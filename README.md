@@ -1,56 +1,95 @@
 # Never Lift
 
-Cliente web (React + TypeScript) do Never Lift — telas de conta/social/campeonato/recordes e o motor de corrida renderizado em Canvas.
+Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco em drift. Este repositório contém as telas do aplicativo e, nos próximos módulos, o motor de corrida renderizado em Canvas.
 
-Este é um **jogo novo**. Existe um protótipo anterior que serve só como referência visual e de sensação de jogo, não como código a reaproveitar diretamente.
+## Fundação técnica
 
-## Stack
+- React 19 + TypeScript strict + Vite.
+- Tailwind CSS 4 pelo plugin oficial do Vite.
+- shadcn/ui configurado em `components.json`, com aliases `@/*`, variáveis CSS e utilitário `cn` prontos para receber componentes.
+- Vitest + Testing Library para testes de componentes.
+- Oxlint para análise estática.
+- GitHub Actions para lint, testes e build em pull requests e nas branches protegidas.
 
-- TypeScript + Vite
-- React + Tailwind CSS + shadcn/ui
-- Canvas 2D nativo para o motor de corrida (dentro de um componente React)
-- Deploy: Vercel ou Cloudflare Pages, tier free
+## Pré-requisitos
 
-## Documentação
+- Node.js 24 recomendado. O Vite exige, no mínimo, Node.js 20.19 ou 22.12.
+- Backend do Never Lift disponível localmente ou em uma URL acessível pelo navegador.
 
-- [`docs/plano-implementacao-frontend.md`](docs/plano-implementacao-frontend.md) — arquitetura completa, protocolo de tempo real, mapa de rotas e todos os módulos. Leia antes de começar qualquer módulo.
-- [`AGENTS.md`](AGENTS.md) — resumo de convenções pro Codex (e pra qualquer humano entrando no projeto).
+## Configuração local
 
-## Rodando localmente
-
-Pré-requisitos: Node.js 20+.
+Crie o arquivo de ambiente a partir do exemplo:
 
 ```bash
-cp .env.example .env   # preencher VITE_API_URL e VITE_WS_URL
+cp .env.example .env
+```
+
+No Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Configure a URL base da API, incluindo o prefixo `/api` e sem adicionar `/health`:
+
+```dotenv
+VITE_API_URL=http://localhost:8080/api
+```
+
+A tela de diagnóstico consulta `${VITE_API_URL}/health`. Com o valor acima, a requisição será feita para `http://localhost:8080/api/health`.
+
+## Executando
+
+```bash
 npm install
 npm run dev
 ```
 
-## Variáveis de ambiente
+O Vite exibirá a URL local no terminal, normalmente `http://localhost:5173`.
 
-| Nome | Descrição |
-|---|---|
-| `VITE_API_URL` | URL base do backend REST (ex.: `http://localhost:8080/api`) |
-| `VITE_WS_URL` | URL do WebSocket do backend (ex.: `ws://localhost:8080/ws`) |
-
-## Testes
+## Verificações
 
 ```bash
+npm run lint
 npm run test
+npm run build
 ```
 
-Nenhum módulo do plano de implementação é considerado pronto sem testes automatizados (componente, e no Módulo 3 um teste com dois clientes simulados) — ver seção 5 do plano.
+Para executar as três verificações em sequência:
 
-## Estrutura sugerida
-
+```bash
+npm run check
 ```
+
+## Deploy automático: Vercel
+
+Foi escolhida a **Vercel** porque ela detecta projetos Vite automaticamente, publica previews para pull requests e permite definir `main` como única branch de produção. Isso se encaixa no fluxo do repositório: branches de trabalho entram em `develop` e somente `develop` entra em `main`.
+
+O arquivo `vercel.json` já fixa o comando de instalação, o build, a pasta `dist` e o fallback de SPA. A criação inicial do projeto precisa ser feita manualmente:
+
+1. Entre em [vercel.com](https://vercel.com) e conecte a conta do GitHub que tem acesso à organização `Never-Lift`.
+2. Clique em **Add New → Project** e importe `Never-Lift/never-lift-frontend`.
+3. Confirme estas opções:
+   - **Framework Preset:** Vite;
+   - **Root Directory:** `./`;
+   - **Install Command:** `npm ci`;
+   - **Build Command:** `npm run build`;
+   - **Output Directory:** `dist`.
+4. Em **Environment Variables**, crie `VITE_API_URL` com a URL pública base do backend, terminando em `/api`. Marque **Production**, **Preview** e **Development**.
+5. Clique em **Deploy** e aguarde o primeiro build.
+6. Depois do deploy, abra **Settings → Git** e confirme **Production Branch: `main`**. Mantenha os deployments automáticos habilitados; commits em outras branches gerarão apenas previews.
+7. Copie o domínio final da Vercel e permita essa origem na configuração CORS do backend. Se previews também precisarem consultar a API, permita os domínios de preview de forma controlada no backend.
+8. Abra a URL de produção. Quando o backend estiver implantado e acessível, a tela deve mostrar `backend: ok` e, quando fornecida, a versão retornada pela API.
+
+O painel da Vercel e o CORS do backend são configurações externas e não são criados por este repositório.
+
+## Estrutura inicial
+
+```text
 src/
-  engine/         # RaceEngine — física (Módulo 2), predição/reconciliação/interpolação (Módulo 3)
-  realtime/       # cliente WebSocket
-  components/     # UI reutilizável (shadcn/ui como base)
-  routes/         # telas do mapa de rotas (Módulos 0-9)
+  components/   # componentes React, incluindo o diagnóstico do backend
+  lib/          # utilitários compartilhados e base do shadcn/ui
+  test/         # configuração global dos testes
 ```
 
-## Deploy
-
-Push na branch principal aciona build + deploy automático (Vercel/Cloudflare Pages). Sem servidor rodando, sem hibernação — só CDN.
+Consulte `docs/frontend-implementation-plan.md` para a arquitetura e os módulos planejados, e `AGENTS.md` para as regras de contribuição.
