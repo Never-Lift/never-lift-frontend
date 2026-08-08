@@ -1,0 +1,30 @@
+name: Branch flow policy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-branch-flow:
+    name: Validate branch flow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce promotion paths
+        env:
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: |
+          if [[ "$BASE_BRANCH" == "main" && "$HEAD_BRANCH" != "develop" ]]; then
+            echo "Pull requests into main must come from develop."
+            exit 1
+          fi
+
+          if [[ "$BASE_BRANCH" == "develop" && "$HEAD_BRANCH" == "main" ]]; then
+            echo "Pull requests into develop cannot come from main."
+            exit 1
+          fi
+
+          echo "Allowed promotion: $HEAD_BRANCH -> $BASE_BRANCH"
