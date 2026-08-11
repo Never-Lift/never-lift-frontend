@@ -44,7 +44,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 
 | Módulo | Status |
 |---|---|
-| 0 — Fundação e deploy | pronto |
+| 0 — Fundação e deploy | código pronto, produção pendente |
 | 1 — Usuários e autenticação | não iniciado |
 | 2 — Motor de corrida local | não iniciado |
 | 3 — Motor autoritativo online | não iniciado |
