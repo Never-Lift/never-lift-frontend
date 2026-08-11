@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --font-sans: "Inter", "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+  --background: oklch(0.14 0.018 253);
+  --foreground: oklch(0.96 0.01 245);
+  --card: oklch(0.19 0.022 251);
+  --card-foreground: oklch(0.96 0.01 245);
+  --primary: oklch(0.82 0.2 125);
+  --primary-foreground: oklch(0.19 0.03 125);
+  --muted: oklch(0.24 0.02 251);
+  --muted-foreground: oklch(0.7 0.02 246);
+  --border: oklch(0.32 0.025 250);
+  --destructive: oklch(0.7 0.19 24);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+}
+
+button {
+  font: inherit;
+}
