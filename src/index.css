@@ -12,7 +12,10 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --font-sans: "Inter", "Segoe UI", sans-serif;
 }
 
@@ -27,7 +30,10 @@
   --muted: oklch(0.24 0.02 251);
   --muted-foreground: oklch(0.7 0.02 246);
   --border: oklch(0.32 0.025 250);
+  --input: oklch(0.32 0.025 250);
+  --ring: oklch(0.82 0.2 125);
   --destructive: oklch(0.7 0.19 24);
+  --destructive-foreground: oklch(0.98 0.01 24);
 }
 
 * {
@@ -39,6 +45,10 @@ body {
   min-height: 100vh;
   margin: 0;
   background: var(--background);
+}
+
+::selection {
+  background: oklch(0.82 0.2 125 / 0.25);
 }
 
 button {
