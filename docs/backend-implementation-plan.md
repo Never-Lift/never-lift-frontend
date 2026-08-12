@@ -1,7 +1,7 @@
 # Plano de Implementação — Backend
-### Never Lift — versão final
+### Never Lift — MVP e expansão planejada
 
-> Este documento cobre o backend. Ele assume conhecimento do plano de frontend (`plano-implementacao-frontend.md`) — os dois compartilham a seção de arquitetura e o protocolo de tempo real abaixo, que **deve ser idêntico nos dois documentos**.
+> Este documento cobre o backend. Ele assume conhecimento do plano de frontend (`frontend-implementation-plan.md`) — os dois compartilham a seção de arquitetura e o protocolo de tempo real abaixo, que **deve ser idêntico nos dois documentos**.
 
 ---
 
@@ -178,3 +178,54 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Cobre features:** 25, 27 (`preferredLanguage` já existe desde o Módulo 1; aqui é só garantir que toda resposta de erro tem chave i18n, não string fixa em português).
 **Escopo:** endpoint `GET /api/info/rules` servindo conteúdo estático (pode ser JSON versionado no repo, não precisa banco); revisão de mensagens de erro pra usar chaves (`error.gamertag_taken`) em vez de texto fixo, pro frontend traduzir.
 **Critério de pronto:** trocar `preferredLanguage` da conta muda o idioma das mensagens de erro recebidas, sem precisar mudar nada no backend.
+
+---
+
+## 6. Expansão aprovada (pós-MVP)
+
+Os Módulos 0–9 continuam formando o MVP original. Os módulos abaixo são expansões posteriores e não bloqueiam o Módulo 9. O servidor continua sendo a autoridade sobre desbloqueios competitivos, fantasmas validados, espectadores, placares, torneios e penalidades.
+
+### Módulo 10 — Progressão, carros e medalhas
+**Depende de:** Módulo 5, Módulo 6 e Módulo 8.
+**Entidades:** `Achievement`, `UserAchievement`, `CarUnlock`, `ProfileMedalSlot`.
+**Escopo:** catálogo versionado de conquistas; progresso derivado de resultados autoritativos; um carro inicial por conta; desbloqueios e recompensas cosméticas idempotentes; medalhas de idade da conta derivadas de `User.createdAt`; até três medalhas públicas ordenadas no perfil.
+**Endpoints:** `GET /api/achievements`, `GET /api/account/me/progression`, `PATCH /api/account/me/medals`, `GET /api/users/{id}/showcase`.
+**Regras:** nunca aceitar do cliente conclusão, progresso ou desbloqueio como verdade; nenhuma recompensa altera constantes físicas; migrações devem conceder o carro inicial às contas existentes.
+**Critério de pronto:** reprocessar o mesmo resultado não duplica recompensa e um perfil público expõe no máximo três medalhas pertencentes ao usuário.
+
+### Módulo 11 — Contrarrelógio e fantasmas
+**Depende de:** Módulo 2, Módulo 3, Módulo 7 e Módulo 8.
+**Entidades:** `TimeTrialRecord`, `GhostRun` com versão de física e sequência compactada de inputs.
+**Endpoints:** `POST /api/time-trials/{trackId}/runs`, `GET /api/time-trials/{trackId}/me`, `GET /api/time-trials/{trackId}/friends/{friendId}`.
+**Regras:** validar circuito, checkpoints, condições e versão; reexecutar inputs no motor autoritativo antes de aceitar recorde; armazenar somente a melhor volta válida por combinação competitiva; permitir fantasma de amigo apenas com amizade aceita; fantasma nunca colide.
+**Critério de pronto:** uma trajetória adulterada é rejeitada e uma trajetória validada reproduz o mesmo tempo dentro da tolerância determinística definida.
+
+### Módulo 12 — Controles personalizáveis
+**Responsabilidade:** exclusivamente frontend. Não há entidade, endpoint ou mudança de protocolo neste módulo; a numeração é reservada para manter os roadmaps alinhados.
+
+### Módulo 13 — Modo espectador para amigos
+**Depende de:** Módulo 3, Módulo 5 e Módulo 7.
+**Escopo:** presença de amigos em corrida; ingresso com papel `spectator`; autorização por amizade aceita e privacidade da sala; snapshots somente de leitura com atraso configurável; limite de espectadores separado das quatro vagas de pilotos; revogação imediata ao perder acesso.
+**Protocolo:** estender a entrada de sala com papel de espectador e emitir estado de câmera/participantes sem aceitar `select_loadout`, `ready` ou `input` de espectadores.
+**Critério de pronto:** espectador autorizado acompanha a prova, não ocupa vaga e qualquer tentativa de input é rejeitada e auditável.
+
+### Módulo 14 — Equipes e placar coletivo
+**Depende de:** Módulo 7 e Módulo 8.
+**Entidades:** `Team`, `TeamMembership`, `TeamInvitation`.
+**Endpoints:** criação/edição/consulta de equipe, convite/aceite/recusa/saída, gestão de membros e `GET /api/teams/leaderboard`.
+**Regras:** nome e sigla únicos; uma equipe por usuário; convites somente entre amigos; papéis e permissões; transferência de liderança; fórmula de pontuação versionada e baseada em resultados elegíveis, sem duplicar histórico quando o jogador troca de equipe.
+**Critério de pronto:** mudanças concorrentes de membros preservam as invariantes e o placar é recalculável a partir das fontes autoritativas.
+
+### Módulo 15 — Torneios oficiais automáticos
+**Depende de:** Módulo 4, Módulo 5, Módulo 6, Módulo 13 e Módulo 14.
+**Entidades:** `Tournament`, `TournamentRegistration`, `TournamentRound`, `TournamentHeat`.
+**Escopo:** agendamento oficial em horários predefinidos; inscrição e check-in; configuração aleatória gerada e persistida no servidor; baterias de até quatro jogadores com avanço dos dois primeiros; byes ou classificatória para totais incompatíveis; regras de empate, abandono e desconexão; chave e eventos consultáveis.
+**Nota de produto:** o limite máximo de inscritos permanece configurável e marcado como pendente até medição de capacidade; nenhum valor arbitrário deve ser fixado no código.
+**Critério de pronto:** simulações para todas as quantidades suportadas produzem exatamente um campeão, com cada inscrito avançando, recebendo bye ou sendo eliminado uma única vez.
+
+### Módulo 16 — Conduta esportiva e penalidades
+**Depende de:** Módulo 3 e Módulo 5.
+**Entidades:** `RaceIncident`, `RacePenalty` e parâmetros versionados de detecção.
+**Escopo:** detectar contato proposital usando velocidade relativa, direção, ponto de impacto, trajetória e oportunidade de evitar; detectar bloqueio após mais de cinco segundos parado em região relevante da pista; excluir pits, perda total, desconexão e carro estacionado em posição segura; aplicar penalidade determinística e publicar motivo/evidências mínimas no evento e resultado.
+**Regra de segurança:** nenhum sinal isolado determina intenção; casos ambíguos devem gerar telemetria para revisão, não punição automática severa.
+**Critério de pronto:** testes de cenários intencionais, inevitáveis e excepcionados não produzem falsos positivos nos casos documentados, e todos os clientes recebem a mesma decisão.

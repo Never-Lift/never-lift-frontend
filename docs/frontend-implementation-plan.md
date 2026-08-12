@@ -1,7 +1,7 @@
 # Plano de Implementação — Frontend
-### Never Lift — versão final
+### Never Lift — MVP e expansão planejada
 
-> Este documento cobre o frontend. Ele assume conhecimento do plano de backend (`plano-implementacao-backend.md`) — os dois compartilham a seção de arquitetura e o protocolo de tempo real abaixo, que **deve ser idêntico nos dois documentos**.
+> Este documento cobre o frontend. Ele assume conhecimento do plano de backend (`backend-implementation-plan.md`) — os dois compartilham a seção de arquitetura e o protocolo de tempo real abaixo, que **deve ser idêntico nos dois documentos**.
 
 ---
 
@@ -142,3 +142,85 @@ Mesma numeração e dependências do plano de backend.
 **Cobre features:** 25, 27.
 **Escopo:** `/info` com regras gerais pra iniciante; troca de idioma (PT/EN) em `/account`, com biblioteca de i18n simples (ex. dicionário de chaves por idioma) — código-fonte permanece em inglês, só a camada de texto exibido troca; revisão final de responsividade e mensagens de erro traduzidas (usando as chaves que o Módulo 9 do backend passou a retornar).
 **Critério de pronto:** trocar o idioma na conta muda todo texto visível, sem precisar de reload nem afetar nomenclatura interna do código.
+
+---
+
+## 6. Expansão aprovada (pós-MVP)
+
+Os Módulos 0–9 continuam formando o MVP original. Os módulos abaixo registram funcionalidades aprovadas para uma fase posterior e não bloqueiam a conclusão do Módulo 9. Todos permanecem sujeitos às mesmas regras de testes, validação manual, PR isolado e sincronização de contrato com o backend.
+
+### Módulo 10 — Progressão, carros e medalhas
+**Depende de:** Módulo 5, Módulo 6 e Módulo 8 dos dois repositórios.
+**Escopo:**
+- A conta começa com exatamente um carro padrão; os demais aparecem bloqueados na garagem, com a conquista necessária claramente indicada.
+- Tela de conquistas com progresso, requisito, raridade e recompensa; concluir conquistas pode liberar carros e recompensas exclusivamente cosméticas.
+- Medalhas por idade da conta calculadas a partir de `createdAt`, sem confundir idade da conta com horas efetivamente jogadas.
+- Seletor de até três medalhas para exibição pública no perfil, lobby, pódio e cartão do piloto; a seleção pode ser alterada a qualquer momento.
+- Nenhuma recompensa altera física, velocidade, dano ou qualquer vantagem competitiva.
+**Testes obrigatórios:** cobrir carro inicial, bloqueios/desbloqueios, progresso, idempotência da recompensa e seleção de no máximo três medalhas.
+**Critério de pronto:** uma conquista válida libera seu carro/recompensa uma única vez e as três medalhas escolhidas aparecem de forma consistente para outros usuários.
+
+### Módulo 11 — Contrarrelógio e fantasmas
+**Depende de:** Módulo 2, Módulo 7, Módulo 8 e Módulo 11 do backend.
+**Rotas:** `/time-trial`, `/time-trial/:trackId`.
+**Escopo:**
+- Salvar melhor tempo e trajetória por jogador, circuito, modelo de carro, modo de drift e condições determinísticas.
+- Correr por padrão contra o fantasma do próprio recorde; permitir selecionar o recorde de um amigo quando houver permissão.
+- O fantasma é somente visual: não colide, não afeta física e não participa da classificação da corrida.
+- Exibir diferença de tempo em tempo real, volta válida/inválida e comparação ao final.
+- Enviar inputs/telemetria compactados para validação do backend; tempo não validado nunca entra em ranking ou desafio compartilhável.
+**Testes obrigatórios:** cobrir reprodução determinística, invalidação por corte de pista, escolha de fantasma próprio/amigo e isolamento entre versões de física.
+**Critério de pronto:** repetir uma trajetória validada produz o mesmo fantasma e o recorde só é substituído por uma volta válida mais rápida.
+
+### Módulo 12 — Controles personalizáveis
+**Responsabilidade:** exclusivamente frontend; não exige endpoint nem alteração no backend.
+**Depende de:** Módulo 2.
+**Escopo:**
+- Tela de configuração para acelerador, freio/ré, esquerda, direita, nitro e demais ações de corrida.
+- Suportar teclado, botões do mouse ou combinação dos dois; cliques usados pela interface não podem acionar comandos da corrida.
+- Detectar conflitos de teclas/botões, permitir restaurar padrões e oferecer perfis distintos para os dois jogadores do modo local.
+- Persistir preferências localmente de forma versionada e fornecer fallback seguro quando um mapeamento antigo ficar incompatível.
+**Testes obrigatórios:** cobrir captura de tecla/botão, conflitos, restauração, dois perfis locais e bloqueio de input enquanto o usuário digita em formulário.
+**Critério de pronto:** o jogador consegue terminar uma corrida com um mapeamento personalizado de teclado, mouse ou ambos sem ações duplicadas.
+
+### Módulo 13 — Modo espectador para amigos
+**Depende de:** Módulo 3, Módulo 5, Módulo 7 e Módulo 13 do backend.
+**Escopo:**
+- Exibir a opção de assistir somente em partidas elegíveis de amigos adicionados.
+- Entrar como espectador não ocupa vaga de piloto, não recebe controles de corrida e nunca pode enviar `input`.
+- Permitir alternar entre carros e mostrar classificação, voltas, tempos, condição da conexão e atraso proposital da transmissão.
+- Tratar corrida encerrada, sala privada, remoção da amizade, desconexão e limite de espectadores.
+**Testes obrigatórios:** cobrir autorização, ausência de input, troca de câmera e remoção ao perder acesso.
+**Critério de pronto:** um amigo autorizado acompanha a corrida sem interferir na simulação e vê estado coerente com os snapshots atrasados do servidor.
+
+### Módulo 14 — Equipes e placar coletivo
+**Depende de:** Módulo 7, Módulo 8 e Módulo 14 do backend.
+**Rotas:** `/teams`, `/teams/:id`.
+**Escopo:**
+- Criar equipe com nome e sigla únicos; convidar amigos, aceitar/recusar convites, sair e gerenciar membros conforme permissões.
+- Exibir perfil da equipe, membros, resultados recentes e placar coletivo.
+- O placar soma somente estatísticas elegíveis definidas pelo backend e deixa a fórmula visível; alterações de equipe não podem duplicar resultados históricos.
+- Aplicar limites de membros e regras claras para transferência de liderança e exclusão da equipe.
+**Testes obrigatórios:** cobrir convites, permissões, mudanças de membro, paginação e consistência do placar.
+**Critério de pronto:** resultados elegíveis dos membros atualizam o placar sem duplicidade e usuários sem permissão não alteram a equipe.
+
+### Módulo 15 — Torneios oficiais automáticos
+**Depende de:** Módulo 4, Módulo 5, Módulo 6, Módulo 13, Módulo 14 e Módulo 15 do backend.
+**Rotas:** `/tournaments`, `/tournaments/:id`.
+**Escopo:**
+- Listar torneios oficiais gerados em horários predefinidos, com inscrição, check-in, regras sorteadas pelo servidor e chave visual completa.
+- Cada bateria comporta no máximo quatro pilotos e classifica os dois primeiros; o sistema mostra byes ou classificatória quando o total não forma uma chave perfeita.
+- O limite máximo global de inscritos fica configurável e explicitamente pendente de definição de produto/capacidade, nunca codificado como suposição.
+- Eliminados podem acompanhar baterias seguintes pelo modo espectador; abandono, empate, desconexão e ausência no check-in têm regras visíveis.
+**Testes obrigatórios:** cobrir cálculo de chave para quantidades pares/ímpares, progressão dos dois primeiros, empate, bye, check-in e atualização em tempo real.
+**Critério de pronto:** para qualquer quantidade aceita de inscritos, a chave termina com um campeão sem perder, duplicar ou classificar incorretamente participantes.
+
+### Módulo 16 — Conduta esportiva e penalidades
+**Depende de:** Módulo 3, Módulo 5 e Módulo 16 do backend.
+**Escopo:**
+- Exibir avisos e penalidades decididos exclusivamente pelo servidor, com motivo, intensidade, momento do incidente e efeito aplicado.
+- Diferenciar colisão proposital de contato inevitável usando contexto autoritativo; o cliente nunca decide culpa.
+- Alertar bloqueio somente quando o carro permanece por mais de cinco segundos na trajetória relevante e pode se mover; pits, perda total, desconexão e posição segura fora da linha não contam.
+- Mostrar histórico pós-corrida e permitir contestação futura sem pausar a corrida.
+**Testes obrigatórios:** cobrir apresentação dos motivos, exceções de bloqueio e impossibilidade de o cliente forjar/remover penalidade.
+**Critério de pronto:** todos os participantes recebem a mesma decisão autoritativa e nenhuma exceção documentada gera penalidade por bloqueio.
