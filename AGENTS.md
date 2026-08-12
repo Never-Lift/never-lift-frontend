@@ -3,7 +3,7 @@
 ## O que é este projeto
 Jogo de corrida 2D multiplayer (top-down, estilo drift). Existe um protótipo anterior do mesmo autor — **este é um jogo novo, não uma versão dele.** O protótipo serve só como referência visual e de sensação de jogo, nunca como código a reaproveitar diretamente. Este repositório é o **frontend**; o backend vive num repositório separado — o contrato entre os dois está documentado abaixo e em `docs/`.
 
-## Arquitetura (resumo — detalhe completo em `docs/plano-implementacao-frontend.md`)
+## Arquitetura (resumo — detalhe completo em `docs/frontend-implementation-plan.md`)
 - Dois planos: REST (conta, social, campeonato, recordes) e tempo real (WebSocket, um socket por sala — o motor de corrida).
 - O **servidor é a única autoridade** sobre a corrida: roda a física, decide colisão, valida progresso. Este cliente envia só `input` (intenção), nunca posição, e usa predição + reconciliação + interpolação pra esconder a latência.
 - Stack deste repositório: TypeScript + React + Vite + Tailwind + shadcn/ui. O backend (repositório separado) usa Java 21 + Spring Boot.
@@ -14,11 +14,11 @@ Envelope: `{ "type": "...", "payload": {...} }`.
 - Cliente → Servidor: `join_room`, `select_loadout`, `ready`, `input { throttle, brake, steer, nitro, clientSeq, clientTimestamp }`.
 - Servidor → Cliente: `room_state`, `countdown`, `state_snapshot`, `race_event`, `race_result`, `error`.
 
-Detalhe completo de cada payload: `docs/plano-implementacao-frontend.md`, seção 3.
+Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seção 3.
 
 ## Documentação
-- `docs/plano-implementacao-frontend.md` — plano deste repositório, módulo a módulo.
-- `docs/plano-implementacao-backend.md` — plano do repositório backend, incluído aqui só como referência da API/WebSocket que este cliente consome. Não implementar nada daqui.
+- `docs/frontend-implementation-plan.md` — plano deste repositório, módulo a módulo.
+- `docs/backend-implementation-plan.md` — plano do repositório backend, incluído aqui só como referência da API/WebSocket que este cliente consome. Não implementar nada daqui.
 
 ## Stack e convenções deste repositório
 - TypeScript (strict) + Vite + React.
@@ -35,7 +35,7 @@ Nenhum módulo é considerado pronto sem testes automatizados rigorosos (Vitest 
 
 ## Ao terminar um módulo
 1. Testes automatizados passando.
-2. Critério de pronto do módulo (ver `docs/plano-implementacao-frontend.md`) validado manualmente.
+2. Critério de pronto do módulo (ver `docs/frontend-implementation-plan.md`) validado manualmente.
 3. Atualizar a tabela de status abaixo.
 4. Commit isolado, mensagem referenciando o número do módulo.
 
@@ -54,5 +54,12 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 | 7 — Social (amigos/notificações) | não iniciado |
 | 8 — Perfil, recordes e histórico | não iniciado |
 | 9 — Polimento e i18n | não iniciado |
+| 10 — Progressão, carros e medalhas | não iniciado (pós-MVP) |
+| 11 — Contrarrelógio e fantasmas | não iniciado (pós-MVP) |
+| 12 — Controles personalizáveis | não iniciado (pós-MVP) |
+| 13 — Modo espectador para amigos | não iniciado (pós-MVP) |
+| 14 — Equipes e placar coletivo | não iniciado (pós-MVP) |
+| 15 — Torneios oficiais automáticos | não iniciado (pós-MVP) |
+| 16 — Conduta esportiva e penalidades | não iniciado (pós-MVP) |
 
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.
