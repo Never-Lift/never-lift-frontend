@@ -11,6 +11,16 @@ Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco 
 - Oxlint para análise estática.
 - GitHub Actions para lint, testes e build em pull requests e nas branches protegidas.
 
+## Módulo 1 — usuários e autenticação
+
+- `/` abre o menu principal e cria automaticamente uma sessão guest.
+- `/login` e `/register` autenticam o piloto; o cadastro aceita um dos oito avatares chibi originais do Never Lift.
+- `/account` permite trocar nome, avatar ou senha mediante confirmação da senha atual e excluir a conta por meio de um `AlertDialog` irreversível.
+- O backend atual devolve JWT no corpo. O frontend guarda esse token somente no estado em memória e o envia como `Authorization: Bearer`; nada é escrito em `localStorage` ou `sessionStorage`.
+- Rotas online futuras devem ser aninhadas sob o componente `OnlineRoute`, que direciona guest e visitante para `/login` com uma mensagem explicativa.
+
+Como a sessão fica exclusivamente em memória, recarregar a página remove o login atual e, ao voltar para `/`, uma nova sessão guest é criada. Esse comportamento é intencional enquanto o backend não adotar cookie `httpOnly`.
+
 ## Pré-requisitos
 
 - Node.js 24 recomendado. O Vite exige, no mínimo, Node.js 20.19 ou 22.12.
@@ -87,8 +97,11 @@ O painel da Vercel e o CORS do backend são configurações externas e não são
 
 ```text
 src/
-  components/   # componentes React, incluindo o diagnóstico do backend
+  assets/       # avatares originais e demais recursos visuais do app
+  auth/         # sessão JWT exclusivamente em memória
+  components/   # componentes React e base local do shadcn/ui
   lib/          # utilitários compartilhados e base do shadcn/ui
+  pages/        # menu, login, cadastro e conta
   test/         # configuração global dos testes
 ```
 
