@@ -160,4 +160,30 @@ describe('AccountPage', () => {
     )
     expect(screen.getByDisplayValue('Turbo Fox Prime')).toBeInTheDocument()
   })
+
+  it('allows removing the current avatar explicitly', async () => {
+    const updatedAccount = {
+      ...userAccount,
+      avatarId: null,
+    }
+    const fetchMock = vi.fn()
+    loginResponses(fetchMock)
+    fetchMock.mockResolvedValueOnce(jsonResponse(updatedAccount))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    await loginAndOpenAccount(user)
+
+    await user.click(screen.getByRole('radio', { name: 'Sem avatar' }))
+    await user.type(screen.getByLabelText('Senha atual'), 'fast123')
+    await user.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Conta atualizada com sucesso.',
+    )
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({
+      currentPassword: 'fast123',
+      displayName: userAccount.displayName,
+      avatarId: null,
+    })
+  })
 })

@@ -119,7 +119,6 @@ export function AccountEditForm({
         </div>
 
         <AvatarPicker
-          allowEmpty={false}
           disabled={form.formState.isSubmitting}
           onChange={(avatarId) =>
             form.setValue('avatarId', avatarId, { shouldDirty: true })
