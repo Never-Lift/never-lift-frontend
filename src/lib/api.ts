@@ -59,7 +59,6 @@ async function apiRequest<T>(
 
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
-    credentials: 'include',
     headers,
   })
   const payload = await parsePayload(response)

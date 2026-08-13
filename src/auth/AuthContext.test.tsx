@@ -116,5 +116,6 @@ describe('AuthProvider', () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       'http://localhost:8080/api/auth/guest',
     )
+    expect(fetchMock.mock.calls[0][1]?.credentials).toBeUndefined()
   })
 })
