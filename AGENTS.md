@@ -36,7 +36,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 ## Regra fixa: design e fase
 - `docs/game-design-guide.md` define a direção aprovada; não reinterpretar estilo, câmera ou composição em cada módulo.
 - Decisão documentada não significa implementação imediata. Itens marcados como pós-MVP só entram no módulo indicado e não podem aumentar o escopo dos Módulos 0–9.
-- A fundação visual global deve ser implementada em rodada e PR próprios antes do Módulo 2. Modernizar visualmente os Módulos 0 e 1 exige regressão automatizada, mas não reabre seu escopo funcional nem muda o status de pronto.
+- A fundação visual global foi implementada em rodada própria antes do Módulo 2. Preserve os tokens de `src/index.css`, as fontes Barlow empacotadas localmente, o componente `Brand` e o shell responsivo; modernizações futuras exigem regressão automatizada, mas não reabrem o escopo funcional dos Módulos 0 e 1 nem mudam seu status de pronto.
 - Valores marcados como **calibração** devem ser medidos no protótipo; ajustes precisam permanecer dentro da direção e dos limites documentados.
 
 ## Regra fixa: testes

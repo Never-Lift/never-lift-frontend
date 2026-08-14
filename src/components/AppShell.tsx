@@ -1,12 +1,17 @@
-import { Flag, Gauge, LogOut, UserRound } from 'lucide-react'
+import { House, LogIn, LogOut, UserRound } from 'lucide-react'
 import type { PropsWithChildren } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '@/auth/auth-context'
+import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+const navItemClass =
+  'group inline-flex h-10 items-center justify-center gap-3 rounded-[10px] border border-transparent px-3 text-sm font-bold text-muted-foreground transition hover:border-border hover:bg-muted/70 hover:text-foreground lg:w-full lg:justify-start'
 
 export function AppShell({ children }: PropsWithChildren) {
-  const { isUser, signOut } = useAuth()
+  const { account, isUser, signOut } = useAuth()
   const navigate = useNavigate()
 
   function handleSignOut() {
@@ -15,55 +20,95 @@ export function AppShell({ children }: PropsWithChildren) {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,oklch(0.79_0.17_126/0.1),transparent_32%),radial-gradient(circle_at_bottom_right,oklch(0.67_0.16_245/0.08),transparent_28%)]" />
-      <div className="pointer-events-none fixed inset-0 opacity-20 [background-image:linear-gradient(oklch(1_0_0/0.04)_1px,transparent_1px),linear-gradient(90deg,oklch(1_0_0/0.04)_1px,transparent_1px)] [background-size:48px_48px]" />
+    <div className="relative min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <div className="racing-grid pointer-events-none fixed inset-0 opacity-60" />
+      <div className="speed-lines pointer-events-none fixed inset-0 opacity-45" />
 
-      <header className="relative z-10 border-b border-border/70 bg-background/75 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-8">
-          <Link className="flex items-center gap-3" to="/">
-            <span className="grid size-9 place-items-center rounded-lg border border-primary/40 bg-primary/10 text-primary">
-              <Flag aria-hidden="true" className="size-4" />
-            </span>
-            <div>
-              <p className="text-sm font-black uppercase tracking-[0.22em] text-primary">
-                Never Lift
-              </p>
-              <p className="hidden text-[11px] text-muted-foreground sm:block">
-                Sua corrida começa aqui
-              </p>
-            </div>
-          </Link>
+      <aside className="relative z-20 flex h-20 items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-6 lg:py-7">
+        <Link className="shrink-0" to="/">
+          <Brand tagline="Race control" />
+        </Link>
 
-          <nav className="flex items-center gap-1" aria-label="Navegação principal">
-            {isUser ? (
-              <>
-                <Button asChild size="sm" variant="ghost">
-                  <Link to="/account">
-                    <UserRound aria-hidden="true" className="size-4" />
-                    <span className="hidden sm:inline">Minha conta</span>
-                  </Link>
-                </Button>
-                <Button onClick={handleSignOut} size="sm" variant="ghost">
-                  <LogOut aria-hidden="true" className="size-4" />
-                  <span className="hidden sm:inline">Sair</span>
-                </Button>
-              </>
-            ) : (
-              <Button asChild size="sm" variant="secondary">
-                <Link to="/login">
-                  <Gauge aria-hidden="true" className="size-4" />
-                  Entrar
-                </Link>
-              </Button>
-            )}
-          </nav>
+        <nav
+          aria-label="Navegação principal"
+          className="flex items-center gap-1 lg:mt-12 lg:w-full lg:flex-1 lg:flex-col lg:items-stretch"
+        >
+          <NavLink
+            className={({ isActive }) =>
+              cn(
+                navItemClass,
+                isActive &&
+                  'border-primary/30 bg-primary/10 text-foreground shadow-[inset_3px_0_0_var(--primary)]',
+              )
+            }
+            end
+            to="/"
+          >
+            <House aria-hidden="true" className="size-4 text-primary" />
+            <span className="hidden lg:inline">Início</span>
+          </NavLink>
+
+          {isUser ? (
+            <>
+              <NavLink
+                className={({ isActive }) =>
+                  cn(
+                    navItemClass,
+                    isActive &&
+                      'border-primary/30 bg-primary/10 text-foreground shadow-[inset_3px_0_0_var(--primary)]',
+                  )
+                }
+                to="/account"
+              >
+                <UserRound aria-hidden="true" className="size-4 text-primary" />
+                <span className="hidden lg:inline">Minha conta</span>
+              </NavLink>
+
+              <button
+                className={cn(navItemClass, 'lg:mt-auto')}
+                onClick={handleSignOut}
+                type="button"
+              >
+                <LogOut aria-hidden="true" className="size-4" />
+                <span className="hidden lg:inline">Sair</span>
+              </button>
+            </>
+          ) : (
+            <Button asChild className="ml-1 lg:mt-auto lg:ml-0" size="sm">
+              <Link to="/login">
+                <LogIn aria-hidden="true" className="size-4" />
+                <span className="hidden sm:inline">Entrar</span>
+              </Link>
+            </Button>
+          )}
+        </nav>
+
+        <div className="hidden border-t border-border/70 pt-5 lg:block">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-success shadow-[0_0_12px_var(--success)]" />
+            Base de pilotos ativa
+          </div>
+          <p className="mt-2 truncate text-sm font-semibold text-foreground">
+            {isUser ? `@${account?.gamertag ?? 'piloto'}` : 'Sessão visitante'}
+          </p>
         </div>
-      </header>
+      </aside>
 
-      <main className="relative z-0 mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
-        {children}
-      </main>
+      <div className="relative z-10 min-w-0">
+        <header className="hidden h-[72px] items-center justify-between border-b border-border/60 px-8 lg:flex xl:px-12">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            Paddock digital <span className="mx-2 text-border">/</span>{' '}
+            <span className="text-info">Módulo 01</span>
+          </p>
+          <p className="text-xs font-semibold text-muted-foreground">
+            {isUser ? `@${account?.gamertag ?? 'piloto'}` : 'Acesso guest'}
+          </p>
+        </header>
+
+        <main className="mx-auto w-full max-w-[1400px] px-5 py-10 sm:px-8 sm:py-14 lg:px-10 xl:px-14">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

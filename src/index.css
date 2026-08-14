@@ -7,8 +7,14 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
@@ -16,41 +22,153 @@
   --color-ring: var(--ring);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --font-sans: "Inter", "Segoe UI", sans-serif;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --font-sans: "Barlow", "Segoe UI", sans-serif;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
 }
 
 :root {
   color-scheme: dark;
-  --background: oklch(0.14 0.018 253);
-  --foreground: oklch(0.96 0.01 245);
-  --card: oklch(0.19 0.022 251);
-  --card-foreground: oklch(0.96 0.01 245);
-  --primary: oklch(0.82 0.2 125);
-  --primary-foreground: oklch(0.19 0.03 125);
-  --muted: oklch(0.24 0.02 251);
-  --muted-foreground: oklch(0.7 0.02 246);
-  --border: oklch(0.32 0.025 250);
-  --input: oklch(0.32 0.025 250);
-  --ring: oklch(0.82 0.2 125);
-  --destructive: oklch(0.7 0.19 24);
-  --destructive-foreground: oklch(0.98 0.01 24);
+  --background: #070b14;
+  --foreground: #f0f0fa;
+  --card: #0d1524;
+  --card-foreground: #f0f0fa;
+  --popover: #101a2b;
+  --popover-foreground: #f0f0fa;
+  --primary: #2d7dff;
+  --primary-foreground: #f7f9ff;
+  --secondary: #152139;
+  --secondary-foreground: #e9eefc;
+  --accent: #ff2e88;
+  --accent-foreground: #fff5fa;
+  --muted: #111c2f;
+  --muted-foreground: #9aa7bd;
+  --border: #22314d;
+  --input: #2a3b5c;
+  --ring: #2d7dff;
+  --destructive: #ff4055;
+  --destructive-foreground: #fff4f5;
+  --success: #2bd67b;
+  --warning: #ffb82e;
+  --info: #31c7ff;
 }
 
 * {
   border-color: var(--border);
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--background);
 }
 
 body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: var(--background);
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 12% 8%, rgb(45 125 255 / 12%), transparent 28rem),
+    radial-gradient(circle at 90% 88%, rgb(255 46 136 / 7%), transparent 24rem),
+    var(--background);
+  color: var(--foreground);
+  font-family: "Barlow", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-block: 0;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
 
 ::selection {
-  background: oklch(0.82 0.2 125 / 0.25);
+  background: rgb(45 125 255 / 35%);
+  color: var(--foreground);
 }
 
-button {
-  font: inherit;
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid var(--background);
+  border-radius: 999px;
+  background: var(--border);
+}
+
+@keyframes scan-line {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(410%);
+  }
+}
+
+.racing-grid {
+  background-image:
+    linear-gradient(rgb(240 240 250 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(240 240 250 / 3%) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 82%);
+}
+
+.speed-lines {
+  background-image: repeating-linear-gradient(
+    112deg,
+    transparent 0,
+    transparent 34px,
+    rgb(45 125 255 / 7%) 35px,
+    transparent 36px
+  );
+}
+
+.display-heading {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 0.88;
+  text-transform: uppercase;
+}
+
+.surface-panel {
+  border: 1px solid rgb(34 49 77 / 92%);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgb(17 28 47 / 96%), rgb(10 17 30 / 96%));
+  box-shadow: 0 24px 70px rgb(0 0 0 / 24%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -78,7 +78,7 @@ function FormLabel({
   return (
     <LabelPrimitive.Root
       className={cn(
-        'text-sm font-semibold leading-none text-foreground',
+        'text-sm font-bold leading-none text-foreground',
         error && 'text-destructive',
         className,
       )}
@@ -113,7 +113,7 @@ function FormDescription({
 
   return (
     <p
-      className={cn('text-xs leading-5 text-muted-foreground', className)}
+      className={cn('text-xs font-medium leading-5 text-muted-foreground', className)}
       id={formDescriptionId}
       {...props}
     />
@@ -132,7 +132,7 @@ function FormMessage({
 
   return (
     <p
-      className={cn('text-xs font-medium text-destructive', className)}
+      className={cn('text-xs font-semibold text-destructive', className)}
       id={formMessageId}
       {...props}
     >
