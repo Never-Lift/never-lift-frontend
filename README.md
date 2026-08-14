@@ -25,6 +25,8 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e carros por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
 
+A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual será uma rodada isolada antes do Módulo 2 e cada decisão específica entra somente no módulo responsável. O Módulo 1 continua funcionalmente pronto até essa modernização visual, que deverá preservar seus fluxos e testes.
+
 ## Pré-requisitos
 
 - Node.js 24 recomendado. O Vite exige, no mínimo, Node.js 20.19 ou 22.12.
@@ -109,4 +111,4 @@ src/
   test/         # configuração global dos testes
 ```
 
-Consulte `docs/frontend-implementation-plan.md` para a arquitetura e os módulos planejados, e `AGENTS.md` para as regras de contribuição.
+Consulte `docs/frontend-implementation-plan.md` para a arquitetura e os módulos planejados, `docs/game-design-guide.md` para a direção visual e `AGENTS.md` para as regras de contribuição.

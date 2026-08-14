@@ -11,7 +11,7 @@ Jogo de corrida 2D multiplayer (top-down, estilo drift). Existe um protótipo an
 
 ## Protocolo de tempo real (contrato com o backend — não alterar sem avisar o outro lado)
 Envelope: `{ "type": "...", "payload": {...} }`.
-- Cliente → Servidor: `join_room`, `select_loadout`, `ready`, `input { throttle, brake, steer, nitro, clientSeq, clientTimestamp }`.
+- Cliente → Servidor: `join_room { roomCode, trackCatalogVersion }`, `select_loadout`, `ready`, `input { throttle, brake, steer, nitro, clientSeq, clientTimestamp }`.
 - Servidor → Cliente: `room_state`, `countdown`, `state_snapshot`, `race_event`, `race_result`, `error`.
 
 Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seção 3.
@@ -19,6 +19,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 ## Documentação
 - `docs/frontend-implementation-plan.md` — plano deste repositório, módulo a módulo.
 - `docs/backend-implementation-plan.md` — plano do repositório backend, incluído aqui só como referência da API/WebSocket que este cliente consome. Não implementar nada daqui.
+- `docs/game-design-guide.md` — fonte oficial das decisões visuais, de câmera, escala, telas e fase de implementação. Ler antes de qualquer trabalho de interface ou corrida.
 
 ## Stack e convenções deste repositório
 - TypeScript (strict) + Vite + React.
@@ -29,6 +30,14 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - O estado da corrida (tempo real) vive **fora** do ciclo de render do React — um store dedicado (ex. Zustand), lido diretamente pelo loop de `requestAnimationFrame` do Canvas. Nunca colocar posição de carro em `useState` re-renderizado a 20-30x/segundo.
 - O mesmo `RaceEngine` do Módulo 2 é reaproveitado como motor de predição no Módulo 3 — não duplicar a física numa segunda implementação.
 - Nunca desenhar um carro remoto direto na posição recebida no `state_snapshot` — sempre interpolar entre os dois snapshots mais recentes.
+- Física, pistas, checkpoints e snapshots usam a unidade compartilhada **1 unidade de mundo = 1 metro**. Pixels são somente uma projeção da câmera e nunca podem entrar nas regras físicas.
+- Circuitos extensos não são bitmaps únicos: renderizar por trechos e descartar desenho fora da área visível.
+
+## Regra fixa: design e fase
+- `docs/game-design-guide.md` define a direção aprovada; não reinterpretar estilo, câmera ou composição em cada módulo.
+- Decisão documentada não significa implementação imediata. Itens marcados como pós-MVP só entram no módulo indicado e não podem aumentar o escopo dos Módulos 0–9.
+- A fundação visual global deve ser implementada em rodada e PR próprios antes do Módulo 2. Modernizar visualmente os Módulos 0 e 1 exige regressão automatizada, mas não reabre seu escopo funcional nem muda o status de pronto.
+- Valores marcados como **calibração** devem ser medidos no protótipo; ajustes precisam permanecer dentro da direção e dos limites documentados.
 
 ## Regra fixa: testes
 Nenhum módulo é considerado pronto sem testes automatizados rigorosos (Vitest + Testing Library; o Módulo 3 exige também um teste com dois clientes simulados via mock de WebSocket) cobrindo suas regras, além do critério funcional descrito no plano.
