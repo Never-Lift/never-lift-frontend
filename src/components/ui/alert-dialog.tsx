@@ -20,7 +20,7 @@ function AlertDialogOverlay({
   return (
     <AlertDialogPrimitive.Overlay
       className={cn(
-        'fixed inset-0 z-50 bg-black/75 backdrop-blur-sm data-[state=closed]:animate-out data-[state=open]:animate-in',
+        'fixed inset-0 z-50 bg-background/85 backdrop-blur-md data-[state=closed]:animate-out data-[state=open]:animate-in',
         className,
       )}
       {...props}
@@ -37,7 +37,7 @@ function AlertDialogContent({
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-5 rounded-2xl border border-border bg-card p-6 shadow-2xl',
+          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-6 rounded-2xl border border-destructive/25 bg-popover p-6 shadow-[0_35px_100px_rgb(0_0_0/0.55)] sm:p-7',
           className,
         )}
         {...props}
@@ -74,7 +74,10 @@ function AlertDialogTitle({
 }: ComponentProps<typeof AlertDialogPrimitive.Title>) {
   return (
     <AlertDialogPrimitive.Title
-      className={cn('text-xl font-bold', className)}
+      className={cn(
+        'font-display text-2xl font-extrabold uppercase text-foreground',
+        className,
+      )}
       {...props}
     />
   )

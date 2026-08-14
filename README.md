@@ -11,6 +11,15 @@ Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco 
 - Oxlint para análise estática.
 - GitHub Actions para lint, testes e build em pull requests e nas branches protegidas.
 
+## Fundação visual
+
+- Paleta **Midnight Racing** aplicada por tokens em `src/index.css`, com azul principal, magenta de acento e cores semânticas próprias para sucesso, aviso, informação e perigo.
+- Barlow e Barlow Condensed são empacotadas localmente por `@fontsource`; a interface não depende de Google Fonts ou de outra CDN.
+- O símbolo e o logotipo oficiais ficam em `public/brand/` e são aplicados pelo componente compartilhado `Brand`.
+- `AppShell` fornece a navegação lateral no desktop e o cabeçalho compacto em telas menores, mantendo a mesma hierarquia e os mesmos fluxos.
+- Menu, login, cadastro, conta, formulários e diálogo irreversível compartilham superfícies, espaçamentos, bordas e estados visuais consistentes.
+- Os oito avatares chibi atuais continuam válidos. A eventual substituição pelos retratos semirrealistas documentados será uma rodada própria de assets, sem alterar os identificadores de avatar.
+
 ## Módulo 1 — usuários e autenticação
 
 - `/` abre o menu principal e cria automaticamente uma sessão guest.
@@ -25,7 +34,7 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e carros por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
 
-A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual será uma rodada isolada antes do Módulo 2 e cada decisão específica entra somente no módulo responsável. O Módulo 1 continua funcionalmente pronto até essa modernização visual, que deverá preservar seus fluxos e testes.
+A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.
 
 ## Pré-requisitos
 
