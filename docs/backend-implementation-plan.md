@@ -2,6 +2,8 @@
 ### Never Lift — MVP e expansão planejada
 
 > Este documento cobre o backend. Ele assume conhecimento do plano de frontend (`frontend-implementation-plan.md`) — os dois compartilham a seção de arquitetura e o protocolo de tempo real abaixo, que **deve ser idêntico nos dois documentos**.
+>
+> As decisões visuais e de experiência estão em `game-design-guide.md`. O backend não implementa apresentação, mas deve respeitar as unidades, metadados e contratos compartilhados necessários para câmera, minimapa, circuitos e telas.
 
 ---
 
@@ -31,6 +33,8 @@ Cada sala ativa tem um **loop de simulação de passo fixo** (tick), independent
 
 **Risco arquitetural a documentar e vigiar:** como o backend é Java e o frontend é TypeScript, a física de predição do cliente (ver plano de frontend) e a física autoritativa do servidor são **duas implementações separadas da mesma fórmula**, em linguagens diferentes. Isso é uma fonte real de bugs sutis — se as constantes de atrito, arrasto, drift etc. divergirem entre os dois lados, o cliente vai prever errado e corrigir (reconciliar) o tempo todo, mesmo com rede perfeita. Recomendação: manter uma única "folha de constantes" documentada (pode ser um JSON versionado, lido por ambos os lados via geração de código ou só copiado manualmente com testes de regressão comparando saída do motor Java e do motor TS pros mesmos inputs) e tratar qualquer divergência como bug de prioridade alta, não como "gosto" de tuning.
 
+**Unidades compartilhadas:** 1 unidade de mundo equivale a 1 metro. Posições, dimensões, limites, checkpoints e definições de pista usam um plano cartesiano com `+X` para a direita e `+Y` para cima; `angle` é expresso em radianos, no sentido anti-horário a partir de `+X`; velocidades usam metros por segundo. Pixels nunca entram no domínio do backend.
+
 ---
 
 ## 3. Protocolo de tempo real (contrato compartilhado com o frontend)
@@ -41,7 +45,7 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 
 | type | payload | quando |
 |---|---|---|
-| `join_room` | `{ roomCode }` | ao entrar numa sala |
+| `join_room` | `{ roomCode, trackCatalogVersion }` | ao entrar numa sala; permite rejeitar geometria incompatível antes da corrida |
 | `select_loadout` | `{ carModel, color }` | antes de ficar ready |
 | `ready` | `{}` | jogador confirma pronto |
 | `input` | `{ throttle, brake, steer, nitro, clientSeq, clientTimestamp }` | a cada mudança de input (não a cada frame) |
@@ -52,21 +56,23 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 
 | type | payload | quando |
 |---|---|---|
-| `room_state` | `{ players[], hostId, settings, readyStates }` | mudança no lobby |
+| `room_state` | `{ players[], hostId, settings, readyStates }`, com `settings.trackId` e `settings.trackCatalogVersion` | mudança no lobby |
 | `countdown` | `{ startAtServerTime }` | semáforo iniciando (feature 14) |
-| `state_snapshot` | `{ tick, serverTime, cars: [{ playerId, x, y, angle, speed, damageState, nitroRemaining, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
+| `state_snapshot` | `{ tick, serverTime, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, damageState, nitroRemaining, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
 | `race_event` | `{ type: collision \| checkpoint \| lap_complete \| finished \| false_start \| pit_enter \| pit_exit \| breakdown, ...dados específicos }` | evento discreto decidido pelo servidor |
 | `race_result` | `{ standings[] }` | fim de corrida |
 | `error` | `{ code, message }` | falha de validação |
 
 `state_snapshot` é usado pelo frontend pra reconciliação (carro do próprio jogador) e interpolação (carros dos outros) — ver plano de frontend, seção do Módulo 3.
 
+`x`/`y` estão em metros, `velocityX`/`velocityY` em metros por segundo e `speed` é a magnitude da velocidade. O vetor de velocidade é necessário para a câmera dinâmica, inclusive no modo espectador, sem confundir direção de movimento com ângulo da carroceria durante um drift.
+
 ---
 
 ## 4. Modelo de dados (visão geral)
 
 - **User**: `id (UUID)`, `gamertag (unique, sem espaço)`, `displayName`, `passwordHash`, `avatarId`, `preferredLanguage`, `createdAt`
-- **Track**: dado semente (seed), não editável via API — `id`, `name`, `pathDefinition`, `sceneryLayout`. 24 registros carregados via migration.
+- **Track**: dado semente (seed), não editável via API — `id`, `name`, `countryCode`, `lengthMeters`, `catalogVersion`, `pathDefinition`, `sceneryLayout`. Os dois últimos usam coordenadas métricas; 24 registros são carregados via migration.
 - **RaceResult**: `id`, `userId (nullable p/ bot)`, `trackId`, `mode (solo|local|online|championship)`, `position`, `totalTimeMs`, `bestLapTimeMs`, `finished`, `createdAt`
 - **Championship**: `id`, `name`, `trackOrder[]`, `pointsTable`, `status`, `createdAt`
 - **ChampionshipEntry**: `championshipId`, `userId`, `totalPoints`, `position`
@@ -82,6 +88,8 @@ Recordes/estatísticas (feature 3 e 10) são **calculados via query** sobre `Rac
 Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem abaixo respeita dependências.
 
 **Regra válida pra todo módulo, sem exceção:** nenhum módulo é considerado pronto sem testes automatizados rigorosos — unitários pras regras de negócio (cálculo de pontos, resolução de colisão, decremento de nitro, etc.) e de integração pros endpoints/eventos WebSocket. Vale até pros módulos que parecem simples, tipo CRUD de amigos. O "Critério de pronto" de cada módulo abaixo é o mínimo funcional a validar manualmente; a suíte de testes automatizados é obrigatória em cima disso, não um substituto.
+
+**Regra de design e fase:** decisões visuais pós-MVP não autorizam endpoints, entidades ou campos antes do módulo indicado. Exceções são somente contratos compartilhados indispensáveis ao motor, como unidades métricas, catálogo de pistas e vetor de velocidade.
 
 ### Módulo 0 — Fundação e deploy
 **Objetivo:** provar que Render + Neon + o pipeline de deploy funcionam de ponta a ponta antes de escrever qualquer feature.
@@ -105,10 +113,14 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
-**Nota:** o motor de física em si (solo/local) roda **inteiramente no frontend** neste módulo — ver plano de frontend, Módulo 2. O backend só entra pra persistir o resultado no fim.
+**Nota:** o motor de física em si (solo/local) roda **inteiramente no frontend** neste módulo — ver plano de frontend, Módulo 2. O backend fornece o catálogo versionado de pistas e persiste o resultado no fim; não participa da simulação local.
 **Endpoints:**
-- `POST /api/races/local-result` `{ trackId, mode: solo|local, results: [{ userIdOrNull, position, totalTimeMs, bestLapTimeMs, finished }] }`
-**Critério de pronto:** resultado de uma corrida solo/local aparece em `race history` (Módulo 8) depois de enviado.
+- `GET /api/tracks` → catálogo público com `catalogVersion` e metadados dos 24 circuitos (`id`, `name`, `countryCode`, `lengthMeters`)
+- `GET /api/tracks/{id}` → definição métrica versionada (`pathDefinition`, `sceneryLayout`) usada pelo motor local e pelo minimapa
+- `POST /api/races/local-result` `{ trackId, trackCatalogVersion, mode: solo|local, results: [{ userIdOrNull, position, totalTimeMs, bestLapTimeMs, finished }] }`
+**Regras do catálogo:** `pathDefinition` precisa conter traçado fechado, limites dirigíveis, checkpoints, largada e pits em metros; `sceneryLayout` usa o mesmo sistema de coordenadas. Comprimentos variados e ajustes aproximados de 10–20% são permitidos conforme o guia, mas frontend e backend precisam consumir a mesma `catalogVersion`.
+**Testes obrigatórios específicos:** validar os 24 registros, identidade/versão do catálogo, geometria fechada, ordem de checkpoints, comprimento coerente e rejeição de resultado com `trackId` inexistente ou versão incompatível.
+**Critério de pronto:** o catálogo permite carregar um circuito curto e um longo no frontend, e o resultado de uma corrida solo/local aparece em `race history` (Módulo 8) depois de enviado.
 
 ### Módulo 3 — Motor autoritativo online (núcleo)
 **Depende de:** Módulo 1.
@@ -118,6 +130,8 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 - Sessão WebSocket por conexão (`/ws`), autenticada via JWT na query string ou header de handshake.
 - `RoomManager`: cria/lista salas, no máximo 4 jogadores+bots por sala, atribui `hostId`.
 - `RaceEngine` por sala: física nova, escrita do zero em Java — o protótipo entra só como referência de sensação/comportamento esperado, não como código a converter (isso é um jogo novo, não uma versão do antigo). Cobre aceleração, atrito — incluindo atrito maior fora da pista (grama: carro fica mais liso e mais lento, feature 5) —, drift, alternância entre `driftMode` e modo normal da sala (feature 4), e colisão. Roda a `30 ticks/segundo` num `ScheduledExecutorService` próprio, lendo o último `input` recebido de cada jogador (não esperando por ele a cada tick).
+- O motor usa exclusivamente metros, segundos e radianos conforme a convenção compartilhada; cada carro mantém vetor de velocidade para snapshots, drift e reconciliação.
+- A sala fixa `trackId` e `trackCatalogVersion` antes da largada e rejeita cliente com catálogo incompatível em vez de simular geometrias diferentes.
 - Resolução de colisão **uma vez, no servidor**, usando o estado real de todos os carros da sala — não a aproximação que existia no protótipo.
 - Broadcast de `state_snapshot` a cada ~50ms (20/s) pra todos da sala.
 **Critério de pronto:** dois clientes de teste (podem ser scripts, não precisa ser a UI final) conectados na mesma sala veem exatamente a mesma colisão acontecer no mesmo lugar — esse é o teste que valida que o bug original foi resolvido.
@@ -188,7 +202,7 @@ Os Módulos 0–9 continuam formando o MVP original. Os módulos abaixo são exp
 ### Módulo 10 — Progressão, carros e medalhas
 **Depende de:** Módulo 5, Módulo 6 e Módulo 8.
 **Entidades:** `Achievement`, `UserAchievement`, `CarUnlock`, `ProfileMedalSlot`.
-**Escopo:** catálogo versionado de conquistas; progresso derivado de resultados autoritativos; um carro inicial por conta; desbloqueios e recompensas cosméticas idempotentes; medalhas de idade da conta derivadas de `User.createdAt`; até três medalhas públicas ordenadas no perfil.
+**Escopo:** catálogo versionado de conquistas com requisito, progresso, raridade e recompensa; progresso derivado de resultados autoritativos; um carro inicial por conta; desbloqueios e recompensas cosméticas idempotentes; medalhas de idade da conta derivadas de `User.createdAt`; até três medalhas públicas ordenadas no perfil. A forma/material visual é resolvida pelo frontend a partir do identificador e da raridade, não armazenada como imagem no backend.
 **Endpoints:** `GET /api/achievements`, `GET /api/account/me/progression`, `PATCH /api/account/me/medals`, `GET /api/users/{id}/showcase`.
 **Regras:** nunca aceitar do cliente conclusão, progresso ou desbloqueio como verdade; nenhuma recompensa altera constantes físicas; migrações devem conceder o carro inicial às contas existentes.
 **Critério de pronto:** reprocessar o mesmo resultado não duplica recompensa e um perfil público expõe no máximo três medalhas pertencentes ao usuário.
@@ -211,9 +225,9 @@ Os Módulos 0–9 continuam formando o MVP original. Os módulos abaixo são exp
 
 ### Módulo 14 — Equipes e placar coletivo
 **Depende de:** Módulo 7 e Módulo 8.
-**Entidades:** `Team`, `TeamMembership`, `TeamInvitation`.
+**Entidades:** `Team` (inclui `name`, `tag`, `primaryColor`, `emblemId`), `TeamMembership`, `TeamInvitation`.
 **Endpoints:** criação/edição/consulta de equipe, convite/aceite/recusa/saída, gestão de membros e `GET /api/teams/leaderboard`.
-**Regras:** nome e sigla únicos; uma equipe por usuário; convites somente entre amigos; papéis e permissões; transferência de liderança; fórmula de pontuação versionada e baseada em resultados elegíveis, sem duplicar histórico quando o jogador troca de equipe.
+**Regras:** nome e sigla únicos; `primaryColor` validada e `emblemId` limitado ao catálogo predefinido; uma equipe por usuário; convites somente entre amigos; papéis e permissões; transferência de liderança; fórmula de pontuação versionada e baseada em resultados elegíveis, sem duplicar histórico quando o jogador troca de equipe.
 **Critério de pronto:** mudanças concorrentes de membros preservam as invariantes e o placar é recalculável a partir das fontes autoritativas.
 
 ### Módulo 15 — Torneios oficiais automáticos
