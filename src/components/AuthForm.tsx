@@ -169,7 +169,7 @@ export function AuthForm(props: AuthFormProps) {
 
         {serverError && (
           <p
-            className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            className="rounded-[10px] border border-destructive/35 bg-destructive/8 px-3.5 py-3 text-sm font-medium text-destructive"
             role="alert"
           >
             {serverError}
@@ -177,7 +177,7 @@ export function AuthForm(props: AuthFormProps) {
         )}
 
         <Button
-          className="w-full"
+          className="mt-2 w-full"
           disabled={form.formState.isSubmitting}
           size="lg"
           type="submit"

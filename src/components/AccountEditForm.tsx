@@ -82,8 +82,8 @@ export function AccountEditForm({
 
   return (
     <Form {...form}>
-      <form className="space-y-6" onSubmit={form.handleSubmit(submit)}>
-        <div className="grid gap-5 sm:grid-cols-2">
+      <form className="space-y-7" onSubmit={form.handleSubmit(submit)}>
+        <div className="grid gap-5 border-b border-border/70 pb-7 sm:grid-cols-2">
           <FormField
             control={form.control}
             name="displayName"
@@ -152,8 +152,8 @@ export function AccountEditForm({
           <p
             className={
               feedback.type === 'error'
-                ? 'rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive'
-                : 'rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary'
+                ? 'rounded-[10px] border border-destructive/35 bg-destructive/8 px-3.5 py-3 text-sm font-medium text-destructive'
+                : 'rounded-[10px] border border-success/35 bg-success/8 px-3.5 py-3 text-sm font-medium text-success'
             }
             role={feedback.type === 'error' ? 'alert' : 'status'}
           >

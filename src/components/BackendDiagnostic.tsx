@@ -88,7 +88,7 @@ export function BackendDiagnostic() {
   return (
     <aside
       aria-live="polite"
-      className="rounded-2xl border border-border bg-card/80 p-5 shadow-2xl shadow-black/20 backdrop-blur"
+      className="surface-panel p-5"
     >
       <div className="mb-5 flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -109,7 +109,7 @@ export function BackendDiagnostic() {
 
       {diagnostic.phase === 'success' && (
         <div className="flex items-start gap-3">
-          <CircleCheck aria-hidden="true" className="mt-0.5 size-5 text-primary" />
+          <CircleCheck aria-hidden="true" className="mt-0.5 size-5 text-success" />
           <div>
             <p className="font-mono text-lg font-bold">
               backend: {formatHealthStatus(diagnostic.health.status)}

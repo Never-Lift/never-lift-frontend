@@ -17,22 +17,27 @@ export function AvatarPicker({
   allowEmpty = true,
 }: AvatarPickerProps) {
   return (
-    <fieldset className="space-y-3" disabled={disabled}>
+    <fieldset className="space-y-4" disabled={disabled}>
       <div>
-        <legend className="text-sm font-semibold">Avatar</legend>
+        <legend className="text-sm font-bold">Avatar</legend>
         <p className="mt-1 text-xs text-muted-foreground">
           Opcional. Você poderá trocar depois na sua conta.
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5" role="radiogroup">
+      <div
+        className="grid grid-cols-3 gap-2.5 sm:grid-cols-5"
+        role="radiogroup"
+      >
         {allowEmpty && (
           <button
             aria-checked={!value}
             aria-label="Sem avatar"
             className={cn(
-              'group relative aspect-square overflow-hidden rounded-xl border bg-muted/40 transition hover:border-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-              !value ? 'border-primary ring-2 ring-primary/20' : 'border-border',
+              'group relative aspect-square overflow-hidden rounded-xl border bg-background/55 transition duration-200 hover:-translate-y-0.5 hover:border-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+              !value
+                ? 'border-primary ring-2 ring-primary/20'
+                : 'border-border',
             )}
             onClick={() => onChange(undefined)}
             role="radio"
@@ -55,7 +60,7 @@ export function AvatarPicker({
               aria-checked={selected}
               aria-label={avatar.name}
               className={cn(
-                'group relative aspect-square overflow-hidden rounded-xl border bg-muted/40 transition hover:border-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                'group relative aspect-square overflow-hidden rounded-xl border bg-background/55 transition duration-200 hover:-translate-y-0.5 hover:border-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card',
                 selected
                   ? 'border-primary ring-2 ring-primary/20'
                   : 'border-border',
