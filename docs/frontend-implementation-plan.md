@@ -83,11 +83,13 @@ Mesma numeração e dependências do plano de backend.
 
 ### Módulo 2 — Motor de corrida local (sem rede)
 **Depende de:** Módulo 0 (frontend) + Módulo 2 (backend, catálogo versionado de pistas e persistência de resultado).
+**Contrato de entrada:** `contracts/module-2/v1/` define `TrackDefinition v1`, catálogo `2026.1`, constantes físicas `1.0.0` e as decisões fechadas do modo local. O frontend consome o catálogo pela API; não mantém uma segunda cópia das 24 geometrias em produção.
 **Cobre features:** 4 (solo/local), 5, 6 (menos vácuo, que só existe com outro jogador real), 14, 15, 16, 17, 18, 21, 22, 23, 24.
 **Este módulo é o motor físico do jogo novo, escrito do zero em TypeScript — o protótipo entra só como referência de sensação/comportamento esperado, não como código a converter (isso não é uma versão do jogo antigo). Nenhuma rede envolvida aqui.**
 **Escopo:**
 - `RaceEngine` em TS: passo de física em **delta de tempo fixo** (ex. `1/60s`), desacoplado do `requestAnimationFrame` — corrige o problema do protótipo onde a física dependia do FPS de cada máquina. Inclui atrito maior fora da pista (grama: carro mais liso e mais lento, feature 5) e a alternância `driftMode`/normal (feature 4, com a mesma tunagem que o motor autoritativo do backend usa). Renderização interpola visualmente entre os dois últimos passos de física quando o frame real cai entre dois ticks.
 - Input: WASD **e** setas simultaneamente habilitados.
+- Modo local com colisão entre carros. O split-screen usa divisão vertical em telas largas e horizontal quando a razão de aspecto for menor que `1.35`; cada jogador possui câmera própria.
 - Renderização: pista, carro, sujeira de pneu, partículas — com o protótipo como referência visual de ponto de partida, não como código reaproveitado diretamente.
 - Carregar metadados por `GET /api/tracks` e a definição selecionada por `GET /api/tracks/{id}`; manter a `trackCatalogVersion` da definição para entrar em salas e registrar resultados. O motor local não depende do backend depois que a pista foi carregada.
 - Coordenadas, dimensões, distância e velocidade usam metros e segundos; escala de câmera não pode afetar física ou colisão.
@@ -97,9 +99,10 @@ Mesma numeração e dependências do plano de backend.
 - Semáforo de largada (não contagem regressiva): sequência de luzes; largada queimada trava o acelerador por 5s.
 - Cone de luz dinâmico à frente do carro em pistas noturnas; escurecimento controlado do restante da pista, sem depender de blur pesado de tela inteira.
 - Seleção de modelo (F1 com cor = capacete, Supercarro, Drift) e cor antes de correr.
-- Catálogo com 24 circuitos de nomes reais e traçados reconhecíveis para o uso pessoal declarado, comprimentos variados e escala métrica aproximada. Pequenos ajustes de 10–20% são permitidos quando necessários à jogabilidade; uma futura distribuição pública exige revisão de nomes e apresentação.
+- Catálogo `2026.1` congelado com as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo diante de alterações posteriores no calendário real. Os traçados são reconhecíveis, têm comprimentos variados e escala métrica aproximada. Pequenos ajustes de 10–20% são permitidos quando necessários à jogabilidade; uma futura distribuição pública exige revisão de nomes e apresentação.
 - Cenário semirrealista simples: superfície limpa, limites legíveis, pontos marcantes próximos e áreas distantes de baixo detalhe; objetos ambientais estáticos.
-- Alertas visuais de peça danificada (aqui ainda sem dano real — dano de verdade só existe online, ver Módulo 5; local pode simular dano cosmético/local se quiserem consistência de sensação, a decidir).
+- Alertas visuais de peça danificada são somente cosméticos no Módulo 2 e nunca alteram física, velocidade ou resultado. Dano autoritativo pertence ao Módulo 5.
+- Bots usam a linha de corrida do contrato; dificuldade maior melhora conjuntamente ritmo, frenagem, precisão, recuperação e consistência.
 **Testes obrigatórios específicos:** equivalência de passo físico em diferentes FPS; transformação mundo→câmera e mundo→minimap; estabilidade da câmera em parada/ré/rodada; culling sem desaparecimento visível; circuito curto e longo concluídos sem depender do tamanho da tela.
 **Critério de pronto:** correr sozinho contra bots ou em split-screen local (2 jogadores, mesmo teclado com mapeamentos distintos) do início ao fim de uma corrida, com física estável em qualquer taxa de frame do navegador, câmera/minimap legíveis e circuito extenso sem borda ou bitmap global visível.
 

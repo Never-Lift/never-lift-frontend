@@ -112,6 +112,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
+**Contrato de entrada:** `contracts/module-2/v1/` contém os schemas compartilhados, catálogo `2026.1`, constantes físicas `1.0.0` e, neste repositório, as 24 definições métricas geradas de forma reproduzível. O Módulo 2 transforma esses dados canônicos em seed/migration e API; não redesenha circuitos durante a implementação.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
 **Nota:** o motor de física em si (solo/local) roda **inteiramente no frontend** neste módulo — ver plano de frontend, Módulo 2. O backend fornece o catálogo versionado de pistas e persiste o resultado no fim; não participa da simulação local.
 **Endpoints:**
@@ -119,8 +120,9 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 - `GET /api/tracks/{id}` → definição métrica versionada (`pathDefinition`, `sceneryLayout`) usada pelo motor local e pelo minimapa
 - `POST /api/races/local-result` `{ trackId, trackCatalogVersion, mode: solo|local, results: [{ userIdOrNull, position, totalTimeMs, bestLapTimeMs, finished }] }`
 **Regras do catálogo:** `pathDefinition` precisa conter traçado fechado, limites dirigíveis, checkpoints, largada e pits em metros; `sceneryLayout` usa o mesmo sistema de coordenadas. Comprimentos variados e ajustes aproximados de 10–20% são permitidos conforme o guia, mas frontend e backend precisam consumir a mesma `catalogVersion`.
+**Regra de identidade:** o backend deriva o usuário do JWT. O payload nunca pode atribuir um resultado a um `userId` arbitrário; guest e bot permanecem sem associação de conta.
 **Testes obrigatórios específicos:** validar os 24 registros, identidade/versão do catálogo, geometria fechada, ordem de checkpoints, comprimento coerente e rejeição de resultado com `trackId` inexistente ou versão incompatível.
-**Critério de pronto:** o catálogo permite carregar um circuito curto e um longo no frontend, e o resultado de uma corrida solo/local aparece em `race history` (Módulo 8) depois de enviado.
+**Critério de pronto:** o catálogo permite carregar um circuito curto e um longo no frontend, e o resultado de uma corrida solo/local é persistido e consultável pela camada de repositório que será exposta pelo `race history` no Módulo 8. O endpoint público de histórico não é antecipado no Módulo 2.
 
 ### Módulo 3 — Motor autoritativo online (núcleo)
 **Depende de:** Módulo 1.

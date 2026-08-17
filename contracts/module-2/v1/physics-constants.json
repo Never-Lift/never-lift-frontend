@@ -1,0 +1,135 @@
+{
+  "$schema": "./physics-constants.schema.json",
+  "version": "1.0.0",
+  "calibrationStatus": "initial",
+  "units": {
+    "distance": "meter",
+    "time": "second",
+    "angle": "radian",
+    "mass": "kilogram"
+  },
+  "simulation": {
+    "physicsStepSeconds": 0.016666667,
+    "serverTickSeconds": 0.033333333,
+    "serverPhysicsSubstepsPerTick": 2,
+    "maxFrameCatchUpSeconds": 0.25,
+    "maxSubstepsPerFrame": 8
+  },
+  "vehicleProfiles": {
+    "formula": {
+      "massKg": 800,
+      "lengthMeters": 5.6,
+      "widthMeters": 2,
+      "maxForwardSpeed": 94,
+      "maxReverseSpeed": 14,
+      "engineAcceleration": 18,
+      "brakeDeceleration": 32,
+      "linearDrag": 0.35,
+      "quadraticDrag": 0.002,
+      "maxSteerRate": 1.75,
+      "highSpeedSteerReduction": 0.62,
+      "baseLateralGrip": 12
+    },
+    "supercar": {
+      "massKg": 1450,
+      "lengthMeters": 4.8,
+      "widthMeters": 2,
+      "maxForwardSpeed": 86,
+      "maxReverseSpeed": 13,
+      "engineAcceleration": 15,
+      "brakeDeceleration": 26,
+      "linearDrag": 0.42,
+      "quadraticDrag": 0.0022,
+      "maxSteerRate": 1.9,
+      "highSpeedSteerReduction": 0.58,
+      "baseLateralGrip": 10.5
+    },
+    "drift": {
+      "massKg": 1250,
+      "lengthMeters": 4.6,
+      "widthMeters": 1.9,
+      "maxForwardSpeed": 78,
+      "maxReverseSpeed": 13,
+      "engineAcceleration": 16,
+      "brakeDeceleration": 24,
+      "linearDrag": 0.46,
+      "quadraticDrag": 0.0024,
+      "maxSteerRate": 2.15,
+      "highSpeedSteerReduction": 0.5,
+      "baseLateralGrip": 8
+    }
+  },
+  "handlingModes": {
+    "normal": {
+      "lateralGripMultiplier": 1,
+      "longitudinalGripMultiplier": 1,
+      "steeringMultiplier": 1,
+      "yawDampingPerSecond": 5.5
+    },
+    "drift": {
+      "lateralGripMultiplier": 0.38,
+      "longitudinalGripMultiplier": 0.88,
+      "steeringMultiplier": 1.12,
+      "yawDampingPerSecond": 2.3
+    }
+  },
+  "surfaces": {
+    "asphalt": {
+      "accelerationMultiplier": 1,
+      "dragMultiplier": 1,
+      "lateralGripMultiplier": 1,
+      "speedLimit": null
+    },
+    "grass": {
+      "accelerationMultiplier": 0.45,
+      "dragMultiplier": 3.2,
+      "lateralGripMultiplier": 0.55,
+      "speedLimit": 48
+    },
+    "pit-lane": {
+      "accelerationMultiplier": 0.75,
+      "dragMultiplier": 1.1,
+      "lateralGripMultiplier": 1,
+      "speedLimit": 22.222222
+    }
+  },
+  "collision": {
+    "carRestitution": 0.18,
+    "barrierRestitution": 0.12,
+    "tangentialFriction": 0.72,
+    "positionCorrectionPercent": 0.8,
+    "penetrationSlopMeters": 0.01
+  },
+  "race": {
+    "jumpStartThrottleThreshold": 0.05,
+    "jumpStartLockSeconds": 5,
+    "gridGapMeters": 8,
+    "checkpointGateMarginMeters": 2
+  },
+  "bots": {
+    "easy": {
+      "paceMultiplier": 0.78,
+      "brakingSafetyMultiplier": 1.35,
+      "steeringNoise": 0.08,
+      "reactionDelaySeconds": 0.32,
+      "recoveryMultiplier": 0.7,
+      "consistency": 0.72
+    },
+    "normal": {
+      "paceMultiplier": 0.88,
+      "brakingSafetyMultiplier": 1.18,
+      "steeringNoise": 0.045,
+      "reactionDelaySeconds": 0.2,
+      "recoveryMultiplier": 0.85,
+      "consistency": 0.84
+    },
+    "hard": {
+      "paceMultiplier": 0.97,
+      "brakingSafetyMultiplier": 1.04,
+      "steeringNoise": 0.018,
+      "reactionDelaySeconds": 0.1,
+      "recoveryMultiplier": 1,
+      "consistency": 0.95
+    }
+  }
+}

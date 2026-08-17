@@ -120,7 +120,7 @@ Regras:
 
 ### 6.1 Catálogo e escala compartilhada
 
-- O catálogo terá 24 circuitos com nomes reais e traçados reconhecíveis, destinados ao uso pessoal informado pelo proprietário.
+- O catálogo `2026.1` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais e traçados reconhecíveis, destinados ao uso pessoal informado pelo proprietário.
 - Se houver decisão futura de distribuição pública, nomes, marcas e apresentação devem ser revistos antes da publicação.
 - Circuitos podem ter comprimentos diferentes e próximos das proporções reais.
 - Unidade compartilhada de mundo: **1 unidade = 1 metro**.
@@ -243,6 +243,8 @@ Regras:
 - Carro atual visível; “Trocar” abre painel compacto.
 - Painel lateral fixo resume pista, voltas, clima, horário, modo e carro.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
+- No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
+- Dano no Módulo 2 é somente cosmético; bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
 
 ### 9.3 Resultado e pódio
 
