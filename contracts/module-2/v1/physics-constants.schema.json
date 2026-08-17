@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://never-lift.local/contracts/module-2/v1/physics-constants.schema.json",
+  "title": "Never Lift Physics Constants v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "calibrationStatus", "units", "simulation", "vehicleProfiles", "handlingModes", "surfaces", "collision", "race", "bots"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": "1.0.0" },
+    "calibrationStatus": { "enum": ["initial", "validated"] },
+    "units": {
+      "type": "object",
+      "required": ["distance", "time", "angle", "mass"],
+      "properties": {
+        "distance": { "const": "meter" },
+        "time": { "const": "second" },
+        "angle": { "const": "radian" },
+        "mass": { "const": "kilogram" }
+      }
+    },
+    "simulation": { "type": "object" },
+    "vehicleProfiles": {
+      "type": "object",
+      "required": ["formula", "supercar", "drift"],
+      "properties": {
+        "formula": { "$ref": "#/$defs/vehicle" },
+        "supercar": { "$ref": "#/$defs/vehicle" },
+        "drift": { "$ref": "#/$defs/vehicle" }
+      }
+    },
+    "handlingModes": { "type": "object" },
+    "surfaces": { "type": "object" },
+    "collision": { "type": "object" },
+    "race": { "type": "object" },
+    "bots": { "type": "object" }
+  },
+  "$defs": {
+    "vehicle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["massKg", "lengthMeters", "widthMeters", "maxForwardSpeed", "maxReverseSpeed", "engineAcceleration", "brakeDeceleration", "linearDrag", "quadraticDrag", "maxSteerRate", "highSpeedSteerReduction", "baseLateralGrip"],
+      "properties": {
+        "massKg": { "type": "number", "exclusiveMinimum": 0 },
+        "lengthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "widthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "maxForwardSpeed": { "type": "number", "exclusiveMinimum": 0 },
+        "maxReverseSpeed": { "type": "number", "exclusiveMinimum": 0 },
+        "engineAcceleration": { "type": "number", "exclusiveMinimum": 0 },
+        "brakeDeceleration": { "type": "number", "exclusiveMinimum": 0 },
+        "linearDrag": { "type": "number", "minimum": 0 },
+        "quadraticDrag": { "type": "number", "minimum": 0 },
+        "maxSteerRate": { "type": "number", "exclusiveMinimum": 0 },
+        "highSpeedSteerReduction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "baseLateralGrip": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

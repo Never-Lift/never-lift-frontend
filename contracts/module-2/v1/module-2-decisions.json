@@ -1,0 +1,18 @@
+{
+  "contractVersion": "1.0.0",
+  "seasonReference": 2026,
+  "calendarPolicy": "original-24-round-freeze",
+  "localCarCollision": true,
+  "splitScreen": {
+    "wideViewport": "vertical",
+    "narrowViewport": "horizontal",
+    "wideAspectRatioThreshold": 1.35
+  },
+  "localDamage": "cosmetic-only",
+  "botDifficultyPolicy": "all-dimensions",
+  "notes": [
+    "O catálogo permanece com 24 circuitos mesmo que o calendário real seja alterado durante a temporada.",
+    "Dano local não altera desempenho no Módulo 2; dano autoritativo e perda de desempenho pertencem ao Módulo 5.",
+    "Bots mais difíceis melhoram ritmo, frenagem, precisão, recuperação e consistência simultaneamente."
+  ]
+}
