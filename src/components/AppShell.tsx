@@ -10,7 +10,11 @@ import { cn } from '@/lib/utils'
 const navItemClass =
   'group inline-flex h-10 items-center justify-center gap-3 rounded-[10px] border border-transparent px-3 text-sm font-bold text-muted-foreground transition hover:border-border hover:bg-muted/70 hover:text-foreground lg:w-full lg:justify-start'
 
-export function AppShell({ children }: PropsWithChildren) {
+type AppShellProps = PropsWithChildren<{
+  moduleLabel?: string
+}>
+
+export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps) {
   const { account, isUser, signOut } = useAuth()
   const navigate = useNavigate()
 
@@ -98,7 +102,7 @@ export function AppShell({ children }: PropsWithChildren) {
         <header className="hidden h-[72px] items-center justify-between border-b border-border/60 px-8 lg:flex xl:px-12">
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
             Paddock digital <span className="mx-2 text-border">/</span>{' '}
-            <span className="text-info">Módulo 01</span>
+            <span className="text-info">{moduleLabel}</span>
           </p>
           <p className="text-xs font-semibold text-muted-foreground">
             {isUser ? `@${account?.gamertag ?? 'piloto'}` : 'Acesso guest'}
