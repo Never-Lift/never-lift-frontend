@@ -84,6 +84,11 @@ Mesma numeração e dependências do plano de backend.
 ### Módulo 2 — Motor de corrida local (sem rede)
 **Depende de:** Módulo 0 (frontend) + Módulo 2 (backend, catálogo versionado de pistas e persistência de resultado).
 **Contrato de entrada:** `contracts/module-2/v1/` define `TrackDefinition v1`, catálogo `2026.1`, constantes físicas `1.0.0` e as decisões fechadas do modo local. O frontend consome o catálogo pela API; não mantém uma segunda cópia das 24 geometrias em produção.
+**Estado da entrega:** em andamento. A Parte 2a (motor) está pronta e validada; as Partes 2b (24 pistas e geometrias da API) e 2c (ambiente e polimento) permanecem pendentes. Este estado parcial não torna o Módulo 2 pronto.
+
+**Parte 2a entregue:** `RaceEngine` determinístico a `1/60s`, interpolação entre ticks, perfis e superfícies do contrato v1, alternância normal/drift, colisões de carros e barreiras, classificação cosmética de dano, oval técnico temporário, seleção dos três modelos e cores, bots determinísticos, dois jogadores com controles distintos, corrida curta completa e persistência em `POST /api/races/local-result`. O motor e o Canvas mantêm posições e velocidades fora do estado React. A equivalência a 30/60/120 FPS, as regras físicas, os inputs, as colisões, os dois modos e o payload REST possuem cobertura automatizada.
+
+**Limite da Parte 2a:** o oval usa provisoriamente o identificador de catálogo `albert-park` apenas para que o resultado técnico seja aceito pelo contrato atual do backend. A Parte 2b troca essa geometria temporária pela definição oficial carregada da API. Split-screen com câmera individual, catálogo/24 pistas, minimapa, culling, semáforo, noite, partículas temáticas e alertas visuais continuam pendentes conforme suas partes.
 **Cobre features:** 4 (solo/local), 5, 6 (menos vácuo, que só existe com outro jogador real), 14, 15, 16, 17, 18, 21, 22, 23, 24.
 **Este módulo é o motor físico do jogo novo, escrito do zero em TypeScript — o protótipo entra só como referência de sensação/comportamento esperado, não como código a converter (isso não é uma versão do jogo antigo). Nenhuma rede envolvida aqui.**
 **Escopo:**
