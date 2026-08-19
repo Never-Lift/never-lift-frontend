@@ -20,7 +20,6 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/frontend-implementation-plan.md` — plano deste repositório, módulo a módulo.
 - `docs/backend-implementation-plan.md` — plano do repositório backend, incluído aqui só como referência da API/WebSocket que este cliente consome. Não implementar nada daqui.
 - `docs/game-design-guide.md` — fonte oficial das decisões visuais, de câmera, escala, telas e fase de implementação. Ler antes de qualquer trabalho de interface ou corrida.
-- `docs/contracts/module-2-shared-contracts.md` e `contracts/module-2/v1/` — contratos versionados de pistas, catálogo e física que o Módulo 2 deve consumir sem reinterpretar.
 
 ## Stack e convenções deste repositório
 - TypeScript (strict) + Vite + React.
@@ -33,7 +32,6 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - Nunca desenhar um carro remoto direto na posição recebida no `state_snapshot` — sempre interpolar entre os dois snapshots mais recentes.
 - Física, pistas, checkpoints e snapshots usam a unidade compartilhada **1 unidade de mundo = 1 metro**. Pixels são somente uma projeção da câmera e nunca podem entrar nas regras físicas.
 - Circuitos extensos não são bitmaps únicos: renderizar por trechos e descartar desenho fora da área visível.
-- O frontend consome as 24 geometrias pela API do backend. Schemas, manifesto e constantes em `contracts/module-2/v1/` devem continuar idênticos nos dois repositórios.
 
 ## Regra fixa: design e fase
 - `docs/game-design-guide.md` define a direção aprovada; não reinterpretar estilo, câmera ou composição em cada módulo.
@@ -50,8 +48,6 @@ Nenhum módulo é considerado pronto sem testes automatizados rigorosos (Vitest 
 3. Atualizar a tabela de status abaixo.
 4. Commit isolado, mensagem referenciando o número do módulo.
 
-Promoções `develop → main` devem preservar a ancestralidade com merge commit. Se alguém usar squash, sincronizar `main` de volta em `develop` antes de iniciar o módulo seguinte.
-
 ## Status dos módulos (frontend)
 Antes de começar um módulo, confira se as dependências dele já estão marcadas como prontas — se não estiverem, pare e avise em vez de assumir.
 
@@ -59,7 +55,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Parte 2a (motor) implementada; correção de dano mecânico v1.1 aguarda revalidação manual; Partes 2b (pistas) e 2c (ambiente/polimento) pendentes |
+| 2 — Motor de corrida local | não iniciado |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/nitro/pits/HUD) | não iniciado |
