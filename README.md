@@ -30,11 +30,24 @@ Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco 
 
 Como a sessão fica exclusivamente em memória, recarregar a página remove o login atual e, ao voltar para `/`, uma nova sessão guest é criada. Esse comportamento é intencional enquanto o backend não adotar cookie `httpOnly`.
 
+## Módulo 2 — Parte 2a: motor local
+
+- `/race` abre o laboratório do `RaceEngine`, com seleção entre F1, Supercarro e Drift, paleta predefinida e acerto normal/drift.
+- O motor usa o passo fixo de `1/60s` e os perfis de `contracts/module-2/v1/physics-constants.json`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
+- O oval técnico temporário permite validar asfalto, grama, bordas, colisão entre carros, marcas de pneu e dano mecânico determinístico. As geometrias das 24 pistas entram na Parte 2b.
+- Solo cria dois bots determinísticos. No modo local, o jogador 1 usa WASD e Shift esquerdo, enquanto o jogador 2 usa setas e Shift direito. Em solo, WASD e setas controlam o mesmo carro.
+- Shift alterna o acerto normal/drift durante a corrida e não funciona como freio de mão. Conforme o contrato v1.1, dano de motor reduz desempenho, dano de direção reduz esterço e perda total desativa os controles; o Módulo 5 acrescenta reparo em pits e o polimento visual completo.
+- A corrida técnica tem uma volta e limite de 60 segundos. Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result`.
+
+O identificador `albert-park` é usado provisoriamente para vincular o oval técnico ao catálogo `2026.1` no envio do resultado. A Parte 2b substituirá somente a geometria temporária pela definição oficial carregada da API.
+
 ## Roadmap
 
 Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e carros por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
 
 A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.
+
+A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md) e [`contracts/module-2/v1/`](contracts/module-2/v1/): catálogo `2026.1`, schemas métricos e constantes físicas compartilhadas. A Parte 2a já consome as constantes diretamente; as geometrias completas pertencem ao backend e serão carregadas por API na Parte 2b.
 
 ## Pré-requisitos
 
@@ -116,7 +129,8 @@ src/
   auth/         # sessão JWT exclusivamente em memória
   components/   # componentes React e base local do shadcn/ui
   lib/          # utilitários compartilhados e base do shadcn/ui
-  pages/        # menu, login, cadastro e conta
+  pages/        # menu, autenticação, conta e laboratório de corrida
+  race/         # física, loop fixo, colisões, input, bots e Canvas 2D
   test/         # configuração global dos testes
 ```
 
