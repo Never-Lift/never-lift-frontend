@@ -58,7 +58,7 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 |---|---|---|
 | `room_state` | `{ players[], hostId, settings, readyStates }`, com `settings.trackId` e `settings.trackCatalogVersion` | mudança no lobby |
 | `countdown` | `{ startAtServerTime }` | semáforo iniciando (feature 14) |
-| `state_snapshot` | `{ tick, serverTime, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, damageState, nitroRemaining, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
+| `state_snapshot` | `{ tick, serverTime, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, nitroRemaining, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
 | `race_event` | `{ type: collision \| checkpoint \| lap_complete \| finished \| false_start \| pit_enter \| pit_exit \| breakdown, ...dados específicos }` | evento discreto decidido pelo servidor |
 | `race_result` | `{ standings[] }` | fim de corrida |
 | `error` | `{ code, message }` | falha de validação |
@@ -112,7 +112,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
-**Contrato de entrada:** `contracts/module-2/v1/` contém os schemas compartilhados, catálogo `2026.1`, constantes físicas `1.1.0` e, neste repositório, as 24 definições métricas geradas de forma reproduzível. O Módulo 2 transforma esses dados canônicos em seed/migration e API; não redesenha circuitos durante a implementação.
+**Contrato de entrada:** `contracts/module-2/v1/` contém os schemas compartilhados, catálogo `2026.1`, constantes físicas `1.2.0` e, neste repositório, as 24 definições métricas geradas de forma reproduzível. O Módulo 2 transforma esses dados canônicos em seed/migration e API; não redesenha circuitos durante a implementação.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
 **Nota:** o motor de física em si (solo/local) roda **inteiramente no frontend** neste módulo — ver plano de frontend, Módulo 2. O backend fornece o catálogo versionado de pistas e persiste o resultado no fim; não participa da simulação local.
 **Endpoints:**
@@ -131,10 +131,10 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Escopo:**
 - Sessão WebSocket por conexão (`/ws`), autenticada via JWT na query string ou header de handshake.
 - `RoomManager`: cria/lista salas, no máximo 4 jogadores+bots por sala, atribui `hostId`.
-- `RaceEngine` por sala: física nova, escrita do zero em Java — o protótipo entra só como referência de sensação/comportamento esperado, não como código a converter (isso é um jogo novo, não uma versão do antigo). Cobre aceleração, atrito — incluindo atrito maior fora da pista (grama: carro fica mais liso e mais lento, feature 5) —, drift, alternância entre `driftMode` e modo normal da sala (feature 4), e colisão. Roda a `30 ticks/segundo` num `ScheduledExecutorService` próprio, lendo o último `input` recebido de cada jogador (não esperando por ele a cada tick).
+- `RaceEngine` por sala: física nova, escrita do zero em Java — o protótipo entra só como referência de sensação/comportamento esperado, não como código a converter (isso é um jogo novo, não uma versão do antigo). Cobre aceleração, atrito — incluindo atrito maior fora da pista (grama: carro fica mais liso e mais lento, feature 5) —, colisão e o modo normal/drift definido uma vez para a sala e aplicado igualmente a todos. Modelos de carro são somente visuais e nunca selecionam constantes mecânicas. Roda a `30 ticks/segundo` num `ScheduledExecutorService` próprio, lendo o último `input` recebido de cada jogador (não esperando por ele a cada tick).
 - O motor usa exclusivamente metros, segundos e radianos conforme a convenção compartilhada; cada carro mantém vetor de velocidade para snapshots, drift e reconciliação.
 - A sala fixa `trackId` e `trackCatalogVersion` antes da largada e rejeita cliente com catálogo incompatível em vez de simular geometrias diferentes.
-- Resolução de colisão **uma vez, no servidor**, usando o estado real de todos os carros da sala — não a aproximação que existia no protótipo. A colisão também classifica e aplica o dano mecânico básico do contrato v1.1 para manter a predição do frontend convergente.
+- Resolução de colisão **uma vez, no servidor**, usando o estado real de todos os carros da sala — não a aproximação que existia no protótipo. A colisão também classifica e aplica o dano mecânico cumulativo do contrato v1.2 para manter a predição do frontend convergente.
 - Broadcast de `state_snapshot` a cada ~50ms (20/s) pra todos da sala.
 **Critério de pronto:** dois clientes de teste (podem ser scripts, não precisa ser a UI final) conectados na mesma sala veem exatamente a mesma colisão acontecer no mesmo lugar — esse é o teste que valida que o bug original foi resolvido.
 
@@ -148,12 +148,12 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Depende de:** Módulo 3.
 **Cobre features:** 5, 6, 7, 15, 19, 24 (estado, alerta visual é frontend).
 **Escopo:**
-- `damageState` por carro: `nenhum | motor | direção | perda_total`, calculado a partir de intensidade/ângulo do impacto no `RaceEngine` desde o núcleo do Módulo 3; este módulo acrescenta a integração completa com pits, eventos, resultado e demais regras de corrida.
+- `damageState` por carro: `{ health, engineDamaged, steeringDamaged, steeringPull, totalLoss }`, cumulativo e calculado pela intensidade do impacto no `RaceEngine`: fraco afeta direção, médio afeta motor, alto combina ambos e crítico causa perda total; colisões menores repetidas também zeram a vida. Dano de motor aplica penalidade moderada e dano de direção gera leve desvio persistente sem reduzir a autoridade de esterço. Este módulo acrescenta a integração completa com pits, eventos, resultado e demais regras de corrida.
 - `nitroRemaining`: orçamento total calculado como `f(número de voltas)` na criação da sala, decrementa com uso, não recarrega.
 - Vácuo: redução leve de arrasto quando um carro está atrás e próximo de outro, calculado no tick da física.
 - Ao cruzar a linha, carro vira `isGhost: true`; regra de colisão do Módulo 3 passa a ignorar par (ghost, não-ghost) e (não-ghost, não-ghost-diferente-de-ghost) — só `(ghost, ghost)` e `(normal, normal)` colidem.
-- `pit_enter`/`pit_exit`: ao sobrepor a zona de pit com `damageState != nenhum`, servidor assume o carro por 2s (ignora `input` do jogador), zera dano, emite os dois eventos.
-- Loadout: `carModel` (F1/Supercar/Drift) e `color` selecionados antes do `ready`, validados no `select_loadout` do Módulo 3.
+- `pit_enter`/`pit_exit`: ao sobrepor a zona de pit com vida abaixo do máximo ou alguma falha mecânica, servidor assume o carro por 2s (ignora `input` do jogador), restaura vida e dano, e emite os dois eventos.
+- Loadout: `carModel` (F1/Supercar/Drift) e `color` selecionados antes do `ready`, validados no `select_loadout` do Módulo 3. Ambos são exclusivamente visuais e nunca alteram física, colisão ou desempenho.
 **Critério de pronto:** simular uma batida forte reduz velocidade máxima do carro pro resto da corrida; usar todo o nitro numa volta o deixa indisponível nas seguintes; carro com perda total fica parado até o fim.
 
 ### Módulo 6 — Campeonatos

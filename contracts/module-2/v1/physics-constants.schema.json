@@ -4,10 +4,10 @@
   "title": "Never Lift Physics Constants v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "calibrationStatus", "units", "simulation", "vehicleProfiles", "handlingModes", "surfaces", "collision", "damage", "race", "bots"],
+  "required": ["version", "calibrationStatus", "units", "simulation", "vehiclePerformance", "vehicleVisualProfiles", "handlingModes", "surfaces", "collision", "damage", "race", "bots"],
   "properties": {
     "$schema": { "type": "string" },
-    "version": { "const": "1.1.0" },
+    "version": { "const": "1.2.0" },
     "calibrationStatus": { "enum": ["initial", "validated"] },
     "units": {
       "type": "object",
@@ -20,13 +20,15 @@
       }
     },
     "simulation": { "type": "object" },
-    "vehicleProfiles": {
+    "vehiclePerformance": { "$ref": "#/$defs/vehiclePerformance" },
+    "vehicleVisualProfiles": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["formula", "supercar", "drift"],
       "properties": {
-        "formula": { "$ref": "#/$defs/vehicle" },
-        "supercar": { "$ref": "#/$defs/vehicle" },
-        "drift": { "$ref": "#/$defs/vehicle" }
+        "formula": { "$ref": "#/$defs/vehicleVisual" },
+        "supercar": { "$ref": "#/$defs/vehicleVisual" },
+        "drift": { "$ref": "#/$defs/vehicleVisual" }
       }
     },
     "handlingModes": { "type": "object" },
@@ -40,22 +42,24 @@
         "thresholds": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["minimumImpactSpeed", "totalLossImpactSpeed", "accumulatedTotalLossPoints", "powertrainAlignment"],
+          "required": ["minimumImpactSpeed", "mediumImpactSpeed", "combinedImpactSpeed", "totalLossImpactSpeed", "maximumHealth", "healthDamagePerImpactSpeed"],
           "properties": {
             "minimumImpactSpeed": { "type": "number", "minimum": 0 },
+            "mediumImpactSpeed": { "type": "number", "exclusiveMinimum": 0 },
+            "combinedImpactSpeed": { "type": "number", "exclusiveMinimum": 0 },
             "totalLossImpactSpeed": { "type": "number", "exclusiveMinimum": 0 },
-            "accumulatedTotalLossPoints": { "type": "number", "exclusiveMinimum": 0 },
-            "powertrainAlignment": { "type": "number", "minimum": 0, "maximum": 1 }
+            "maximumHealth": { "type": "number", "exclusiveMinimum": 0 },
+            "healthDamagePerImpactSpeed": { "type": "number", "exclusiveMinimum": 0 }
           }
         },
         "effects": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["engineAccelerationMultiplier", "engineMaxSpeedMultiplier", "steeringResponseMultiplier", "totalLossDragMultiplier"],
+          "required": ["engineAccelerationMultiplier", "engineMaxSpeedMultiplier", "steeringPullStrength", "totalLossDragMultiplier"],
           "properties": {
             "engineAccelerationMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
             "engineMaxSpeedMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
-            "steeringResponseMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "steeringPullStrength": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
             "totalLossDragMultiplier": { "type": "number", "minimum": 1 }
           }
         }
@@ -65,14 +69,13 @@
     "bots": { "type": "object" }
   },
   "$defs": {
-    "vehicle": {
+    "vehiclePerformance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["massKg", "lengthMeters", "widthMeters", "maxForwardSpeed", "maxReverseSpeed", "engineAcceleration", "brakeDeceleration", "linearDrag", "quadraticDrag", "maxSteerRate", "highSpeedSteerReduction", "baseLateralGrip"],
+      "required": ["massKg", "collisionRadiusMeters", "maxForwardSpeed", "maxReverseSpeed", "engineAcceleration", "brakeDeceleration", "linearDrag", "quadraticDrag", "maxSteerRate", "highSpeedSteerReduction", "baseLateralGrip"],
       "properties": {
         "massKg": { "type": "number", "exclusiveMinimum": 0 },
-        "lengthMeters": { "type": "number", "exclusiveMinimum": 0 },
-        "widthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "collisionRadiusMeters": { "type": "number", "exclusiveMinimum": 0 },
         "maxForwardSpeed": { "type": "number", "exclusiveMinimum": 0 },
         "maxReverseSpeed": { "type": "number", "exclusiveMinimum": 0 },
         "engineAcceleration": { "type": "number", "exclusiveMinimum": 0 },
@@ -82,6 +85,15 @@
         "maxSteerRate": { "type": "number", "exclusiveMinimum": 0 },
         "highSpeedSteerReduction": { "type": "number", "minimum": 0, "maximum": 1 },
         "baseLateralGrip": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "vehicleVisual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lengthMeters", "widthMeters"],
+      "properties": {
+        "lengthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "widthMeters": { "type": "number", "exclusiveMinimum": 0 }
       }
     }
   }

@@ -30,7 +30,6 @@ function setup(id: string, kind: VehicleSetup['kind'] = 'human'): VehicleSetup {
     kind,
     profileId: 'formula',
     color: '#2d7dff',
-    handlingMode: 'normal',
   }
 }
 
@@ -61,7 +60,15 @@ function vehicle(
     previousAngle: options.angle ?? 0,
     yawRate: 0,
     surface: 'asphalt',
-    damage: { kind: 'none', points: 0, lastImpactSpeed: 0 },
+    damage: {
+      kind: 'none',
+      health: 100,
+      engineDamaged: false,
+      steeringDamaged: false,
+      steeringPull: 0,
+      impactCount: 0,
+      lastImpactSpeed: 0,
+    },
     progressRadians: 0,
     previousTrackAngle: 0,
     currentLap: 1,
@@ -75,6 +82,7 @@ function vehicle(
 function runAtFrameRate(framesPerSecond: number) {
   const engine = new RaceEngine({
     mode: 'local',
+    handlingMode: 'normal',
     racers: [setup('player-1'), setup('player-2')],
     maximumRaceSeconds: 120,
   })
@@ -82,7 +90,7 @@ function runAtFrameRate(framesPerSecond: number) {
     throttle: 0.82,
     brake: 0,
     steer: 0.18,
-    handlingMode: 'normal',
+    nitro: false,
   }
   engine.setInput('player-1', input)
   const seconds = 6
@@ -118,7 +126,7 @@ function automaticInput(state: VehicleState): DriverInput {
     throttle: brake ? 0.15 : 0.9,
     brake: brake ? 0.6 : 0,
     steer: clamp(headingError / 0.58, -1, 1),
-    handlingMode: state.handlingMode,
+    nitro: false,
   }
 }
 
@@ -141,13 +149,14 @@ describe('RaceEngine fixed-step simulation', () => {
   it('exposes interpolation between the previous and current fixed ticks', () => {
     const engine = new RaceEngine({
       mode: 'local',
+      handlingMode: 'normal',
       racers: [setup('player-1'), setup('player-2')],
     })
     engine.setInput('player-1', {
       throttle: 1,
       brake: 0,
       steer: 0,
-      handlingMode: 'normal',
+      nitro: false,
     })
     engine.advanceFrame(PHYSICS_STEP_SECONDS * 1.5)
 
@@ -164,6 +173,18 @@ describe('RaceEngine fixed-step simulation', () => {
     )
   })
 
+  it('applies one handling mode to every racer in the race', () => {
+    const engine = new RaceEngine({
+      mode: 'local',
+      handlingMode: 'drift',
+      racers: [setup('player-1'), setup('player-2')],
+    })
+
+    expect(
+      engine.getInterpolatedVehicles().map((candidate) => candidate.handlingMode),
+    ).toEqual(['drift', 'drift'])
+  })
+
   it.each(['solo', 'local'] as const)(
     'runs a %s race from start to classified results',
     (mode) => {
@@ -173,6 +194,7 @@ describe('RaceEngine fixed-step simulation', () => {
           : [setup('player-1'), setup('player-2')]
       const engine = new RaceEngine({
         mode,
+        handlingMode: 'normal',
         racers,
         lapCount: 1,
         maximumRaceSeconds: 60,
@@ -212,7 +234,7 @@ describe('canonical vehicle physics', () => {
     throttle: 1,
     brake: 0,
     steer: 0,
-    handlingMode: 'normal',
+    nitro: false,
   }
 
   it('accelerates less and loses more speed on grass than on asphalt', () => {
@@ -233,12 +255,29 @@ describe('canonical vehicle physics', () => {
     expect(grass.surface).toBe('grass')
   })
 
+  it('uses identical performance for every visual car model', () => {
+    const states = (['formula', 'supercar', 'drift'] as const).map((profileId) =>
+      integrateFor(
+        vehicle(profileId, { profileId }),
+        accelerating,
+        'asphalt',
+        240,
+      ),
+    )
+
+    for (const state of states.slice(1)) {
+      expect(state.position.x).toBeCloseTo(states[0].position.x, 8)
+      expect(state.velocity.x).toBeCloseTo(states[0].velocity.x, 8)
+      expect(state.angle).toBeCloseTo(states[0].angle, 8)
+    }
+  })
+
   it('retains more lateral slip in drift mode than normal mode', () => {
     const input: DriverInput = {
       throttle: 0.6,
       brake: 0,
       steer: 0,
-      handlingMode: 'normal',
+      nitro: false,
     }
     const normal = integrateFor(
       vehicle('normal', {
@@ -257,7 +296,7 @@ describe('canonical vehicle physics', () => {
         velocityX: 25,
         velocityY: 8,
       }),
-      { ...input, handlingMode: 'drift' },
+      input,
       'asphalt',
       45,
     )
@@ -268,7 +307,7 @@ describe('canonical vehicle physics', () => {
   })
 })
 
-describe('collisions and v1 mechanical damage', () => {
+describe('collisions and v1.2 cumulative mechanical damage', () => {
   it('separates colliding cars, applies impulse and classifies the impact', () => {
     const first = vehicle('first', { x: -0.5, velocityX: 18 })
     const second = vehicle('second', { x: 0.5, velocityX: -18 })
@@ -286,7 +325,7 @@ describe('collisions and v1 mechanical damage', () => {
       throttle: 1,
       brake: 0,
       steer: 0,
-      handlingMode: 'normal',
+      nitro: false,
     }
     const healthy = vehicle('healthy-engine')
     const damaged = vehicle('damaged-engine')
@@ -296,27 +335,69 @@ describe('collisions and v1 mechanical damage', () => {
     integrateFor(healthy, accelerationInput, 'asphalt', 300)
     integrateFor(damaged, accelerationInput, 'asphalt', 300)
 
-    expect(damaged.velocity.x).toBeLessThan(healthy.velocity.x * 0.75)
+    expect(damaged.velocity.x).toBeLessThan(healthy.velocity.x)
+    expect(damaged.velocity.x).toBeGreaterThan(healthy.velocity.x * 0.7)
   })
 
-  it('reduces steering response after side impact damage', () => {
-    const steeringInput: DriverInput = {
+  it('applies a persistent slight steering pull without removing steering authority', () => {
+    const neutralSteeringInput: DriverInput = {
       throttle: 0.4,
       brake: 0,
-      steer: 1,
-      handlingMode: 'normal',
+      steer: 0,
+      nitro: false,
     }
     const healthy = vehicle('healthy-steering', { velocityX: 24 })
     const damaged = vehicle('damaged-steering', { velocityX: 24 })
-    recordImpactDamage(damaged, { x: 0, y: 1 }, 10)
+    recordImpactDamage(damaged, { x: 0, y: 1 }, 7)
 
     expect(damaged.damage.kind).toBe('steering')
-    integrateFor(healthy, steeringInput, 'asphalt', 45)
-    integrateFor(damaged, steeringInput, 'asphalt', 45)
+    expect(Math.abs(damaged.damage.steeringPull)).toBe(1)
+    integrateFor(healthy, neutralSteeringInput, 'asphalt', 45)
+    integrateFor(damaged, neutralSteeringInput, 'asphalt', 45)
 
-    expect(Math.abs(damaged.yawRate)).toBeLessThan(
-      Math.abs(healthy.yawRate) * 0.6,
+    expect(Math.abs(healthy.yawRate)).toBeCloseTo(0, 6)
+    expect(Math.abs(damaged.yawRate)).toBeGreaterThan(0)
+
+    const healthyWithSteering = vehicle('healthy-full-steering', { velocityX: 24 })
+    const damagedWithSteering = vehicle('damaged-full-steering', { velocityX: 24 })
+    recordImpactDamage(damagedWithSteering, { x: 0, y: 1 }, 7)
+    const fullSteeringInput = { ...neutralSteeringInput, steer: 1 }
+    integrateFor(healthyWithSteering, fullSteeringInput, 'asphalt', 45)
+    integrateFor(damagedWithSteering, fullSteeringInput, 'asphalt', 45)
+
+    expect(Math.abs(damagedWithSteering.yawRate)).toBeGreaterThan(
+      Math.abs(healthyWithSteering.yawRate) * 0.85,
     )
+  })
+
+  it('keeps prior damage and combines engine and steering failures', () => {
+    const state = vehicle('combined')
+    recordImpactDamage(state, { x: 0, y: 1 }, 7)
+    const healthAfterWeakImpact = state.damage.health
+    recordImpactDamage(state, { x: -1, y: 0 }, 10)
+
+    expect(state.damage.kind).toBe('engine-and-steering')
+    expect(state.damage.engineDamaged).toBe(true)
+    expect(state.damage.steeringDamaged).toBe(true)
+    expect(state.damage.health).toBeLessThan(healthAfterWeakImpact)
+  })
+
+  it('classifies a high non-critical impact as combined damage', () => {
+    const state = vehicle('high-impact')
+    recordImpactDamage(state, { x: -1, y: 0 }, 15)
+
+    expect(state.damage.kind).toBe('engine-and-steering')
+    expect(state.damage.health).toBeGreaterThan(0)
+  })
+
+  it('turns repeated weak impacts into cumulative total loss', () => {
+    const state = vehicle('repeated-weak')
+    for (let impact = 0; impact < 7; impact += 1) {
+      recordImpactDamage(state, { x: 0, y: 1 }, 7)
+    }
+
+    expect(state.damage.kind).toBe('total-loss')
+    expect(state.damage.health).toBe(0)
   })
 
   it('disables driver input and rapidly coasts after total loss', () => {
@@ -330,13 +411,13 @@ describe('collisions and v1 mechanical damage', () => {
         throttle: 1,
         brake: 0,
         steer: 1,
-        handlingMode: 'drift',
+        nitro: false,
       },
       'asphalt',
       120,
     )
 
-    expect(Math.hypot(state.velocity.x, state.velocity.y)).toBeLessThan(1)
+    expect(Math.hypot(state.velocity.x, state.velocity.y)).toBeLessThan(2.5)
     expect(state.angle).toBeCloseTo(0, 6)
     expect(state.handlingMode).toBe('normal')
   })

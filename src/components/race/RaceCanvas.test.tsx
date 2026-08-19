@@ -17,12 +17,13 @@ function telemetry(
     speedKph: 120,
     handlingMode: 'normal',
     damage: 'none',
+    health: 100,
     ...overrides,
   }
 }
 
 describe('DriverTelemetryCard', () => {
-  it('explains the active handling mode and what Shift will do', () => {
+  it('explains the race-wide handling mode and reserves Shift for boost', () => {
     render(
       <DriverTelemetryCard
         driver={telemetry({ handlingMode: 'drift' })}
@@ -31,15 +32,16 @@ describe('DriverTelemetryCard', () => {
       />,
     )
 
-    expect(screen.getByText('Drift ativo')).toBeInTheDocument()
+    expect(screen.getByText('Modo da corrida: Drift')).toBeInTheDocument()
     expect(
-      screen.getByText('Shift esquerdo alterna para Normal'),
+      screen.getByText('Shift esquerdo: boost (disponível no Módulo 5)'),
     ).toBeInTheDocument()
   })
 
   it.each([
-    ['engine', 'Motor: potência reduzida'],
-    ['steering', 'Direção: esterço reduzido'],
+    ['engine', 'Motor: potência levemente reduzida'],
+    ['steering', 'Direção: carro puxando para um lado'],
+    ['engine-and-steering', 'Motor e direção danificados'],
     ['total-loss', 'Perda total: controles desativados'],
   ] as const)('describes the mechanical effect of %s damage', (damage, label) => {
     render(
@@ -52,7 +54,21 @@ describe('DriverTelemetryCard', () => {
 
     expect(screen.getByText(label)).toBeInTheDocument()
     expect(
-      screen.getByText('Shift direito alterna para Drift'),
+      screen.getByText('Shift direito: boost (disponível no Módulo 5)'),
     ).toBeInTheDocument()
+  })
+
+  it('shows cumulative vehicle health as an accessible bar', () => {
+    render(
+      <DriverTelemetryCard
+        driver={telemetry({ damage: 'steering', health: 73 })}
+        driverIndex={0}
+        lapCount={1}
+      />,
+    )
+
+    expect(
+      screen.getByRole('progressbar', { name: 'Vida do carro: 73%' }),
+    ).toHaveAttribute('aria-valuenow', '73')
   })
 })

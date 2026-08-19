@@ -7,14 +7,20 @@ export type HandlingMode = 'normal' | 'drift'
 export type SurfaceId = 'asphalt' | 'grass' | 'pit-lane'
 export type RaceMode = 'solo' | 'local'
 export type BotDifficulty = 'easy' | 'normal' | 'hard'
-export type DamageKind = 'none' | 'engine' | 'steering' | 'total-loss'
+export type DamageKind =
+  | 'none'
+  | 'engine'
+  | 'steering'
+  | 'engine-and-steering'
+  | 'total-loss'
+export type SteeringPull = -1 | 0 | 1
 export type RacerKind = 'human' | 'bot'
 
 export type DriverInput = {
   throttle: number
   brake: number
   steer: number
-  handlingMode: HandlingMode
+  nitro: boolean
 }
 
 export type VehicleSetup = {
@@ -23,17 +29,21 @@ export type VehicleSetup = {
   kind: RacerKind
   profileId: VehicleProfileId
   color: string
-  handlingMode: HandlingMode
   botDifficulty?: BotDifficulty
 }
 
 export type VehicleDamage = {
   kind: DamageKind
-  points: number
+  health: number
+  engineDamaged: boolean
+  steeringDamaged: boolean
+  steeringPull: SteeringPull
+  impactCount: number
   lastImpactSpeed: number
 }
 
 export type VehicleState = VehicleSetup & {
+  handlingMode: HandlingMode
   position: Vector2
   previousPosition: Vector2
   velocity: Vector2
@@ -60,6 +70,7 @@ export type RaceStatus = 'running' | 'finished'
 
 export type RaceEngineOptions = {
   mode: RaceMode
+  handlingMode: HandlingMode
   racers: VehicleSetup[]
   lapCount?: number
   maximumRaceSeconds?: number

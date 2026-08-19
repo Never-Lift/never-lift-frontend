@@ -38,7 +38,7 @@ const NEUTRAL_INPUT: DriverInput = {
   throttle: 0,
   brake: 0,
   steer: 0,
-  handlingMode: 'normal',
+  nitro: false,
 }
 function cloneVehicle(vehicle: VehicleState): VehicleState {
   return {
@@ -50,7 +50,11 @@ function cloneVehicle(vehicle: VehicleState): VehicleState {
   }
 }
 
-function createVehicle(setup: VehicleSetup, index: number): VehicleState {
+function createVehicle(
+  setup: VehicleSetup,
+  index: number,
+  handlingMode: RaceEngineOptions['handlingMode'],
+): VehicleState {
   const startAngle = -0.07 - Math.floor(index / 2) * 0.11
   const centerline = getCenterlinePoint(startAngle)
   const radialNormal = normalize({
@@ -65,6 +69,7 @@ function createVehicle(setup: VehicleSetup, index: number): VehicleState {
 
   return {
     ...setup,
+    handlingMode,
     position,
     previousPosition: { ...position },
     velocity: { x: 0, y: 0 },
@@ -72,7 +77,15 @@ function createVehicle(setup: VehicleSetup, index: number): VehicleState {
     previousAngle: normalizeAngle(startAngle + Math.PI / 2),
     yawRate: 0,
     surface: 'asphalt',
-    damage: { kind: 'none', points: 0, lastImpactSpeed: 0 },
+    damage: {
+      kind: 'none',
+      health: PHYSICS_CONSTANTS.damage.thresholds.maximumHealth,
+      engineDamaged: false,
+      steeringDamaged: false,
+      steeringPull: 0,
+      impactCount: 0,
+      lastImpactSpeed: 0,
+    },
     progressRadians: 0,
     previousTrackAngle: normalizeAngle(getTrackAngle(position)),
     currentLap: 1,
@@ -85,6 +98,7 @@ function createVehicle(setup: VehicleSetup, index: number): VehicleState {
 
 export class RaceEngine {
   readonly mode: RaceEngineOptions['mode']
+  readonly handlingMode: RaceEngineOptions['handlingMode']
   readonly lapCount: number
   readonly maximumRaceSeconds: number
 
@@ -100,14 +114,14 @@ export class RaceEngine {
     }
 
     this.mode = options.mode
+    this.handlingMode = options.handlingMode
     this.lapCount = options.lapCount ?? 1
     this.maximumRaceSeconds = options.maximumRaceSeconds ?? 60
-    this.vehicles = options.racers.map(createVehicle)
+    this.vehicles = options.racers.map((racer, index) =>
+      createVehicle(racer, index, this.handlingMode),
+    )
     for (const vehicle of this.vehicles) {
-      this.inputs.set(vehicle.id, {
-        ...NEUTRAL_INPUT,
-        handlingMode: vehicle.handlingMode,
-      })
+      this.inputs.set(vehicle.id, { ...NEUTRAL_INPUT })
     }
   }
 
@@ -117,7 +131,7 @@ export class RaceEngine {
       throttle: clamp(input.throttle, 0, 1),
       brake: clamp(input.brake, 0, 1),
       steer: clamp(input.steer, -1, 1),
-      handlingMode: input.handlingMode,
+      nitro: input.nitro,
     })
   }
 
@@ -157,7 +171,7 @@ export class RaceEngine {
       vehicle.previousAngle = vehicle.angle
 
       const input = vehicle.finished
-        ? { ...NEUTRAL_INPUT, handlingMode: vehicle.handlingMode }
+        ? { ...NEUTRAL_INPUT }
         : vehicle.kind === 'bot'
           ? this.createBotInput(vehicle)
           : (this.inputs.get(vehicle.id) ?? NEUTRAL_INPUT)
@@ -166,7 +180,7 @@ export class RaceEngine {
 
       for (const contact of getBarrierContacts(
         vehicle.position,
-        getCollisionRadius(vehicle.profileId),
+        getCollisionRadius(),
       )) {
         applyBarrierResponse(
           vehicle,
@@ -225,7 +239,7 @@ export class RaceEngine {
       throttle: needsBraking ? 0.15 : difficulty.paceMultiplier,
       brake: needsBraking ? 0.55 * difficulty.brakingSafetyMultiplier : 0,
       steer,
-      handlingMode: vehicle.handlingMode,
+      nitro: false,
     }
   }
 

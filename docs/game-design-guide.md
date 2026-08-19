@@ -179,6 +179,7 @@ Regras:
 - Efeitos de movimento arcade controlados: fumaça proporcional ao drift, marcas de pneu limitadas, faíscas em contatos relevantes e nitro com chama/rastro curtos.
 - Iluminação simples: faróis, lanternas, luz de freio e cone noturno, com brilho suave.
 - Jogadores são diferenciados somente por modelo e pintura.
+- A escolha do modelo é exclusivamente visual: F1, supercarro e drift compartilham exatamente a mesma física, colisão e desempenho.
 - A mesma combinação de modelo e pintura não pode se repetir na mesma sala; modelos repetidos exigem cores principais diferentes.
 
 ## 8. Interface e HUD
@@ -244,7 +245,9 @@ Regras:
 - Painel lateral fixo resume pista, voltas, clima, horário, modo e carro.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
-- Dano no Módulo 2 usa estados mecânicos simples e determinísticos: motor reduz desempenho, direção reduz autoridade de esterço e perda total desativa inputs. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
+- Normal/drift é uma configuração única da corrida e vale igualmente para todos os participantes; nenhum jogador alterna o próprio acerto durante a prova.
+- Shift é reservado ao nitro/boost do Módulo 5. O orçamento depende do total de voltas, é finito e não recarrega.
+- Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa intensidade do impacto: fraco afeta direção, médio afeta motor, alto combina os dois e crítico causa perda total. Batidas menores repetidas também podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica um leve desvio persistente para a esquerda ou direita sem reduzir a capacidade de esterçar, e uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
 
 ### 9.3 Resultado e pódio
 

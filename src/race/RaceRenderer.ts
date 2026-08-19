@@ -174,7 +174,7 @@ export class RaceRenderer {
         continue
       }
 
-      const profile = PHYSICS_CONSTANTS.vehicleProfiles[vehicle.profileId]
+      const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
       const rearOffset = profile.lengthMeters * 0.34
       this.tireMarks.push({
         position: {
@@ -204,7 +204,7 @@ export class RaceRenderer {
 
   private drawVehicle(vehicle: InterpolatedVehicleState) {
     const context = this.context
-    const profile = PHYSICS_CONSTANTS.vehicleProfiles[vehicle.profileId]
+    const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
     const point = this.world(vehicle.renderPosition)
     const length = profile.lengthMeters * this.scale
     const width = profile.widthMeters * this.scale
