@@ -1,0 +1,18 @@
+{
+  "contractVersion": "1.1.0",
+  "seasonReference": 2026,
+  "calendarPolicy": "original-24-round-freeze",
+  "localCarCollision": true,
+  "splitScreen": {
+    "wideViewport": "vertical",
+    "narrowViewport": "horizontal",
+    "wideAspectRatioThreshold": 1.35
+  },
+  "localDamage": "deterministic-mechanical",
+  "botDifficultyPolicy": "all-dimensions",
+  "notes": [
+    "O catálogo permanece com 24 circuitos mesmo que o calendário real seja alterado durante a temporada.",
+    "Dano local altera motor, direção e resposta aos inputs conforme as constantes v1.1; o backend reproduz a mesma regra ao implementar o motor autoritativo.",
+    "Bots mais difíceis melhoram ritmo, frenagem, precisão, recuperação e consistência simultaneamente."
+  ]
+}
