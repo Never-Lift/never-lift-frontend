@@ -10,7 +10,7 @@ Fechar antes da implementação os formatos que atravessam frontend e backend: c
 - O catálogo não muda automaticamente quando o calendário real é alterado durante a temporada.
 - Colisão entre carros existe no modo local.
 - Split-screen usa divisão vertical em telas largas e horizontal abaixo da razão de aspecto `1.35`.
-- Dano local é somente cosmético no Módulo 2; não altera física, velocidade nem resultado.
+- Dano local é mecânico e determinístico no Módulo 2: impactos podem reduzir motor, reduzir resposta da direção ou causar perda total sem resposta aos inputs.
 - Dificuldade dos bots melhora ritmo, frenagem, trajetória, recuperação e consistência ao mesmo tempo.
 - Física usa subpasso canônico de `1/60 s`. O servidor do Módulo 3 roda a `30 Hz`, executando dois subpassos por tick.
 
@@ -71,6 +71,8 @@ O frontend M2 deve:
 3. registrar os estados finais esperados e trocar `calibrationStatus` para `validated` após validação manual.
 
 O backend M3 deve reproduzir os mesmos cenários dentro das tolerâncias declaradas. Divergência é bug.
+
+O contrato físico `1.1.0` também fixa limiares de impacto e multiplicadores de dano. Motor danificado reduz aceleração e velocidade máxima, direção danificada reduz a autoridade de esterço e perda total ignora inputs e aumenta o arrasto até a parada. O frontend aplica essas regras na corrida local; o backend deve consumir os mesmos valores ao implementar a simulação autoritativa.
 
 ## Resultado local e segurança
 

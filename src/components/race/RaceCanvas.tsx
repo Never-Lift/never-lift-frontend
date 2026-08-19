@@ -20,7 +20,7 @@ type RaceCanvasProps = {
   onAbort: () => void
   onFinished: (results: RaceResultEntry[]) => void
 }
-type DriverTelemetry = {
+export type DriverTelemetry = {
   name: string
   lap: number
   speedKph: number
@@ -29,10 +29,70 @@ type DriverTelemetry = {
 }
 
 const damageLabels: Record<DamageKind, string> = {
-  none: 'sem dano',
-  engine: 'motor (cosmético)',
-  steering: 'direção (cosmético)',
-  'total-loss': 'perda total (cosmética)',
+  none: 'Sem dano mecânico',
+  engine: 'Motor: potência reduzida',
+  steering: 'Direção: esterço reduzido',
+  'total-loss': 'Perda total: controles desativados',
+}
+
+type DriverTelemetryCardProps = {
+  driver: DriverTelemetry
+  driverIndex: number
+  lapCount: number
+}
+
+export function DriverTelemetryCard({
+  driver,
+  driverIndex,
+  lapCount,
+}: DriverTelemetryCardProps) {
+  const isDrift = driver.handlingMode === 'drift'
+  const shiftKey = driverIndex === 0 ? 'Shift esquerdo' : 'Shift direito'
+
+  return (
+    <article className="surface-panel flex flex-wrap items-center justify-between gap-4 p-4">
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 place-items-center rounded-[10px] border border-primary/30 bg-primary/10 text-primary">
+          {driverIndex === 0 ? (
+            <Gauge aria-hidden="true" className="size-5" />
+          ) : (
+            <Flag aria-hidden="true" className="size-5" />
+          )}
+        </span>
+        <div>
+          <p className="font-extrabold">{driver.name}</p>
+          <p className="text-xs font-semibold text-muted-foreground">
+            Volta {driver.lap}/{lapCount}
+          </p>
+        </div>
+      </div>
+      <div className="min-w-44 text-right">
+        <p className="font-display text-2xl font-black italic">
+          {driver.speedKph} km/h
+        </p>
+        <p
+          className={`text-[10px] font-extrabold uppercase tracking-[0.12em] ${
+            driver.damage === 'none'
+              ? 'text-muted-foreground'
+              : 'text-destructive'
+          }`}
+        >
+          {damageLabels[driver.damage]}
+        </p>
+        <p
+          aria-live="polite"
+          className={`mt-2 text-xs font-extrabold uppercase tracking-[0.1em] ${
+            isDrift ? 'text-warning' : 'text-info'
+          }`}
+        >
+          {isDrift ? 'Drift ativo' : 'Normal ativo'}
+        </p>
+        <p className="text-[10px] font-semibold text-muted-foreground">
+          {shiftKey} alterna para {isDrift ? 'Normal' : 'Drift'}
+        </p>
+      </div>
+    </article>
+  )
 }
 
 export function RaceCanvas({
@@ -145,41 +205,19 @@ export function RaceCanvas({
 
       <div className="grid gap-3 md:grid-cols-2">
         {telemetry.map((driver, index) => (
-          <article
-            className="surface-panel flex flex-wrap items-center justify-between gap-4 p-4"
+          <DriverTelemetryCard
+            driver={driver}
+            driverIndex={index}
             key={driver.name}
-          >
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-[10px] border border-primary/30 bg-primary/10 text-primary">
-                {index === 0 ? (
-                  <Gauge aria-hidden="true" className="size-5" />
-                ) : (
-                  <Flag aria-hidden="true" className="size-5" />
-                )}
-              </span>
-              <div>
-                <p className="font-extrabold">{driver.name}</p>
-                <p className="text-xs font-semibold text-muted-foreground">
-                  Volta {driver.lap}/{engine.lapCount} · {driver.handlingMode}
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="font-display text-2xl font-black italic">
-                {driver.speedKph} km/h
-              </p>
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                {damageLabels[driver.damage]}
-              </p>
-            </div>
-          </article>
+            lapCount={engine.lapCount}
+          />
         ))}
       </div>
 
       <p className="text-center text-xs font-semibold text-muted-foreground">
         {mode === 'solo'
-          ? 'WASD ou setas controlam o carro · Shift esquerdo alterna normal/drift'
-          : 'Jogador 1: WASD + Shift esquerdo · Jogador 2: setas + Shift direito'}
+          ? 'WASD ou setas controlam o carro · Shift esquerdo alterna Normal/Drift (não é freio de mão)'
+          : 'Jogador 1: WASD + Shift esquerdo · Jogador 2: setas + Shift direito · Shift alterna Normal/Drift'}
       </p>
     </section>
   )

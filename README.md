@@ -34,9 +34,9 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 - `/race` abre o laboratório do `RaceEngine`, com seleção entre F1, Supercarro e Drift, paleta predefinida e acerto normal/drift.
 - O motor usa o passo fixo de `1/60s` e os perfis de `contracts/module-2/v1/physics-constants.json`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
-- O oval técnico temporário permite validar asfalto, grama, bordas, colisão entre carros, marcas de pneu e dano cosmético. As geometrias das 24 pistas entram na Parte 2b.
+- O oval técnico temporário permite validar asfalto, grama, bordas, colisão entre carros, marcas de pneu e dano mecânico determinístico. As geometrias das 24 pistas entram na Parte 2b.
 - Solo cria dois bots determinísticos. No modo local, o jogador 1 usa WASD e Shift esquerdo, enquanto o jogador 2 usa setas e Shift direito. Em solo, WASD e setas controlam o mesmo carro.
-- Shift alterna o acerto normal/drift durante a corrida. Conforme o contrato v1, os impactos classificam dano de motor, direção ou perda total apenas para feedback cosmético; desempenho e controles não são alterados até o Módulo 5.
+- Shift alterna o acerto normal/drift durante a corrida e não funciona como freio de mão. Conforme o contrato v1.1, dano de motor reduz desempenho, dano de direção reduz esterço e perda total desativa os controles; o Módulo 5 acrescenta reparo em pits e o polimento visual completo.
 - A corrida técnica tem uma volta e limite de 60 segundos. Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result`.
 
 O identificador `albert-park` é usado provisoriamente para vincular o oval técnico ao catálogo `2026.1` no envio do resultado. A Parte 2b substituirá somente a geometria temporária pela definição oficial carregada da API.

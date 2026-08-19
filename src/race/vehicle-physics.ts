@@ -1,5 +1,6 @@
 import {
-  COSMETIC_DAMAGE_THRESHOLDS,
+  DAMAGE_EFFECTS,
+  DAMAGE_THRESHOLDS,
   PHYSICS_CONSTANTS,
 } from '@/race/constants'
 import { clamp, dot, magnitude, normalize, scale } from '@/race/math'
@@ -18,27 +19,50 @@ export function integrateVehicle(
   deltaSeconds: number,
 ) {
   const profile = PHYSICS_CONSTANTS.vehicleProfiles[vehicle.profileId]
-  const handling = PHYSICS_CONSTANTS.handlingModes[input.handlingMode]
+  const isTotalLoss = vehicle.damage.kind === 'total-loss'
+  const handlingMode = isTotalLoss
+    ? vehicle.handlingMode
+    : input.handlingMode
+  const handling = PHYSICS_CONSTANTS.handlingModes[handlingMode]
   const surface = PHYSICS_CONSTANTS.surfaces[surfaceId]
+  const accelerationDamageMultiplier =
+    vehicle.damage.kind === 'engine'
+      ? DAMAGE_EFFECTS.engineAccelerationMultiplier
+      : 1
+  const speedDamageMultiplier =
+    vehicle.damage.kind === 'engine'
+      ? DAMAGE_EFFECTS.engineMaxSpeedMultiplier
+      : 1
+  const steeringDamageMultiplier =
+    vehicle.damage.kind === 'steering'
+      ? DAMAGE_EFFECTS.steeringResponseMultiplier
+      : 1
+  const totalLossDragMultiplier = isTotalLoss
+    ? DAMAGE_EFFECTS.totalLossDragMultiplier
+    : 1
+  const throttleInput = isTotalLoss ? 0 : input.throttle
+  const brakeInput = isTotalLoss ? 0 : input.brake
+  const steerInput = isTotalLoss ? 0 : input.steer
   const forward = { x: Math.cos(vehicle.angle), y: Math.sin(vehicle.angle) }
   const right = { x: -forward.y, y: forward.x }
   let longitudinalSpeed = dot(vehicle.velocity, forward)
   const lateralSpeed = dot(vehicle.velocity, right)
 
   const throttleAcceleration =
-    clamp(input.throttle, 0, 1) *
+    clamp(throttleInput, 0, 1) *
     profile.engineAcceleration *
     surface.accelerationMultiplier *
-    handling.longitudinalGripMultiplier
+    handling.longitudinalGripMultiplier *
+    accelerationDamageMultiplier
   let longitudinalAcceleration = throttleAcceleration
 
-  if (input.brake > 0) {
+  if (brakeInput > 0) {
     if (longitudinalSpeed > 0.4) {
       longitudinalAcceleration -=
-        clamp(input.brake, 0, 1) * profile.brakeDeceleration
+        clamp(brakeInput, 0, 1) * profile.brakeDeceleration
     } else {
       longitudinalAcceleration -=
-        clamp(input.brake, 0, 1) * profile.engineAcceleration * 0.55
+        clamp(brakeInput, 0, 1) * profile.engineAcceleration * 0.55
     }
   }
 
@@ -57,7 +81,8 @@ export function integrateVehicle(
   if (speed > Number.EPSILON) {
     const dragAcceleration =
       (profile.linearDrag * speed + profile.quadraticDrag * speed * speed) *
-      surface.dragMultiplier
+      surface.dragMultiplier *
+      totalLossDragMultiplier
     const dragDelta = Math.min(speed, dragAcceleration * deltaSeconds)
     const velocityDirection = normalize(vehicle.velocity)
     vehicle.velocity.x -= velocityDirection.x * dragDelta
@@ -65,20 +90,22 @@ export function integrateVehicle(
   }
 
   longitudinalSpeed = dot(vehicle.velocity, forward)
-  const forwardLimit =
+  const surfaceForwardLimit =
     surface.speedLimit === null
       ? profile.maxForwardSpeed
       : Math.min(profile.maxForwardSpeed, surface.speedLimit)
+  const forwardLimit = surfaceForwardLimit * speedDamageMultiplier
+  const reverseLimit = profile.maxReverseSpeed * speedDamageMultiplier
   if (longitudinalSpeed > forwardLimit) {
     const excess = longitudinalSpeed - forwardLimit
     vehicle.velocity.x -= forward.x * excess
     vehicle.velocity.y -= forward.y * excess
     longitudinalSpeed = forwardLimit
-  } else if (longitudinalSpeed < -profile.maxReverseSpeed) {
-    const excess = longitudinalSpeed + profile.maxReverseSpeed
+  } else if (longitudinalSpeed < -reverseLimit) {
+    const excess = longitudinalSpeed + reverseLimit
     vehicle.velocity.x -= forward.x * excess
     vehicle.velocity.y -= forward.y * excess
-    longitudinalSpeed = -profile.maxReverseSpeed
+    longitudinalSpeed = -reverseLimit
   }
 
   const speedRatio = clamp(
@@ -90,15 +117,16 @@ export function integrateVehicle(
   const direction = longitudinalSpeed < -0.25 ? -1 : 1
   const steeringAuthority = clamp(Math.abs(longitudinalSpeed) / 3, 0, 1)
   const targetYawRate =
-    clamp(input.steer, -1, 1) *
+    clamp(steerInput, -1, 1) *
     profile.maxSteerRate *
     handling.steeringMultiplier *
+    steeringDamageMultiplier *
     highSpeedSteering *
     steeringAuthority *
     direction
   const yawResponse = clamp((3.5 + lateralGrip * 0.12) * deltaSeconds, 0, 1)
   vehicle.yawRate += (targetYawRate - vehicle.yawRate) * yawResponse
-  if (Math.abs(input.steer) < 0.01) {
+  if (Math.abs(steerInput) < 0.01) {
     vehicle.yawRate *= Math.exp(-handling.yawDampingPerSecond * deltaSeconds)
   }
 
@@ -106,7 +134,7 @@ export function integrateVehicle(
   vehicle.position.x += vehicle.velocity.x * deltaSeconds
   vehicle.position.y += vehicle.velocity.y * deltaSeconds
   vehicle.surface = surfaceId
-  vehicle.handlingMode = input.handlingMode
+  vehicle.handlingMode = handlingMode
 }
 function damagePriority(kind: DamageKind) {
   if (kind === 'total-loss') return 2
@@ -114,12 +142,12 @@ function damagePriority(kind: DamageKind) {
   return 1
 }
 
-export function recordCosmeticImpact(
+export function recordImpactDamage(
   vehicle: VehicleState,
   pushNormal: { x: number; y: number },
   impactSpeed: number,
 ) {
-  if (impactSpeed < COSMETIC_DAMAGE_THRESHOLDS.minimumImpactSpeed) return
+  if (impactSpeed < DAMAGE_THRESHOLDS.minimumImpactSpeed) return
 
   const forward = { x: Math.cos(vehicle.angle), y: Math.sin(vehicle.angle) }
   const alignment = Math.abs(dot(forward, pushNormal))
@@ -128,13 +156,13 @@ export function recordCosmeticImpact(
   vehicle.damage.lastImpactSpeed = impactSpeed
 
   let nextKind: DamageKind =
-    alignment >= COSMETIC_DAMAGE_THRESHOLDS.powertrainAlignment
+    alignment >= DAMAGE_THRESHOLDS.powertrainAlignment
       ? 'engine'
       : 'steering'
   if (
-    weightedImpact >= COSMETIC_DAMAGE_THRESHOLDS.totalLossImpactSpeed ||
+    weightedImpact >= DAMAGE_THRESHOLDS.totalLossImpactSpeed ||
     vehicle.damage.points >=
-      COSMETIC_DAMAGE_THRESHOLDS.accumulatedTotalLossPoints
+      DAMAGE_THRESHOLDS.accumulatedTotalLossPoints
   ) {
     nextKind = 'total-loss'
   }
@@ -178,5 +206,5 @@ export function applyBarrierResponse(
     y:
       tangentialVelocity.y * collision.tangentialFriction + bouncedNormal.y,
   }
-  recordCosmeticImpact(vehicle, pushNormal, incomingSpeed)
+  recordImpactDamage(vehicle, pushNormal, incomingSpeed)
 }

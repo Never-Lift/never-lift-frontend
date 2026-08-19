@@ -3,7 +3,7 @@ import { clamp, dot, magnitude, normalize, scale, subtract } from '@/race/math'
 import type { VehicleState } from '@/race/types'
 import {
   getCollisionRadius,
-  recordCosmeticImpact,
+  recordImpactDamage,
 } from '@/race/vehicle-physics'
 
 export function resolveVehicleCollision(
@@ -66,7 +66,7 @@ export function resolveVehicleCollision(
   }
 
   const impactSpeed = -velocityAlongNormal
-  recordCosmeticImpact(first, scale(normal, -1), impactSpeed)
-  recordCosmeticImpact(second, normal, impactSpeed)
+  recordImpactDamage(first, scale(normal, -1), impactSpeed)
+  recordImpactDamage(second, normal, impactSpeed)
   return true
 }

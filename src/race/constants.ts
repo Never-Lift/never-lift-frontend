@@ -4,12 +4,8 @@ export const PHYSICS_CONSTANTS = physicsConstants
 export const PHYSICS_STEP_SECONDS =
   PHYSICS_CONSTANTS.simulation.physicsStepSeconds
 
-export const COSMETIC_DAMAGE_THRESHOLDS = {
-  minimumImpactSpeed: 4,
-  totalLossImpactSpeed: 18,
-  accumulatedTotalLossPoints: 36,
-  powertrainAlignment: 0.62,
-} as const
+export const DAMAGE_THRESHOLDS = PHYSICS_CONSTANTS.damage.thresholds
+export const DAMAGE_EFFECTS = PHYSICS_CONSTANTS.damage.effects
 export const TEST_OVAL = {
   trackId: 'albert-park',
   trackCatalogVersion: '2026.1',

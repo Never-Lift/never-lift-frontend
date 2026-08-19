@@ -244,7 +244,7 @@ Regras:
 - Painel lateral fixo resume pista, voltas, clima, horário, modo e carro.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
-- Dano no Módulo 2 é somente cosmético; bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
+- Dano no Módulo 2 usa estados mecânicos simples e determinísticos: motor reduz desempenho, direção reduz autoridade de esterço e perda total desativa inputs. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
 
 ### 9.3 Resultado e pódio
 
