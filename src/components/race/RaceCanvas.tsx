@@ -15,8 +15,6 @@ import type {
 type RaceCanvasProps = {
   engine: RaceEngine
   mode: RaceMode
-  playerOneMode: HandlingMode
-  playerTwoMode: HandlingMode
   onAbort: () => void
   onFinished: (results: RaceResultEntry[]) => void
 }
@@ -26,12 +24,14 @@ export type DriverTelemetry = {
   speedKph: number
   handlingMode: HandlingMode
   damage: DamageKind
+  health: number
 }
 
 const damageLabels: Record<DamageKind, string> = {
   none: 'Sem dano mecânico',
-  engine: 'Motor: potência reduzida',
-  steering: 'Direção: esterço reduzido',
+  engine: 'Motor: potência levemente reduzida',
+  steering: 'Direção: carro puxando para um lado',
+  'engine-and-steering': 'Motor e direção danificados',
   'total-loss': 'Perda total: controles desativados',
 }
 
@@ -48,6 +48,7 @@ export function DriverTelemetryCard({
 }: DriverTelemetryCardProps) {
   const isDrift = driver.handlingMode === 'drift'
   const shiftKey = driverIndex === 0 ? 'Shift esquerdo' : 'Shift direito'
+  const health = Math.max(0, Math.min(100, Math.round(driver.health)))
 
   return (
     <article className="surface-panel flex flex-wrap items-center justify-between gap-4 p-4">
@@ -79,16 +80,40 @@ export function DriverTelemetryCard({
         >
           {damageLabels[driver.damage]}
         </p>
+        <div className="mt-2 flex items-center justify-end gap-2">
+          <span className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-muted-foreground">
+            Vida {health}%
+          </span>
+          <span
+            aria-label={`Vida do carro: ${health}%`}
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={health}
+            className="h-2 w-24 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+          >
+            <span
+              className={`block h-full rounded-full transition-[width] ${
+                health > 55
+                  ? 'bg-success'
+                  : health > 25
+                    ? 'bg-warning'
+                    : 'bg-destructive'
+              }`}
+              style={{ width: `${health}%` }}
+            />
+          </span>
+        </div>
         <p
           aria-live="polite"
           className={`mt-2 text-xs font-extrabold uppercase tracking-[0.1em] ${
             isDrift ? 'text-warning' : 'text-info'
           }`}
         >
-          {isDrift ? 'Drift ativo' : 'Normal ativo'}
+          Modo da corrida: {isDrift ? 'Drift' : 'Normal'}
         </p>
         <p className="text-[10px] font-semibold text-muted-foreground">
-          {shiftKey} alterna para {isDrift ? 'Normal' : 'Drift'}
+          {shiftKey}: boost (disponível no Módulo 5)
         </p>
       </div>
     </article>
@@ -98,8 +123,6 @@ export function DriverTelemetryCard({
 export function RaceCanvas({
   engine,
   mode,
-  playerOneMode,
-  playerTwoMode,
   onAbort,
   onFinished,
 }: RaceCanvasProps) {
@@ -117,7 +140,7 @@ export function RaceCanvas({
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const controls = new KeyboardControls(playerOneMode, playerTwoMode)
+    const controls = new KeyboardControls()
     const renderer = new RaceRenderer(canvas)
     let animationFrame = 0
     let previousTimestamp: number | null = null
@@ -149,6 +172,7 @@ export function RaceCanvas({
                 speedKph: Math.round(Math.hypot(vehicle.velocity.x, vehicle.velocity.y) * 3.6),
                 handlingMode: vehicle.handlingMode,
                 damage: vehicle.damage.kind,
+                health: vehicle.damage.health,
               },
             ]
           }),
@@ -171,7 +195,7 @@ export function RaceCanvas({
       cancelAnimationFrame(animationFrame)
       controls.destroy()
     }
-  }, [engine, mode, playerOneMode, playerTwoMode])
+  }, [engine, mode])
 
   return (
     <section aria-label="Corrida local em andamento" className="space-y-4">
@@ -216,8 +240,8 @@ export function RaceCanvas({
 
       <p className="text-center text-xs font-semibold text-muted-foreground">
         {mode === 'solo'
-          ? 'WASD ou setas controlam o carro · Shift esquerdo alterna Normal/Drift (não é freio de mão)'
-          : 'Jogador 1: WASD + Shift esquerdo · Jogador 2: setas + Shift direito · Shift alterna Normal/Drift'}
+          ? 'WASD ou setas controlam o carro · Shift será o boost no Módulo 5'
+          : 'Jogador 1: WASD + Shift esquerdo · Jogador 2: setas + Shift direito · Shift será o boost no Módulo 5'}
       </p>
     </section>
   )

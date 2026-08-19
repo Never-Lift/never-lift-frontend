@@ -5,10 +5,9 @@ import {
 } from '@/race/constants'
 import { clamp, dot, magnitude, normalize, scale } from '@/race/math'
 import type {
-  DamageKind,
   DriverInput,
+  SteeringPull,
   SurfaceId,
-  VehicleProfileId,
   VehicleState,
 } from '@/race/types'
 
@@ -18,31 +17,27 @@ export function integrateVehicle(
   surfaceId: SurfaceId,
   deltaSeconds: number,
 ) {
-  const profile = PHYSICS_CONSTANTS.vehicleProfiles[vehicle.profileId]
+  const profile = PHYSICS_CONSTANTS.vehiclePerformance
   const isTotalLoss = vehicle.damage.kind === 'total-loss'
-  const handlingMode = isTotalLoss
-    ? vehicle.handlingMode
-    : input.handlingMode
-  const handling = PHYSICS_CONSTANTS.handlingModes[handlingMode]
+  const handling = PHYSICS_CONSTANTS.handlingModes[vehicle.handlingMode]
   const surface = PHYSICS_CONSTANTS.surfaces[surfaceId]
   const accelerationDamageMultiplier =
-    vehicle.damage.kind === 'engine'
+    vehicle.damage.engineDamaged
       ? DAMAGE_EFFECTS.engineAccelerationMultiplier
       : 1
   const speedDamageMultiplier =
-    vehicle.damage.kind === 'engine'
+    vehicle.damage.engineDamaged
       ? DAMAGE_EFFECTS.engineMaxSpeedMultiplier
-      : 1
-  const steeringDamageMultiplier =
-    vehicle.damage.kind === 'steering'
-      ? DAMAGE_EFFECTS.steeringResponseMultiplier
       : 1
   const totalLossDragMultiplier = isTotalLoss
     ? DAMAGE_EFFECTS.totalLossDragMultiplier
     : 1
   const throttleInput = isTotalLoss ? 0 : input.throttle
   const brakeInput = isTotalLoss ? 0 : input.brake
-  const steerInput = isTotalLoss ? 0 : input.steer
+  const steeringPull = vehicle.damage.steeringDamaged
+    ? vehicle.damage.steeringPull * DAMAGE_EFFECTS.steeringPullStrength
+    : 0
+  const steerInput = isTotalLoss ? 0 : clamp(input.steer + steeringPull, -1, 1)
   const forward = { x: Math.cos(vehicle.angle), y: Math.sin(vehicle.angle) }
   const right = { x: -forward.y, y: forward.x }
   let longitudinalSpeed = dot(vehicle.velocity, forward)
@@ -120,7 +115,6 @@ export function integrateVehicle(
     clamp(steerInput, -1, 1) *
     profile.maxSteerRate *
     handling.steeringMultiplier *
-    steeringDamageMultiplier *
     highSpeedSteering *
     steeringAuthority *
     direction
@@ -134,47 +128,86 @@ export function integrateVehicle(
   vehicle.position.x += vehicle.velocity.x * deltaSeconds
   vehicle.position.y += vehicle.velocity.y * deltaSeconds
   vehicle.surface = surfaceId
-  vehicle.handlingMode = handlingMode
 }
-function damagePriority(kind: DamageKind) {
-  if (kind === 'total-loss') return 2
-  if (kind === 'none') return 0
-  return 1
+
+function chooseSteeringPull(
+  vehicle: VehicleState,
+  impactSpeed: number,
+): SteeringPull {
+  const idSignature = [...vehicle.id].reduce(
+    (signature, character) => signature * 31 + character.charCodeAt(0),
+    17,
+  )
+  return (
+    (idSignature + vehicle.damage.impactCount + Math.round(impactSpeed * 10)) %
+      2 ===
+    0
+  )
+    ? -1
+    : 1
+}
+
+function updateDamageKind(vehicle: VehicleState) {
+  if (vehicle.damage.health <= 0) {
+    vehicle.damage.kind = 'total-loss'
+  } else if (vehicle.damage.engineDamaged && vehicle.damage.steeringDamaged) {
+    vehicle.damage.kind = 'engine-and-steering'
+  } else if (vehicle.damage.engineDamaged) {
+    vehicle.damage.kind = 'engine'
+  } else if (vehicle.damage.steeringDamaged) {
+    vehicle.damage.kind = 'steering'
+  } else {
+    vehicle.damage.kind = 'none'
+  }
 }
 
 export function recordImpactDamage(
   vehicle: VehicleState,
-  pushNormal: { x: number; y: number },
+  _pushNormal: { x: number; y: number },
   impactSpeed: number,
 ) {
-  if (impactSpeed < DAMAGE_THRESHOLDS.minimumImpactSpeed) return
-
-  const forward = { x: Math.cos(vehicle.angle), y: Math.sin(vehicle.angle) }
-  const alignment = Math.abs(dot(forward, pushNormal))
-  const weightedImpact = impactSpeed * (0.75 + alignment * 0.5)
-  vehicle.damage.points += weightedImpact
-  vehicle.damage.lastImpactSpeed = impactSpeed
-
-  let nextKind: DamageKind =
-    alignment >= DAMAGE_THRESHOLDS.powertrainAlignment
-      ? 'engine'
-      : 'steering'
   if (
-    weightedImpact >= DAMAGE_THRESHOLDS.totalLossImpactSpeed ||
-    vehicle.damage.points >=
-      DAMAGE_THRESHOLDS.accumulatedTotalLossPoints
+    impactSpeed < DAMAGE_THRESHOLDS.minimumImpactSpeed ||
+    vehicle.damage.kind === 'total-loss'
   ) {
-    nextKind = 'total-loss'
+    return
   }
 
-  if (damagePriority(nextKind) >= damagePriority(vehicle.damage.kind)) {
-    vehicle.damage.kind = nextKind
+  vehicle.damage.impactCount += 1
+  vehicle.damage.lastImpactSpeed = impactSpeed
+  vehicle.damage.health = clamp(
+    vehicle.damage.health -
+      impactSpeed * DAMAGE_THRESHOLDS.healthDamagePerImpactSpeed,
+    0,
+    DAMAGE_THRESHOLDS.maximumHealth,
+  )
+
+  if (
+    impactSpeed >= DAMAGE_THRESHOLDS.totalLossImpactSpeed ||
+    vehicle.damage.health <= 0
+  ) {
+    vehicle.damage.health = 0
+    vehicle.damage.engineDamaged = true
+    vehicle.damage.steeringDamaged = true
+    updateDamageKind(vehicle)
+    return
   }
+
+  if (impactSpeed >= DAMAGE_THRESHOLDS.combinedImpactSpeed) {
+    vehicle.damage.engineDamaged = true
+    vehicle.damage.steeringDamaged = true
+    vehicle.damage.steeringPull = chooseSteeringPull(vehicle, impactSpeed)
+  } else if (impactSpeed >= DAMAGE_THRESHOLDS.mediumImpactSpeed) {
+    vehicle.damage.engineDamaged = true
+  } else {
+    vehicle.damage.steeringDamaged = true
+    vehicle.damage.steeringPull = chooseSteeringPull(vehicle, impactSpeed)
+  }
+  updateDamageKind(vehicle)
 }
 
-export function getCollisionRadius(profileId: VehicleProfileId) {
-  const profile = PHYSICS_CONSTANTS.vehicleProfiles[profileId]
-  return profile.widthMeters * 0.62
+export function getCollisionRadius() {
+  return PHYSICS_CONSTANTS.vehiclePerformance.collisionRadiusMeters
 }
 
 export function applyBarrierResponse(

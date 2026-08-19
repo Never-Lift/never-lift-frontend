@@ -1,8 +1,10 @@
 {
-  "contractVersion": "1.1.0",
+  "contractVersion": "1.2.0",
   "seasonReference": 2026,
   "calendarPolicy": "original-24-round-freeze",
   "localCarCollision": true,
+  "vehiclePerformancePolicy": "shared-physics-visual-only-models",
+  "handlingModeScope": "race-wide",
   "splitScreen": {
     "wideViewport": "vertical",
     "narrowViewport": "horizontal",
@@ -12,7 +14,11 @@
   "botDifficultyPolicy": "all-dimensions",
   "notes": [
     "O catálogo permanece com 24 circuitos mesmo que o calendário real seja alterado durante a temporada.",
-    "Dano local altera motor, direção e resposta aos inputs conforme as constantes v1.1; o backend reproduz a mesma regra ao implementar o motor autoritativo.",
+    "F1, Supercarro e Drift diferem somente em silhueta e pintura; massa, colisão e desempenho usam um único perfil compartilhado.",
+    "O modo normal ou drift é uma configuração da corrida e vale igualmente para todos os participantes.",
+    "Dano local v1.2 é cumulativo e classificado pela intensidade: leve afeta direção, médio afeta motor, alto combina ambos e crítico causa perda total.",
+    "O dano de direção aplica um leve desvio lateral persistente e o dano de motor usa penalidades moderadas para preservar a jogabilidade.",
+    "O Shift fica reservado ao nitro do Módulo 5; seu orçamento depende do número de voltas e não recarrega.",
     "Bots mais difíceis melhoram ritmo, frenagem, precisão, recuperação e consistência simultaneamente."
   ]
 }

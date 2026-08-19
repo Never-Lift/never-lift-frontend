@@ -9,7 +9,7 @@ Esta pasta contém os artefatos que precisam permanecer compatíveis entre o fro
 - `track-definition.schema.json`: contrato da definição métrica retornada por `GET /api/tracks/{id}`.
 - `catalog.json`: manifesto congelado dos 24 circuitos da temporada de referência de 2026.
 - `physics-constants.schema.json`: formato da folha de constantes físicas.
-- `physics-constants.json`: primeira calibração compartilhada dos veículos, superfícies, colisão e bots.
+- `physics-constants.json`: calibração compartilhada v1.2 do perfil mecânico único, silhuetas, superfícies, colisão, dano e bots.
 - `physics-reference-scenarios.json`: cenários determinísticos que o motor TypeScript deve fechar no Módulo 2 e o motor Java deve reproduzir no Módulo 3.
 
 ## Fonte canônica

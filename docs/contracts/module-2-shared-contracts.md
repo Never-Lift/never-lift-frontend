@@ -10,7 +10,9 @@ Fechar antes da implementação os formatos que atravessam frontend e backend: c
 - O catálogo não muda automaticamente quando o calendário real é alterado durante a temporada.
 - Colisão entre carros existe no modo local.
 - Split-screen usa divisão vertical em telas largas e horizontal abaixo da razão de aspecto `1.35`.
-- Dano local é mecânico e determinístico no Módulo 2: impactos podem reduzir motor, reduzir resposta da direção ou causar perda total sem resposta aos inputs.
+- F1, Supercarro e Drift são escolhas estritamente visuais; todos usam um único perfil de física e colisão.
+- Normal/drift pertence à corrida inteira e é aplicado igualmente a todos os participantes.
+- Dano local é mecânico, cumulativo e determinístico no Módulo 2: a intensidade classifica falhas de direção, motor, combinação das duas ou perda total, e toda colisão relevante reduz a vida.
 - Dificuldade dos bots melhora ritmo, frenagem, trajetória, recuperação e consistência ao mesmo tempo.
 - Física usa subpasso canônico de `1/60 s`. O servidor do Módulo 3 roda a `30 Hz`, executando dois subpassos por tick.
 
@@ -72,7 +74,7 @@ O frontend M2 deve:
 
 O backend M3 deve reproduzir os mesmos cenários dentro das tolerâncias declaradas. Divergência é bug.
 
-O contrato físico `1.1.0` também fixa limiares de impacto e multiplicadores de dano. Motor danificado reduz aceleração e velocidade máxima, direção danificada reduz a autoridade de esterço e perda total ignora inputs e aumenta o arrasto até a parada. O frontend aplica essas regras na corrida local; o backend deve consumir os mesmos valores ao implementar a simulação autoritativa.
+O contrato físico `1.2.0` separa as silhuetas visuais de um único perfil mecânico compartilhado e fixa limiares de impacto, vida e efeitos moderados de dano. Impacto fraco danifica direção, médio danifica motor, alto combina ambos e crítico causa perda total; a vida cumulativa também permite que colisões menores repetidas terminem a corrida. Motor danificado reduz moderadamente aceleração e velocidade máxima, direção danificada aplica um leve desvio persistente para um lado sem retirar autoridade de esterço, e perda total ignora inputs e aumenta o arrasto até a parada. O frontend aplica essas regras na corrida local; o backend deve consumir os mesmos valores ao implementar a simulação autoritativa.
 
 ## Resultado local e segurança
 

@@ -1,6 +1,6 @@
 {
-  "contractVersion": "1.1.0",
-  "physicsConstantsVersion": "1.1.0",
+  "contractVersion": "1.2.0",
+  "physicsConstantsVersion": "1.2.0",
   "physicsStepSeconds": 0.016666667,
   "outputPolicy": "Frontend M2 locks expected outputs after implementing the canonical integrator; backend M3 must reproduce them within the declared tolerance.",
   "tolerance": {

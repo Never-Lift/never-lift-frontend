@@ -33,7 +33,6 @@ type PlayerSelection = {
   name: string
   profileId: VehicleProfileId
   color: string
-  handlingMode: HandlingMode
 }
 
 type SubmissionState =
@@ -47,9 +46,13 @@ const vehicleOptions: Array<{
   name: string
   description: string
 }> = [
-  { id: 'formula', name: 'F1', description: 'Leve, veloz e preciso' },
-  { id: 'supercar', name: 'Supercarro', description: 'Estável e equilibrado' },
-  { id: 'drift', name: 'Drift', description: 'Ágil e solto de traseira' },
+  { id: 'formula', name: 'F1', description: 'Silhueta monoposto' },
+  {
+    id: 'supercar',
+    name: 'Supercarro',
+    description: 'Silhueta esportiva fechada',
+  },
+  { id: 'drift', name: 'Drift', description: 'Silhueta urbana preparada' },
 ]
 
 const colorOptions = ['#2d7dff', '#ff2e88', '#2bd67b', '#ffb82e', '#f0f0fa', '#9c6cff']
@@ -58,14 +61,12 @@ const defaultPlayerOne: PlayerSelection = {
   name: 'Piloto 1',
   profileId: 'formula',
   color: colorOptions[0],
-  handlingMode: 'normal',
 }
 
 const defaultPlayerTwo: PlayerSelection = {
   name: 'Piloto 2',
   profileId: 'drift',
   color: colorOptions[1],
-  handlingMode: 'drift',
 }
 
 function PlayerConfigurator({
@@ -127,29 +128,10 @@ function PlayerConfigurator({
           </div>
         </div>
 
-        <div>
-          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.17em] text-muted-foreground">
-            Acerto inicial
-          </p>
-          <div className="flex rounded-[10px] border border-border bg-background/45 p-1">
-            {(['normal', 'drift'] as const).map((handlingMode) => (
-              <button
-                aria-pressed={selection.handlingMode === handlingMode}
-                className={`rounded-lg px-4 py-2 text-xs font-extrabold uppercase tracking-[0.1em] ${
-                  selection.handlingMode === handlingMode
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground'
-                }`}
-                key={handlingMode}
-                onClick={() => onChange({ ...selection, handlingMode })}
-                type="button"
-              >
-                {handlingMode}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
+      <p className="mt-3 text-xs font-semibold text-muted-foreground">
+        A escolha do modelo é somente visual; todos os carros compartilham a mesma física.
+      </p>
     </fieldset>
   )
 }
@@ -160,6 +142,7 @@ export function RacePage() {
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [mode, setMode] = useState<RaceMode>('solo')
   const [difficulty, setDifficulty] = useState<BotDifficulty>('normal')
+  const [handlingMode, setHandlingMode] = useState<HandlingMode>('normal')
   const [playerOne, setPlayerOne] = useState(defaultPlayerOne)
   const [playerTwo, setPlayerTwo] = useState(defaultPlayerTwo)
   const [engine, setEngine] = useState<RaceEngine | null>(null)
@@ -190,7 +173,6 @@ export function RacePage() {
         kind: 'human',
         profileId: playerOne.profileId,
         color: playerOne.color,
-        handlingMode: playerOne.handlingMode,
       },
     ]
 
@@ -201,7 +183,6 @@ export function RacePage() {
         kind: 'human',
         profileId: playerTwo.profileId,
         color: playerTwo.color,
-        handlingMode: playerTwo.handlingMode,
       })
     } else {
       racers.push(
@@ -211,7 +192,6 @@ export function RacePage() {
           kind: 'bot',
           profileId: 'supercar',
           color: '#ffb82e',
-          handlingMode: 'normal',
           botDifficulty: difficulty,
         },
         {
@@ -220,7 +200,6 @@ export function RacePage() {
           kind: 'bot',
           profileId: 'drift',
           color: '#2bd67b',
-          handlingMode: 'drift',
           botDifficulty: difficulty,
         },
       )
@@ -229,9 +208,23 @@ export function RacePage() {
     setResults(null)
     setSubmission({ status: 'idle' })
     setEngine(
-      new RaceEngine({ mode, racers, lapCount: 1, maximumRaceSeconds: 60 }),
+      new RaceEngine({
+        mode,
+        handlingMode,
+        racers,
+        lapCount: 1,
+        maximumRaceSeconds: 60,
+      }),
     )
-  }, [account?.displayName, difficulty, mode, playerOne, playerTwo, session])
+  }, [
+    account?.displayName,
+    difficulty,
+    handlingMode,
+    mode,
+    playerOne,
+    playerTwo,
+    session,
+  ])
 
   const finishRace = useCallback(
     async (raceResults: RaceResultEntry[]) => {
@@ -278,8 +271,6 @@ export function RacePage() {
           mode={mode}
           onAbort={() => setEngine(null)}
           onFinished={finishRace}
-          playerOneMode={playerOne.handlingMode}
-          playerTwoMode={playerTwo.handlingMode}
         />
       </AppShell>
     )
@@ -390,6 +381,28 @@ export function RacePage() {
             <span><strong className="block">Dois jogadores locais</strong><small className="text-muted-foreground">WASD contra setas</small></span>
           </button>
         </div>
+
+        <fieldset className="rounded-2xl border border-border bg-card/55 p-5">
+          <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+            Modo de condução da corrida
+          </legend>
+          <p className="mb-3 text-sm text-muted-foreground">
+            A opção escolhida vale igualmente para todos os jogadores e bots.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(['normal', 'drift'] as const).map((option) => (
+              <Button
+                aria-pressed={handlingMode === option}
+                key={option}
+                onClick={() => setHandlingMode(option)}
+                type="button"
+                variant={handlingMode === option ? 'default' : 'secondary'}
+              >
+                {option === 'normal' ? 'Normal' : 'Drift'}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
 
         <PlayerConfigurator label="Jogador 1" onChange={setPlayerOne} selection={playerOne} />
         {mode === 'local' && (

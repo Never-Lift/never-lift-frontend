@@ -1,5 +1,5 @@
 import { clamp } from '@/race/math'
-import type { DriverInput, HandlingMode, RaceMode } from '@/race/types'
+import type { DriverInput, RaceMode } from '@/race/types'
 
 const CONTROL_KEYS = new Set([
   'KeyW',
@@ -14,24 +14,12 @@ const CONTROL_KEYS = new Set([
   'ShiftRight',
 ])
 
-function opposite(mode: HandlingMode): HandlingMode {
-  return mode === 'normal' ? 'drift' : 'normal'
-}
-
 export class KeyboardControls {
   private readonly pressed = new Set<string>()
   private readonly target: Window
-  private playerOneMode: HandlingMode
-  private playerTwoMode: HandlingMode
 
-  constructor(
-    playerOneMode: HandlingMode,
-    playerTwoMode: HandlingMode,
-    target: Window = window,
-  ) {
+  constructor(target: Window = window) {
     this.target = target
-    this.playerOneMode = playerOneMode
-    this.playerTwoMode = playerTwoMode
     target.addEventListener('keydown', this.handleKeyDown)
     target.addEventListener('keyup', this.handleKeyUp)
     target.addEventListener('blur', this.handleBlur)
@@ -40,12 +28,6 @@ export class KeyboardControls {
   private handleKeyDown = (event: KeyboardEvent) => {
     if (!CONTROL_KEYS.has(event.code)) return
     event.preventDefault()
-    if (!event.repeat && event.code === 'ShiftLeft') {
-      this.playerOneMode = opposite(this.playerOneMode)
-    }
-    if (!event.repeat && event.code === 'ShiftRight') {
-      this.playerTwoMode = opposite(this.playerTwoMode)
-    }
     this.pressed.add(event.code)
   }
 
@@ -73,18 +55,20 @@ export class KeyboardControls {
           ? 1
           : 0,
       steer: clamp(
-        (this.isPressed('KeyD') ||
-        (includeArrows && this.isPressed('ArrowRight'))
+        (this.isPressed('KeyA') ||
+        (includeArrows && this.isPressed('ArrowLeft'))
           ? 1
           : 0) -
-          (this.isPressed('KeyA') ||
-          (includeArrows && this.isPressed('ArrowLeft'))
+          (this.isPressed('KeyD') ||
+          (includeArrows && this.isPressed('ArrowRight'))
             ? 1
             : 0),
         -1,
         1,
       ),
-      handlingMode: this.playerOneMode,
+      nitro:
+        this.isPressed('ShiftLeft') ||
+        (includeArrows && this.isPressed('ShiftRight')),
     }
   }
 
@@ -93,12 +77,12 @@ export class KeyboardControls {
       throttle: this.isPressed('ArrowUp') ? 1 : 0,
       brake: this.isPressed('ArrowDown') ? 1 : 0,
       steer: clamp(
-        (this.isPressed('ArrowRight') ? 1 : 0) -
-          (this.isPressed('ArrowLeft') ? 1 : 0),
+        (this.isPressed('ArrowLeft') ? 1 : 0) -
+          (this.isPressed('ArrowRight') ? 1 : 0),
         -1,
         1,
       ),
-      handlingMode: this.playerTwoMode,
+      nitro: this.isPressed('ShiftRight'),
     }
   }
 

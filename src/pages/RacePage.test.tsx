@@ -30,6 +30,13 @@ describe('Module 2a race setup', () => {
       'true',
     )
     expect(screen.getByText('Dificuldade dos bots')).toBeInTheDocument()
+    expect(screen.getByText('Modo de condução da corrida')).toBeInTheDocument()
+    expect(
+      screen.getByText(/A opção escolhida vale igualmente/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/A escolha do modelo é somente visual/),
+    ).toBeInTheDocument()
   })
 
   it('switches to two players and exposes the second car selection', async () => {

@@ -13,16 +13,13 @@ export function resolveVehicleCollision(
   const delta = subtract(second.position, first.position)
   const distance = magnitude(delta)
   const minimumDistance =
-    getCollisionRadius(first.profileId) +
-    getCollisionRadius(second.profileId)
+    getCollisionRadius() + getCollisionRadius()
   if (distance >= minimumDistance) return false
 
   const normal = distance <= Number.EPSILON ? { x: 1, y: 0 } : normalize(delta)
   const collision = PHYSICS_CONSTANTS.collision
-  const firstProfile = PHYSICS_CONSTANTS.vehicleProfiles[first.profileId]
-  const secondProfile = PHYSICS_CONSTANTS.vehicleProfiles[second.profileId]
-  const firstInverseMass = 1 / firstProfile.massKg
-  const secondInverseMass = 1 / secondProfile.massKg
+  const firstInverseMass = 1 / PHYSICS_CONSTANTS.vehiclePerformance.massKg
+  const secondInverseMass = 1 / PHYSICS_CONSTANTS.vehiclePerformance.massKg
   const inverseMassSum = firstInverseMass + secondInverseMass
   const penetration = minimumDistance - distance
   const correctionMagnitude =
