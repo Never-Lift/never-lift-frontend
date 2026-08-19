@@ -32,14 +32,18 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 ## Módulo 2 — Parte 2a: motor local
 
-- `/race` abre o laboratório do `RaceEngine`, com seleção entre F1, Supercarro e Drift, paleta predefinida e acerto normal/drift.
-- O motor usa o passo fixo de `1/60s` e os perfis de `contracts/module-2/v1/physics-constants.json`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
+- `/race` abre o laboratório do `RaceEngine`, com seleção visual entre F1, Supercarro e Drift, paleta predefinida e modo de condução Normal ou Drift escolhido antes da largada para toda a corrida.
+- O motor usa passo fixo de `1/60s` e o desempenho compartilhado de `contracts/module-2/v1/physics-constants.json`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
+- No contrato v1.2, os três modelos de carro diferem somente em aparência e dimensões visuais: aceleração, velocidade, direção e colisão usam o mesmo perfil físico. O modo Normal/Drift vale igualmente para jogadores e bots e não pode ser alternado durante a corrida.
 - O oval técnico temporário permite validar asfalto, grama, bordas, colisão entre carros, marcas de pneu e dano mecânico determinístico. As geometrias das 24 pistas entram na Parte 2b.
-- Solo cria dois bots determinísticos. No modo local, o jogador 1 usa WASD e Shift esquerdo, enquanto o jogador 2 usa setas e Shift direito. Em solo, WASD e setas controlam o mesmo carro.
-- Shift alterna o acerto normal/drift durante a corrida e não funciona como freio de mão. Conforme o contrato v1.1, dano de motor reduz desempenho, dano de direção reduz esterço e perda total desativa os controles; o Módulo 5 acrescenta reparo em pits e o polimento visual completo.
+- Solo cria dois bots determinísticos. No modo local, o jogador 1 usa WASD e Shift esquerdo, enquanto o jogador 2 usa setas e Shift direito. Em solo, WASD e setas controlam o mesmo carro; A/seta esquerda esterçam para a esquerda e D/seta direita, para a direita.
+- O Shift envia o input reservado de nitro, mas não ativa boost, freio de mão nem troca o modo de condução na Parte 2a. O nitro funcional pertence ao Módulo 5.
+- O dano mecânico v1.2 é cumulativo e aparece na telemetria com a integridade do carro: impactos fracos podem causar desvio persistente da direção, médios reduzem aceleração e velocidade, fortes combinam as duas falhas e impactos críticos ou a perda de toda a integridade causam perda total, que desativa os controles. Batidas menores repetidas também podem levar à perda total.
 - A corrida técnica tem uma volta e limite de 60 segundos. Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result`.
 
 O identificador `albert-park` é usado provisoriamente para vincular o oval técnico ao catálogo `2026.1` no envio do resultado. A Parte 2b substituirá somente a geometria temporária pela definição oficial carregada da API.
+
+A implementação e os testes automatizados das regras v1.2 estão concluídos; a revalidação manual dessas correções na preview permanece pendente. As Partes 2b (pistas) e 2c (ambiente e polimento) ainda não fazem parte da implementação atual.
 
 ## Roadmap
 
