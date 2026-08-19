@@ -116,33 +116,3 @@ export const accountApi = {
       token,
     ),
 }
-
-export type LocalRaceResultRequest = {
-  trackId: string
-  trackCatalogVersion: string
-  mode: 'solo' | 'local'
-  results: Array<{
-    userIdOrNull: string | null
-    position: number
-    totalTimeMs: number
-    bestLapTimeMs: number
-    finished: boolean
-  }>
-}
-
-export type LocalRaceResultResponse = {
-  persistedCount: number
-  resultIds: string[]
-}
-
-export const raceApi = {
-  submitLocalResult: (result: LocalRaceResultRequest, token?: string) =>
-    apiRequest<LocalRaceResultResponse>(
-      '/races/local-result',
-      {
-        method: 'POST',
-        body: JSON.stringify(result),
-      },
-      token,
-    ),
-}
