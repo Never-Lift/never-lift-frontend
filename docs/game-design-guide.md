@@ -342,10 +342,10 @@ Executar em uma rodada e PR próprios, sem misturar com funcionalidade de corrid
 
 Os itens abaixo precisam de protótipo, mas não autorizam trocar a direção definida:
 
-- intensidade e curva exata da suavização da câmera;
-- escala final do carro dentro do alvo de 5,5% e limite inicial de 6%;
+- intensidade e curva exata da suavização da câmera — calibração da Parte 2b: `0,25s`, com limite angular para impedir giros instantâneos;
+- escala final do carro dentro do alvo de 5,5% e limite inicial de 6% — calibração da Parte 2b: `5,5%` da altura da viewport focada;
 - densidade máxima de partículas por nível de qualidade;
 - tons intermediários das superfícies escuras;
-- quantidade de trechos de pista mantidos em memória;
+- quantidade de trechos de pista mantidos em memória — na Parte 2b, somente os `chunks` cuja projeção intercepta a viewport, com margem equivalente à largura visual da pista, são desenhados;
 - compressão e resolução final de sprites e imagens estáticas;
 - pequenos ajustes métricos de cada circuito para jogabilidade.

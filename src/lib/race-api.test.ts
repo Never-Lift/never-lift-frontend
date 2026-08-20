@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { raceApi } from '@/lib/api'
 import { jsonResponse } from '@/test/render-app'
+import { SHORT_TRACK } from '@/test/track-fixtures'
 
 describe('raceApi', () => {
   beforeEach(() => {
@@ -11,6 +12,45 @@ describe('raceApi', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
+  })
+
+  it('loads the versioned track catalog and a selected definition', async () => {
+    const catalog = {
+      schemaVersion: '1.0.0',
+      catalogVersion: '2026.1',
+      seasonReference: 2026,
+      calendarPolicy: 'original-24-round-freeze',
+      tracks: [
+        {
+          round: 8,
+          id: 'monaco',
+          name: 'Circuit de Monaco',
+          countryCode: 'MC',
+          countryName: 'Monaco',
+          locality: 'Monaco',
+          lengthMeters: 3337,
+          definitionPath: 'tracks/monaco.json',
+        },
+      ],
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(catalog))
+      .mockResolvedValueOnce(jsonResponse(SHORT_TRACK))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(raceApi.getTracks()).resolves.toEqual(catalog)
+    await expect(raceApi.getTrack('monaco')).resolves.toEqual(SHORT_TRACK)
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8080/api/tracks',
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:8080/api/tracks/monaco',
+      expect.any(Object),
+    )
   })
 
   it('posts a contract-compatible local result with the in-memory token', async () => {

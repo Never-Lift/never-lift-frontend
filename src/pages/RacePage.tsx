@@ -4,7 +4,9 @@ import {
   CircleAlert,
   Gamepad2,
   LoaderCircle,
+  MapPinned,
   Play,
+  RotateCcw,
   Users,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,9 +18,11 @@ import { Button } from '@/components/ui/button'
 import {
   raceApi,
   type LocalRaceResultResponse,
+  type TrackCatalog,
+  type TrackCatalogEntry,
+  type TrackDefinition,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error-messages'
-import { TEST_OVAL } from '@/race/constants'
 import { RaceEngine } from '@/race/RaceEngine'
 import type {
   BotDifficulty,
@@ -67,6 +71,90 @@ const defaultPlayerTwo: PlayerSelection = {
   name: 'Piloto 2',
   profileId: 'drift',
   color: colorOptions[1],
+}
+
+const environmentLabels: Record<
+  TrackDefinition['sceneryLayout']['preset'],
+  string
+> = {
+  park: 'Parque',
+  street: 'Urbano',
+  desert: 'Deserto',
+  coastal: 'Litoral',
+  classic: 'Clássico',
+  'night-city': 'Cidade',
+}
+
+function formatTrackLength(lengthMeters: number) {
+  return `${(lengthMeters / 1000).toFixed(3)} km`
+}
+
+function TrackPreview({ track }: { track: TrackDefinition }) {
+  const width = Math.max(1, track.bounds.maxX - track.bounds.minX)
+  const height = Math.max(1, track.bounds.maxY - track.bounds.minY)
+  const points = track.centerline
+    .map((point) => `${point.x},${-point.y}`)
+    .join(' ')
+
+  return (
+    <svg
+      aria-label={`Prévia do traçado ${track.name}`}
+      className="h-full min-h-52 w-full"
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      viewBox={`${track.bounds.minX - width * 0.06} ${-track.bounds.maxY - height * 0.06} ${width * 1.12} ${height * 1.12}`}
+    >
+      <polyline
+        fill="none"
+        points={points}
+        stroke="rgba(240, 240, 250, 0.2)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={Math.max(width, height) * 0.025}
+      />
+      <polyline
+        fill="none"
+        points={points}
+        stroke="#31c7ff"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={Math.max(width, height) * 0.009}
+      />
+    </svg>
+  )
+}
+
+function TrackOption({
+  track,
+  selected,
+  onSelect,
+}: {
+  track: TrackCatalogEntry
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button
+      aria-pressed={selected}
+      className={`flex w-full items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition ${
+        selected
+          ? 'border-primary bg-primary/10'
+          : 'border-border/70 bg-background/35 hover:bg-muted/55'
+      }`}
+      onClick={onSelect}
+      type="button"
+    >
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-extrabold">{track.name}</span>
+        <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">
+          {track.countryName} · {track.locality}
+        </span>
+      </span>
+      <span className="shrink-0 font-mono text-xs font-bold text-info">
+        {formatTrackLength(track.lengthMeters)}
+      </span>
+    </button>
+  )
 }
 
 function PlayerConfigurator({
@@ -139,7 +227,15 @@ function PlayerConfigurator({
 export function RacePage() {
   const { account, session, startGuestSession } = useAuth()
   const requestedGuest = useRef(false)
+  const trackRequestId = useRef(0)
+  const activeTrack = useRef<TrackDefinition | null>(null)
   const [sessionError, setSessionError] = useState<string | null>(null)
+  const [trackCatalog, setTrackCatalog] = useState<TrackCatalog | null>(null)
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null)
+  const [selectedTrack, setSelectedTrack] = useState<TrackDefinition | null>(null)
+  const [trackError, setTrackError] = useState<string | null>(null)
+  const [tracksLoading, setTracksLoading] = useState(true)
+  const [trackLoading, setTrackLoading] = useState(false)
   const [mode, setMode] = useState<RaceMode>('solo')
   const [difficulty, setDifficulty] = useState<BotDifficulty>('normal')
   const [handlingMode, setHandlingMode] = useState<HandlingMode>('normal')
@@ -158,13 +254,62 @@ export function RacePage() {
     })
   }, [startGuestSession])
 
+  const loadTrackCatalog = useCallback(() => {
+    setTracksLoading(true)
+    setTrackError(null)
+    raceApi
+      .getTracks()
+      .then((catalog) => {
+        if (catalog.tracks.length !== 24) {
+          throw new Error('O catálogo ativo não contém as 24 pistas esperadas.')
+        }
+        setTrackCatalog(catalog)
+        setSelectedTrackId((current) => current ?? catalog.tracks[0]?.id ?? null)
+      })
+      .catch((error: unknown) => setTrackError(getErrorMessage(error)))
+      .finally(() => setTracksLoading(false))
+  }, [])
+
   useEffect(() => {
     if (session || requestedGuest.current) return
     requestGuestSession()
   }, [requestGuestSession, session])
 
+  useEffect(() => {
+    loadTrackCatalog()
+  }, [loadTrackCatalog])
+
+  useEffect(() => {
+    if (!selectedTrackId || !trackCatalog) return
+    const requestId = trackRequestId.current + 1
+    trackRequestId.current = requestId
+    setTrackLoading(true)
+    setTrackError(null)
+    setSelectedTrack(null)
+    raceApi
+      .getTrack(selectedTrackId)
+      .then((definition) => {
+        if (requestId !== trackRequestId.current) return
+        if (
+          definition.id !== selectedTrackId ||
+          definition.catalogVersion !== trackCatalog.catalogVersion
+        ) {
+          throw new Error('A definição da pista não corresponde ao catálogo ativo.')
+        }
+        setSelectedTrack(definition)
+      })
+      .catch((error: unknown) => {
+        if (requestId === trackRequestId.current) {
+          setTrackError(getErrorMessage(error))
+        }
+      })
+      .finally(() => {
+        if (requestId === trackRequestId.current) setTrackLoading(false)
+      })
+  }, [selectedTrackId, trackCatalog])
+
   const startRace = useCallback(() => {
-    if (!session) return
+    if (!session || !selectedTrack) return
     const primaryName = account?.displayName ?? playerOne.name
     const racers: VehicleSetup[] = [
       {
@@ -207,13 +352,14 @@ export function RacePage() {
 
     setResults(null)
     setSubmission({ status: 'idle' })
+    activeTrack.current = selectedTrack
     setEngine(
       new RaceEngine({
+        track: selectedTrack,
         mode,
         handlingMode,
         racers,
         lapCount: 1,
-        maximumRaceSeconds: 60,
       }),
     )
   }, [
@@ -223,6 +369,7 @@ export function RacePage() {
     mode,
     playerOne,
     playerTwo,
+    selectedTrack,
     session,
   ])
 
@@ -237,12 +384,16 @@ export function RacePage() {
 
       setSubmission({ status: 'sending' })
       try {
+        const completedTrack = activeTrack.current
+        if (!completedTrack) {
+          throw new Error('A definição da pista concluída não está mais em memória.')
+        }
         const authenticatedUserId =
           session.role === 'user' ? (account?.id ?? session.subject ?? null) : null
         const response = await raceApi.submitLocalResult(
           {
-            trackId: TEST_OVAL.trackId,
-            trackCatalogVersion: TEST_OVAL.trackCatalogVersion,
+            trackId: completedTrack.id,
+            trackCatalogVersion: completedTrack.catalogVersion,
             mode,
             results: raceResults.map((result) => ({
               userIdOrNull:
@@ -265,7 +416,7 @@ export function RacePage() {
 
   if (engine) {
     return (
-      <AppShell moduleLabel="Módulo 02 // Parte 2a">
+      <AppShell moduleLabel="Módulo 02 // Parte 2b">
         <RaceCanvas
           engine={engine}
           mode={mode}
@@ -278,7 +429,7 @@ export function RacePage() {
 
   if (results) {
     return (
-      <AppShell moduleLabel="Módulo 02 // Parte 2a">
+      <AppShell moduleLabel="Módulo 02 // Parte 2b">
         <section className="mx-auto max-w-3xl">
           <div className="mb-8 text-center">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">
@@ -348,18 +499,111 @@ export function RacePage() {
   }
 
   return (
-    <AppShell moduleLabel="Módulo 02 // Parte 2a">
+    <AppShell moduleLabel="Módulo 02 // Parte 2b">
       <section className="space-y-7">
         <header className="max-w-3xl">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">
-            Laboratório de pista
+            Preparação da corrida
           </p>
-          <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Motor local</h1>
+          <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Escolha a pista</h1>
           <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">
-            Uma volta no oval técnico para validar passo fixo, superfícies, drift,
-            colisões, bots e dois jogadores no mesmo teclado.
+            Selecione um dos 24 circuitos oficiais do catálogo ativo. A geometria
+            carregada será usada pela física, pelas câmeras e pelo minimapa.
           </p>
         </header>
+
+        <section className="grid gap-4 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
+          <div className="surface-panel p-4 sm:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+                  Catálogo {trackCatalog?.catalogVersion ?? 'carregando'}
+                </p>
+                <h2 className="mt-1 font-display text-2xl font-black uppercase italic">
+                  24 circuitos
+                </h2>
+              </div>
+              <MapPinned aria-hidden="true" className="size-6 text-info" />
+            </div>
+
+            {tracksLoading && (
+              <div className="grid min-h-48 place-items-center text-sm text-muted-foreground">
+                <LoaderCircle aria-hidden="true" className="size-6 animate-spin text-info" />
+                Carregando catálogo…
+              </div>
+            )}
+            {!tracksLoading && trackCatalog && (
+              <div
+                aria-label="Circuitos disponíveis"
+                className="max-h-[28rem] space-y-2 overflow-y-auto pr-1"
+              >
+                {trackCatalog.tracks.map((track) => (
+                  <TrackOption
+                    key={track.id}
+                    onSelect={() => setSelectedTrackId(track.id)}
+                    selected={selectedTrackId === track.id}
+                    track={track}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="surface-panel min-h-[28rem] overflow-hidden p-5 sm:p-6">
+            {trackLoading && (
+              <div className="grid h-full min-h-[24rem] place-items-center text-sm font-semibold text-muted-foreground">
+                <LoaderCircle aria-hidden="true" className="size-7 animate-spin text-info" />
+                Carregando geometria…
+              </div>
+            )}
+            {!trackLoading && selectedTrack && (
+              <div className="flex h-full flex-col">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-info">
+                      {selectedTrack.countryCode} // {selectedTrack.locality}
+                    </p>
+                    <h2 className="mt-1 font-display text-3xl font-black uppercase italic">
+                      {selectedTrack.name}
+                    </h2>
+                  </div>
+                  <div className="flex gap-2 text-xs font-bold">
+                    <span className="rounded-full border border-border bg-background/55 px-3 py-1.5">
+                      {formatTrackLength(selectedTrack.lengthMeters)}
+                    </span>
+                    <span className="rounded-full border border-info/35 bg-info/10 px-3 py-1.5 text-info">
+                      {environmentLabels[selectedTrack.sceneryLayout.preset]}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-5 flex-1 rounded-xl border border-border/70 bg-[#07101a] p-4">
+                  <TrackPreview track={selectedTrack} />
+                </div>
+                <p className="mt-4 text-xs font-semibold text-muted-foreground">
+                  {selectedTrack.chunks.length} trechos renderizáveis · minimapa de orientação fixa
+                </p>
+              </div>
+            )}
+            {!trackLoading && !selectedTrack && !trackError && (
+              <div className="grid h-full min-h-[24rem] place-items-center text-sm text-muted-foreground">
+                Selecione um circuito para carregar a prévia.
+              </div>
+            )}
+          </div>
+        </section>
+
+        {trackError && (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4"
+            role="alert"
+          >
+            <p className="text-sm text-destructive">{trackError}</p>
+            <Button onClick={loadTrackCatalog} size="sm" variant="secondary">
+              <RotateCcw aria-hidden="true" className="size-4" />
+              Recarregar pistas
+            </Button>
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <button
@@ -441,11 +685,21 @@ export function RacePage() {
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/65 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <Gamepad2 aria-hidden="true" className="size-5 text-info" />
-            Geometria temporária vinculada ao catálogo v1; as 24 pistas chegam na Parte 2b.
+            {selectedTrack
+              ? `${selectedTrack.name} · ${formatTrackLength(selectedTrack.lengthMeters)} · ${environmentLabels[selectedTrack.sceneryLayout.preset]}`
+              : 'Selecione e carregue uma pista para liberar a largada.'}
           </div>
-          <Button disabled={!session} onClick={startRace} size="lg">
-            {session ? <Play aria-hidden="true" className="size-4" /> : <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}
-            {session ? 'Largar' : 'Preparando sessão'}
+          <Button
+            disabled={!session || !selectedTrack || trackLoading}
+            onClick={startRace}
+            size="lg"
+          >
+            {session && selectedTrack ? (
+              <Play aria-hidden="true" className="size-4" />
+            ) : (
+              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+            )}
+            {session && selectedTrack ? 'Largar' : 'Preparando corrida'}
           </Button>
         </div>
       </section>

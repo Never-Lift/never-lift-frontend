@@ -1,3 +1,5 @@
+import type { TrackDefinition } from '@/lib/api'
+
 export type Vector2 = {
   x: number
   y: number
@@ -52,8 +54,9 @@ export type VehicleState = VehicleSetup & {
   yawRate: number
   surface: SurfaceId
   damage: VehicleDamage
-  progressRadians: number
-  previousTrackAngle: number
+  nextCheckpointIndex: number
+  lapProgressMeters: number
+  totalProgressMeters: number
   currentLap: number
   lapStartedAtSeconds: number
   bestLapTimeSeconds: number | null
@@ -69,6 +72,7 @@ export type InterpolatedVehicleState = VehicleState & {
 export type RaceStatus = 'running' | 'finished'
 
 export type RaceEngineOptions = {
+  track: TrackDefinition
   mode: RaceMode
   handlingMode: HandlingMode
   racers: VehicleSetup[]

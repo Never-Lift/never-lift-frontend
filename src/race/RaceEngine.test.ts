@@ -4,11 +4,7 @@ import { resolveVehicleCollision } from '@/race/collision'
 import { PHYSICS_STEP_SECONDS } from '@/race/constants'
 import { clamp, signedAngleDelta } from '@/race/math'
 import { RaceEngine } from '@/race/RaceEngine'
-import {
-  getBarrierContacts,
-  getCenterlinePoint,
-  getTrackAngle,
-} from '@/race/test-oval'
+import { TrackGeometry } from '@/race/TrackGeometry'
 import type {
   DriverInput,
   HandlingMode,
@@ -22,6 +18,9 @@ import {
   integrateVehicle,
   recordImpactDamage,
 } from '@/race/vehicle-physics'
+import { LONG_TRACK, SHORT_TRACK } from '@/test/track-fixtures'
+
+const TRACK_GEOMETRY = new TrackGeometry(SHORT_TRACK)
 
 function setup(id: string, kind: VehicleSetup['kind'] = 'human'): VehicleSetup {
   return {
@@ -69,8 +68,9 @@ function vehicle(
       impactCount: 0,
       lastImpactSpeed: 0,
     },
-    progressRadians: 0,
-    previousTrackAngle: 0,
+    nextCheckpointIndex: 0,
+    lapProgressMeters: 0,
+    totalProgressMeters: 0,
     currentLap: 1,
     lapStartedAtSeconds: 0,
     bestLapTimeSeconds: null,
@@ -81,6 +81,7 @@ function vehicle(
 
 function runAtFrameRate(framesPerSecond: number) {
   const engine = new RaceEngine({
+    track: SHORT_TRACK,
     mode: 'local',
     handlingMode: 'normal',
     racers: [setup('player-1'), setup('player-2')],
@@ -113,8 +114,10 @@ function integrateFor(
 }
 
 function automaticInput(state: VehicleState): DriverInput {
-  const trackAngle = getTrackAngle(state.position)
-  const target = getCenterlinePoint(trackAngle + 0.18)
+  const projection = TRACK_GEOMETRY.project(state.position)
+  const target = TRACK_GEOMETRY.getRacingLinePoint(
+    projection.distanceMeters + 28,
+  )
   const desiredHeading = Math.atan2(
     target.y - state.position.y,
     target.x - state.position.x,
@@ -126,6 +129,27 @@ function automaticInput(state: VehicleState): DriverInput {
     throttle: brake ? 0.15 : 0.9,
     brake: brake ? 0.6 : 0,
     steer: clamp(headingError / 0.58, -1, 1),
+    nitro: false,
+  }
+}
+
+function trackInput(state: VehicleState, geometry: TrackGeometry): DriverInput {
+  const projection = geometry.project(state.position)
+  const speed = Math.hypot(state.velocity.x, state.velocity.y)
+  const target = geometry.getRacingLinePoint(
+    projection.distanceMeters + 26 + speed * 0.5,
+  )
+  const desiredHeading = Math.atan2(
+    target.y - state.position.y,
+    target.x - state.position.x,
+  )
+  const headingError = signedAngleDelta(state.angle, desiredHeading)
+  const targetSpeed = 94 * target.targetSpeedFactor
+  const shouldBrake = speed > targetSpeed || Math.abs(headingError) > 0.8
+  return {
+    throttle: shouldBrake ? 0.1 : 1,
+    brake: shouldBrake ? 0.5 : 0,
+    steer: clamp(headingError / 0.55, -1, 1),
     nitro: false,
   }
 }
@@ -148,6 +172,7 @@ describe('RaceEngine fixed-step simulation', () => {
 
   it('exposes interpolation between the previous and current fixed ticks', () => {
     const engine = new RaceEngine({
+      track: SHORT_TRACK,
       mode: 'local',
       handlingMode: 'normal',
       racers: [setup('player-1'), setup('player-2')],
@@ -175,6 +200,7 @@ describe('RaceEngine fixed-step simulation', () => {
 
   it('applies one handling mode to every racer in the race', () => {
     const engine = new RaceEngine({
+      track: SHORT_TRACK,
       mode: 'local',
       handlingMode: 'drift',
       racers: [setup('player-1'), setup('player-2')],
@@ -193,6 +219,7 @@ describe('RaceEngine fixed-step simulation', () => {
           ? [setup('player-1'), setup('bot-1', 'bot'), setup('bot-2', 'bot')]
           : [setup('player-1'), setup('player-2')]
       const engine = new RaceEngine({
+        track: SHORT_TRACK,
         mode,
         handlingMode: 'normal',
         racers,
@@ -227,6 +254,40 @@ describe('RaceEngine fixed-step simulation', () => {
       }
     },
   )
+})
+
+describe('official-size track completion', () => {
+  it.each([
+    ['short', SHORT_TRACK],
+    ['long', LONG_TRACK],
+  ] as const)('completes a %s catalog circuit using ordered directional gates', (_, track) => {
+    const engine = new RaceEngine({
+      track,
+      mode: 'solo',
+      handlingMode: 'normal',
+      racers: [setup('player-1'), setup('bot-1', 'bot')],
+      lapCount: 1,
+      maximumRaceSeconds: 240,
+    })
+    const geometry = new TrackGeometry(track)
+
+    for (
+      let frame = 0;
+      frame < 240 * 60 && engine.getStatus() !== 'finished';
+      frame += 1
+    ) {
+      const state = engine.getVehicleState('player-1')
+      if (state) engine.setInput('player-1', trackInput(state, geometry))
+      engine.advanceFrame(1 / 60)
+    }
+
+    const playerResult = engine
+      .getResults()
+      .find((result) => result.racerId === 'player-1')
+    expect(engine.getStatus()).toBe('finished')
+    expect(playerResult?.finished).toBe(true)
+    expect(playerResult?.totalTimeMs).toBeGreaterThan(0)
+  })
 })
 
 describe('canonical vehicle physics', () => {
@@ -423,14 +484,17 @@ describe('collisions and v1.2 cumulative mechanical damage', () => {
   })
 
   it('pushes a car out of the outer barrier and reflects its velocity', () => {
-    const state = vehicle('barrier', { x: 70.5, velocityX: 24 })
-    const [contact] = getBarrierContacts(state.position, 1.24)
+    const state = vehicle('barrier', {
+      x: SHORT_TRACK.bounds.maxX - 6,
+      velocityX: 24,
+    })
+    const [contact] = TRACK_GEOMETRY.getBarrierContacts(state.position, 1.24)
     expect(contact).toBeDefined()
     if (!contact) return
 
     applyBarrierResponse(state, contact.pushNormal, contact.penetrationMeters)
 
-    expect(state.position.x).toBeLessThan(70.5)
+    expect(state.position.x).toBeLessThan(SHORT_TRACK.bounds.maxX - 6)
     expect(state.velocity.x).toBeLessThanOrEqual(0)
     expect(state.damage.kind).not.toBe('none')
   })
