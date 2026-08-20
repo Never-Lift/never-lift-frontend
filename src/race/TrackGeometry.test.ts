@@ -1,22 +1,43 @@
 import { describe, expect, it } from 'vitest'
 
 import { crossesGate, TrackGeometry } from '@/race/TrackGeometry'
-import { SHORT_TRACK } from '@/test/track-fixtures'
+import { LONG_TRACK, SHORT_TRACK } from '@/test/track-fixtures'
 
 describe('TrackGeometry', () => {
-  const geometry = new TrackGeometry(SHORT_TRACK)
-  const radius = SHORT_TRACK.lengthMeters / (Math.PI * 2)
+  const walledGeometry = new TrackGeometry(SHORT_TRACK)
+  const runoffGeometry = new TrackGeometry(LONG_TRACK)
+  const walledRadius = SHORT_TRACK.lengthMeters / (Math.PI * 2)
+  const runoffRadius = LONG_TRACK.lengthMeters / (Math.PI * 2)
 
   it('classifies the real-width racing surface independently from screen scale', () => {
-    expect(geometry.getSurfaceAt({ x: radius, y: 60 })).toBe('asphalt')
-    expect(geometry.getSurfaceAt({ x: radius + 20, y: 60 })).toBe('grass')
+    expect(runoffGeometry.getSurfaceAt({ x: runoffRadius, y: 0 })).toBe('asphalt')
+    expect(runoffGeometry.getSurfaceAt({ x: runoffRadius + 9, y: 0 })).toBe('grass')
   })
 
-  it('returns an inward barrier correction at the actual track limit', () => {
-    const [contact] = geometry.getBarrierContacts({ x: radius + 8, y: 80 }, 1.24)
+  it('keeps a walled circuit closed at the asphalt edge', () => {
+    const [contact] = walledGeometry.getBarrierContacts(
+      { x: walledRadius + 8, y: 0 },
+      1.24,
+    )
 
     expect(contact).toBeDefined()
     expect(contact?.penetrationMeters).toBeGreaterThan(0)
+    expect(contact?.pushNormal.x).toBeLessThan(0)
+  })
+
+  it('allows ten meters of grass before the external barrier on runoff segments', () => {
+    expect(
+      runoffGeometry.getBarrierContacts(
+        { x: runoffRadius + 9, y: 0 },
+        1.24,
+      ),
+    ).toHaveLength(0)
+
+    const [contact] = runoffGeometry.getBarrierContacts(
+      { x: runoffRadius + 18, y: 0 },
+      1.24,
+    )
+    expect(contact).toBeDefined()
     expect(contact?.pushNormal.x).toBeLessThan(0)
   })
 

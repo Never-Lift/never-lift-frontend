@@ -13,6 +13,7 @@ import {
 import { PHYSICS_CONSTANTS } from '@/race/constants'
 import { dot, magnitude } from '@/race/math'
 import type { RaceEngine } from '@/race/RaceEngine'
+import { TrackGeometry } from '@/race/TrackGeometry'
 import type { InterpolatedVehicleState, Vector2 } from '@/race/types'
 
 type TireMark = {
@@ -29,6 +30,7 @@ export class RaceRenderer {
   private readonly context: CanvasRenderingContext2D
   private readonly canvas: HTMLCanvasElement
   private readonly track: TrackDefinition
+  private readonly geometry: TrackGeometry
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
   private frameCount = 0
@@ -37,6 +39,7 @@ export class RaceRenderer {
   constructor(canvas: HTMLCanvasElement, track: TrackDefinition) {
     this.canvas = canvas
     this.track = track
+    this.geometry = new TrackGeometry(track)
     this.renderStats = {
       totalChunks: track.chunks.length,
       visibleChunksByViewport: [],
@@ -136,7 +139,11 @@ export class RaceRenderer {
     const maximumHalfWidth = Math.max(
       ...this.track.centerline.map((point) => point.halfWidthMeters),
     )
-    return maximumHalfWidth * transform.pixelsPerMeter + 12
+    return (
+      (maximumHalfWidth + this.track.trackLimits.runoffWidthMeters) *
+        transform.pixelsPerMeter +
+      12
+    )
   }
 
   private drawViewport(
@@ -195,14 +202,10 @@ export class RaceRenderer {
 
     this.strokePolyline(
       screenPoints,
-      (averageHalfWidthMeters * 2 + 0.8) * transform.pixelsPerMeter,
-      '#e8edf8',
-    )
-    this.strokePolyline(
-      screenPoints,
       averageHalfWidthMeters * 2 * transform.pixelsPerMeter,
       '#29303b',
     )
+    this.drawTrackBoundaries(chunkPoints, transform)
     this.context.save()
     this.context.setLineDash([
       1.6 * transform.pixelsPerMeter,
@@ -214,6 +217,44 @@ export class RaceRenderer {
       'rgba(240, 240, 250, 0.17)',
     )
     this.context.restore()
+  }
+
+  private drawTrackBoundaries(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    for (const side of ['left', 'right'] as const) {
+      const direction = side === 'left' ? 1 : -1
+      const boundary = points.map((point) => {
+        const tangent = this.geometry.getCenterlineTangent(
+          point.distanceMeters,
+        )
+        const normal = { x: -tangent.y, y: tangent.x }
+        const limit = this.geometry.getTrackLimitAt(
+          point.distanceMeters,
+          side,
+        )
+        const offsetMeters =
+          point.halfWidthMeters + limit.runoffWidthMeters
+        return worldToCamera(
+          {
+            x: point.x + normal.x * offsetMeters * direction,
+            y: point.y + normal.y * offsetMeters * direction,
+          },
+          transform,
+        )
+      })
+      this.strokePolyline(
+        boundary,
+        Math.max(2, 0.42 * transform.pixelsPerMeter),
+        '#e8edf8',
+      )
+      this.strokePolyline(
+        boundary,
+        Math.max(1, 0.14 * transform.pixelsPerMeter),
+        '#596273',
+      )
+    }
   }
 
   private strokePolyline(points: Vector2[], width: number, color: string) {

@@ -31,11 +31,13 @@ export type MinimapTransform = {
 const CAMERA_SMOOTHING_SECONDS = 0.25
 const MINIMUM_DIRECTION_SPEED = 1.5
 const MAXIMUM_CAMERA_TURN_RADIANS_PER_SECOND = 3
+const REVERSE_ORIENTATION_DELAY_SECONDS = 0.4
 export const TARGET_CAR_HEIGHT_RATIO = 0.055
 export const MAXIMUM_CAR_HEIGHT_RATIO = 0.06
 
 export class RaceCamera {
   private state: CameraState
+  private reverseMovementSeconds = 0
 
   constructor(position: Vector2, orientation: number) {
     this.state = {
@@ -53,13 +55,21 @@ export class RaceCamera {
     this.state.position = { ...position }
     const speed = Math.hypot(velocity.x, velocity.y)
     if (speed < MINIMUM_DIRECTION_SPEED || deltaSeconds <= 0) {
+      this.reverseMovementSeconds = 0
       return this.getState()
     }
 
     const bodyForward = { x: Math.cos(bodyAngle), y: Math.sin(bodyAngle) }
     const directionDot =
       (velocity.x * bodyForward.x + velocity.y * bodyForward.y) / speed
-    if (directionDot < -0.2) return this.getState()
+    if (directionDot < -0.2) {
+      this.reverseMovementSeconds += deltaSeconds
+      if (this.reverseMovementSeconds < REVERSE_ORIENTATION_DELAY_SECONDS) {
+        return this.getState()
+      }
+    } else {
+      this.reverseMovementSeconds = 0
+    }
 
     const movementOrientation = Math.atan2(velocity.y, velocity.x)
     const difference = signedAngleDelta(

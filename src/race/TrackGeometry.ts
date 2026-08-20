@@ -1,6 +1,8 @@
 import type {
   TrackDefinition,
   TrackGate,
+  TrackLimitSegment,
+  TrackLimitType,
   TrackPathPoint,
   TrackRacingPoint,
 } from '@/lib/api'
@@ -193,15 +195,36 @@ export class TrackGeometry {
       : this.definition.surfaceModel.offTrack
   }
 
+  getTrackLimitAt(
+    distanceMeters: number,
+    side: 'left' | 'right',
+  ): { type: TrackLimitType; runoffWidthMeters: number } {
+    const segment = this.getTrackLimitSegment(distanceMeters)
+    const type = segment[side]
+    return {
+      type,
+      runoffWidthMeters:
+        type === 'runoff' ? this.definition.trackLimits.runoffWidthMeters : 0,
+    }
+  }
+
   getBarrierContacts(
     point: Vector2,
     vehicleRadius: number,
   ): BarrierContact[] {
     const projection = this.project(point)
+    const tangent = this.getCenterlineTangent(projection.distanceMeters)
+    const relative = subtract(point, projection.point)
+    const side =
+      tangent.x * relative.y - tangent.y * relative.x >= 0
+        ? 'left'
+        : 'right'
+    const limit = this.getTrackLimitAt(projection.distanceMeters, side)
     const penetrationMeters =
       projection.distanceFromCenterMeters +
       vehicleRadius -
-      projection.halfWidthMeters
+      projection.halfWidthMeters -
+      limit.runoffWidthMeters
     if (penetrationMeters <= 0) return []
 
     let pushNormal = normalize(subtract(projection.point, point))
@@ -220,7 +243,19 @@ export class TrackGeometry {
     )
   }
 
-  private getCenterlineTangent(distanceMeters: number) {
+  private getTrackLimitSegment(distanceMeters: number): TrackLimitSegment {
+    const length = this.definition.lengthMeters
+    const normalizedDistance = ((distanceMeters % length) + length) % length
+    return (
+      this.definition.trackLimits.segments.find(
+        (segment) =>
+          normalizedDistance >= segment.fromDistanceMeters &&
+          normalizedDistance < segment.toDistanceMeters,
+      ) ?? this.definition.trackLimits.segments.at(-1)!
+    )
+  }
+
+  getCenterlineTangent(distanceMeters: number) {
     const path = this.definition.centerline
     let nearestIndex = 1
     for (let index = 1; index < path.length; index += 1) {

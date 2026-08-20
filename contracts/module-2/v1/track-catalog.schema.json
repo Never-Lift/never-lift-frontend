@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "catalogVersion", "seasonReference", "tracks"],
   "properties": {
-    "schemaVersion": { "const": "1.0.0" },
+    "schemaVersion": { "const": "1.1.0" },
     "catalogVersion": { "type": "string", "pattern": "^2026\\.[1-9][0-9]*$" },
     "seasonReference": { "const": 2026 },
     "calendarPolicy": { "const": "original-24-round-freeze" },

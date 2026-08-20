@@ -6,7 +6,7 @@ Fechar antes da implementação os formatos que atravessam frontend e backend: c
 
 ## Decisões fechadas
 
-- Temporada de referência: calendário original de 24 etapas da Fórmula 1 de 2026, congelado para o catálogo `2026.1`.
+- Temporada de referência: calendário original de 24 etapas da Fórmula 1 de 2026, congelado para o catálogo `2026.2`.
 - O catálogo não muda automaticamente quando o calendário real é alterado durante a temporada.
 - Colisão entre carros existe no modo local.
 - Split-screen usa divisão vertical em telas largas e horizontal abaixo da razão de aspecto `1.35`.
@@ -24,6 +24,7 @@ Cada definição contém:
 
 - centro da pista fechado e amostrado em metros;
 - meia largura dirigível por ponto;
+- limites por trecho e por lado: `barrier` encosta no asfalto e `runoff` oferece 10 m de grama antes da proteção externa;
 - linha inicial dos bots;
 - largada/chegada, quatro posições de grid e oito checkpoints direcionais;
 - pit lane simplificado e já reservado no contrato, embora sua mecânica completa pertença ao Módulo 5;
@@ -31,7 +32,7 @@ Cada definição contém:
 - preset e âncoras mínimas de cenário;
 - atribuição e descrição da transformação dos dados de origem.
 
-O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Fora desse limite, a superfície padrão é grama. A linha de corrida v1 começa no centro e poderá ser calibrada sem alterar o schema, desde que a `catalogVersion` seja incrementada quando a geometria publicada mudar.
+O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Fora desse limite, a superfície padrão é grama. O schema `1.1.0` acrescenta `trackLimits`, com cobertura contínua da volta e classificação independente dos lados esquerdo e direito. Em `barrier`, a colisão fica junto ao asfalto; em `runoff`, ela fica 10 m além do asfalto, deixando a grama jogável. Monaco e os circuitos urbanos murados usam barreiras contínuas; circuitos híbridos e permanentes combinam trechos, inclusive Interlagos. Esses perfis são aproximações de gameplay coerentes com o caráter dos circuitos, não levantamentos topográficos. A linha de corrida v1 começa no centro e poderá ser calibrada sem alterar o schema, desde que a `catalogVersion` seja incrementada quando a geometria publicada mudar.
 
 ## Calendário congelado
 

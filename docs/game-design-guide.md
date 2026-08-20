@@ -98,7 +98,7 @@ Regras:
 - A câmera gira dinamicamente conforme a direção de movimento, não cada oscilação instantânea do ângulo da carroceria.
 - Suavização inicial de referência: `0,2–0,3 s` (**calibração**).
 - Quando o carro estiver parado ou quase parado, manter a última orientação válida.
-- Rodadas e mudanças para ré não podem produzir giros instantâneos de 180°.
+- Rodadas e mudanças para ré não podem produzir giros instantâneos de 180°. A câmera conserva a orientação no início da ré e, se o movimento contrário persistir, converge suavemente para a nova direção.
 - HUD e minimapa não giram com o mundo.
 
 ### 5.2 Enquadramento
@@ -120,7 +120,7 @@ Regras:
 
 ### 6.1 Catálogo e escala compartilhada
 
-- O catálogo `2026.1` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais e traçados reconhecíveis, destinados ao uso pessoal informado pelo proprietário.
+- O catálogo `2026.2` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais e traçados reconhecíveis, destinados ao uso pessoal informado pelo proprietário.
 - Se houver decisão futura de distribuição pública, nomes, marcas e apresentação devem ser revistos antes da publicação.
 - Circuitos podem ter comprimentos diferentes e próximos das proporções reais.
 - Unidade compartilhada de mundo: **1 unidade = 1 metro**.
@@ -128,6 +128,7 @@ Regras:
 - Pequenos ajustes aproximados de 10–20% são permitidos quando necessários para legibilidade, física ou diversão, preservando a identidade do traçado.
 - A pista existe em coordenadas de mundo e não precisa caber inteira na tela.
 - Renderização usa trechos, culling e elementos reutilizáveis; tamanho do circuito não pode exigir um bitmap proporcional ao mundo inteiro.
+- Limites são definidos por trecho e por lado. `barrier` coloca a proteção junto ao asfalto; `runoff` mantém 10 m de grama jogável antes da proteção externa. Monaco e circuitos urbanos murados preservam barreiras contínuas; híbridos e autódromos alternam áreas de escape e barreiras de forma coerente com seu caráter, sem alegar reprodução topográfica exata.
 
 ### 6.2 Aparência
 
@@ -342,7 +343,7 @@ Executar em uma rodada e PR próprios, sem misturar com funcionalidade de corrid
 
 Os itens abaixo precisam de protótipo, mas não autorizam trocar a direção definida:
 
-- intensidade e curva exata da suavização da câmera — calibração da Parte 2b: `0,25s`, com limite angular para impedir giros instantâneos;
+- intensidade e curva exata da suavização da câmera — calibração da Parte 2b: `0,25s`, limite angular para impedir giros instantâneos e retenção inicial de `0,4s` antes de convergir durante ré sustentada;
 - escala final do carro dentro do alvo de 5,5% e limite inicial de 6% — calibração da Parte 2b: `5,5%` da altura da viewport focada;
 - densidade máxima de partículas por nível de qualidade;
 - tons intermediários das superfícies escuras;

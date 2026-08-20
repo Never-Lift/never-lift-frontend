@@ -16,8 +16,8 @@ describe('raceApi', () => {
 
   it('loads the versioned track catalog and a selected definition', async () => {
     const catalog = {
-      schemaVersion: '1.0.0',
-      catalogVersion: '2026.1',
+      schemaVersion: '1.1.0',
+      catalogVersion: '2026.2',
       seasonReference: 2026,
       calendarPolicy: 'original-24-round-freeze',
       tracks: [
@@ -60,7 +60,7 @@ describe('raceApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const payload = {
       trackId: 'albert-park',
-      trackCatalogVersion: '2026.1',
+      trackCatalogVersion: '2026.2',
       mode: 'local' as const,
       results: [
         {

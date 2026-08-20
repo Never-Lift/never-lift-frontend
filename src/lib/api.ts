@@ -159,7 +159,7 @@ export type TrackCatalogEntry = {
 }
 
 export type TrackCatalog = {
-  schemaVersion: '1.0.0'
+  schemaVersion: '1.1.0'
   catalogVersion: string
   seasonReference: 2026
   calendarPolicy?: 'original-24-round-freeze'
@@ -204,8 +204,18 @@ export type TrackSceneryObject = {
   scale: number
 }
 
+export type TrackLimitType = 'barrier' | 'runoff'
+
+export type TrackLimitSegment = {
+  index: number
+  fromDistanceMeters: number
+  toDistanceMeters: number
+  left: TrackLimitType
+  right: TrackLimitType
+}
+
 export type TrackDefinition = {
-  schemaVersion: '1.0.0'
+  schemaVersion: '1.1.0'
   catalogVersion: string
   id: string
   name: string
@@ -236,6 +246,10 @@ export type TrackDefinition = {
     onTrack: 'asphalt'
     offTrack: 'grass'
     pitLane: 'pit-lane'
+  }
+  trackLimits: {
+    runoffWidthMeters: 10
+    segments: TrackLimitSegment[]
   }
   chunks: TrackChunk[]
   sceneryLayout: {
