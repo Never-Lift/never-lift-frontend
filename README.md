@@ -43,7 +43,7 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 O identificador `albert-park` é usado provisoriamente para vincular o oval técnico ao catálogo `2026.1` no envio do resultado. A Parte 2b substituirá somente a geometria temporária pela definição oficial carregada da API.
 
-A implementação e os testes automatizados das regras v1.2 estão concluídos; a revalidação manual dessas correções na preview permanece pendente. As Partes 2b (pistas) e 2c (ambiente e polimento) ainda não fazem parte da implementação atual.
+A implementação, os testes automatizados e a validação manual das regras v1.2 estão concluídos. As Partes 2b (pistas) e 2c (ambiente e polimento) ainda não fazem parte da implementação atual.
 
 ## Roadmap
 
