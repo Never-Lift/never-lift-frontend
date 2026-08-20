@@ -53,13 +53,35 @@ describe('camera and minimap transforms', () => {
 })
 
 describe('dynamic camera stability', () => {
-  it('keeps its last orientation while stopped and while reversing', () => {
+  it('keeps its last orientation while stopped and at the start of reversing', () => {
     const camera = new RaceCamera({ x: 0, y: 0 }, 0.4)
     const stopped = camera.update({ x: 1, y: 2 }, { x: 0, y: 0 }, 1.7, 1 / 60)
     const reversing = camera.update({ x: 0, y: 0 }, { x: -20, y: 0 }, 0, 1 / 60)
 
     expect(stopped.orientation).toBeCloseTo(0.4, 8)
     expect(reversing.orientation).toBeCloseTo(0.4, 8)
+  })
+
+  it('turns smoothly toward movement after reverse is sustained', () => {
+    const camera = new RaceCamera({ x: 0, y: 0 }, 0)
+    let previousOrientation = 0
+    let largestStep = 0
+    for (let frame = 0; frame < 90; frame += 1) {
+      const state = camera.update(
+        { x: -frame / 3, y: 0 },
+        { x: -20, y: 0 },
+        0,
+        1 / 60,
+      )
+      largestStep = Math.max(
+        largestStep,
+        Math.abs(signedAngleDelta(previousOrientation, state.orientation)),
+      )
+      previousOrientation = state.orientation
+    }
+
+    expect(Math.abs(signedAngleDelta(0, previousOrientation))).toBeGreaterThan(1)
+    expect(largestStep).toBeLessThanOrEqual(3 / 60 + 1e-8)
   })
 
   it('follows movement instead of a spinning body and never snaps 180 degrees', () => {

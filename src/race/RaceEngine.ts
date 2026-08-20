@@ -216,9 +216,12 @@ export class RaceEngine {
       vehicle.position,
       vehicle.lapProgressMeters,
     )
-    const lookAheadMeters = 10 + speed * 0.18
+    const steeringLookAheadMeters =
+      12 +
+      speed * 0.35 +
+      Math.max(0, 0.35 - difficulty.reactionDelaySeconds) * 12
     const target = this.geometry.getRacingLinePoint(
-      projection.distanceMeters + lookAheadMeters,
+      projection.distanceMeters + steeringLookAheadMeters,
     )
     const desiredHeading = Math.atan2(
       target.y - vehicle.position.y,
@@ -230,21 +233,42 @@ export class RaceEngine {
         this.simulationTimeSeconds * 2.1 +
           vehicle.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0),
       ) * difficulty.steeringNoise
+    const brakingHorizonMeters =
+      24 + speed * (0.85 + difficulty.recoveryMultiplier * 0.2)
+    let upcomingSpeedFactor = target.targetSpeedFactor
+    for (let sample = 1; sample <= 6; sample += 1) {
+      const preview = this.geometry.getRacingLinePoint(
+        projection.distanceMeters +
+          (brakingHorizonMeters * sample) / 6,
+      )
+      upcomingSpeedFactor = Math.min(
+        upcomingSpeedFactor,
+        preview.targetSpeedFactor,
+      )
+    }
     const targetSpeed =
       PHYSICS_CONSTANTS.vehiclePerformance.maxForwardSpeed *
-      target.targetSpeedFactor *
+      upcomingSpeedFactor ** 1.3 *
       difficulty.paceMultiplier *
-      0.6
+      0.56
+    const safeTargetSpeed =
+      targetSpeed / difficulty.brakingSafetyMultiplier
+    const isRecovering = vehicle.surface === 'grass'
     const needsBraking =
-      speed > targetSpeed || Math.abs(headingError) > 0.65
+      speed > safeTargetSpeed || Math.abs(headingError) > 0.58
+    const maximumBrake = 0.72 + difficulty.recoveryMultiplier * 0.16
 
     return {
-      throttle: needsBraking ? 0.05 : difficulty.paceMultiplier * 0.82,
+      throttle: needsBraking
+        ? isRecovering
+          ? 0.18
+          : 0.05
+        : difficulty.paceMultiplier * (isRecovering ? 0.48 : 0.82),
       brake: needsBraking
         ? clamp(
-            0.45 + Math.max(0, speed - targetSpeed) / 18,
+            0.45 + Math.max(0, speed - safeTargetSpeed) / 14,
             0,
-            0.68 * difficulty.brakingSafetyMultiplier,
+            maximumBrake,
           )
         : 0,
       steer: clamp(headingError / 0.42 + deterministicNoise, -1, 1),

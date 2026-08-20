@@ -59,7 +59,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Partes 2a e 2b concluídas: física v1.2, 24 pistas da API, câmera, minimapa, split-screen e culling validados; Parte 2c (ambiente e largada) pendente |
+| 2 — Motor de corrida local | em andamento — Parte 2a pronta; Parte 2b implementada com catálogo `2026.2`, limites segmentados, câmera, minimapa, split-screen e culling, aguardando revalidação manual das correções; Parte 2c pendente |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/nitro/pits/HUD) | não iniciado |
