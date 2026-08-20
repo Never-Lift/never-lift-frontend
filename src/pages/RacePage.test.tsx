@@ -2,16 +2,39 @@ import { cleanup, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import trackCatalog from '../../contracts/module-2/v1/catalog.json'
 import { jsonResponse, renderApp } from '@/test/render-app'
+import { SHORT_TRACK } from '@/test/track-fixtures'
 
-describe('Module 2a race setup', () => {
+const albertParkDefinition = {
+  ...SHORT_TRACK,
+  id: 'albert-park',
+  name: 'Albert Park Circuit',
+  countryCode: 'AU',
+  locality: 'Melbourne',
+}
+
+describe('Module 2b race setup', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api')
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        jsonResponse({ token: 'guest.jwt', role: 'guest', subject: 'guest-id' }),
-      ),
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.endsWith('/auth/guest')) {
+          return Promise.resolve(
+            jsonResponse({ token: 'guest.jwt', role: 'guest', subject: 'guest-id' }),
+          )
+        }
+        if (url.endsWith('/tracks')) return Promise.resolve(jsonResponse(trackCatalog))
+        if (url.endsWith('/tracks/albert-park')) {
+          return Promise.resolve(jsonResponse(albertParkDefinition))
+        }
+        if (url.endsWith('/tracks/monaco')) {
+          return Promise.resolve(jsonResponse(SHORT_TRACK))
+        }
+        return Promise.resolve(jsonResponse({}, 404))
+      }),
     )
   })
 
@@ -37,6 +60,12 @@ describe('Module 2a race setup', () => {
     expect(
       screen.getByText(/A escolha do modelo é somente visual/),
     ).toBeInTheDocument()
+    expect(screen.getByText('24 circuitos')).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', { name: 'Prévia do traçado Albert Park Circuit' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('5.278 km')).toBeInTheDocument()
+    expect(screen.getByText('Litoral')).toBeInTheDocument()
   })
 
   it('switches to two players and exposes the second car selection', async () => {
@@ -47,5 +76,25 @@ describe('Module 2a race setup', () => {
 
     expect(screen.getByText('Jogador 2')).toBeInTheDocument()
     expect(screen.queryByText('Dificuldade dos bots')).not.toBeInTheDocument()
+  })
+
+  it('loads the selected track definition instead of keeping a fixed track id', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    await screen.findByRole('button', { name: /Largar/ })
+
+    await user.click(
+      screen.getByRole('button', { name: /Circuit de Monaco/ }),
+    )
+
+    expect(
+      await screen.findByRole('img', {
+        name: 'Prévia do traçado Circuit de Monaco',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Circuit de Monaco/ }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByText('3.337 km').length).toBeGreaterThan(0)
   })
 })

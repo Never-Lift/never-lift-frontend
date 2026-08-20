@@ -135,7 +135,126 @@ export type LocalRaceResultResponse = {
   resultIds: string[]
 }
 
+export type TrackVector = {
+  x: number
+  y: number
+}
+
+export type TrackBounds = {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+export type TrackCatalogEntry = {
+  round: number
+  id: string
+  name: string
+  countryCode: string
+  countryName: string
+  locality: string
+  lengthMeters: number
+  definitionPath: string
+}
+
+export type TrackCatalog = {
+  schemaVersion: '1.0.0'
+  catalogVersion: string
+  seasonReference: 2026
+  calendarPolicy?: 'original-24-round-freeze'
+  tracks: TrackCatalogEntry[]
+}
+
+export type TrackPathPoint = TrackVector & {
+  distanceMeters: number
+  halfWidthMeters: number
+}
+
+export type TrackRacingPoint = TrackVector & {
+  distanceMeters: number
+  targetSpeedFactor: number
+}
+
+export type TrackGate = {
+  index: number
+  distanceMeters: number
+  position: TrackVector
+  forward: TrackVector
+  halfWidthMeters: number
+}
+
+export type TrackGridSlot = {
+  position: TrackVector
+  angle: number
+}
+
+export type TrackChunk = {
+  index: number
+  fromDistanceMeters: number
+  toDistanceMeters: number
+  bounds: TrackBounds
+}
+
+export type TrackSceneryObject = {
+  id: string
+  kind: string
+  position: TrackVector
+  rotation: number
+  scale: number
+}
+
+export type TrackDefinition = {
+  schemaVersion: '1.0.0'
+  catalogVersion: string
+  id: string
+  name: string
+  countryCode: string
+  locality: string
+  lengthMeters: number
+  coordinateSystem: {
+    unit: 'meter'
+    xAxis: 'right'
+    yAxis: 'up'
+    angleUnit: 'radian'
+    angleDirection: 'counterclockwise'
+    angleOrigin: '+x'
+  }
+  bounds: TrackBounds
+  centerline: TrackPathPoint[]
+  racingLine: TrackRacingPoint[]
+  startFinish: TrackGate
+  gridSlots: TrackGridSlot[]
+  checkpoints: TrackGate[]
+  pitLane: {
+    entryDistanceMeters: number
+    exitDistanceMeters: number
+    speedLimitMetersPerSecond: number
+    path: TrackVector[]
+  }
+  surfaceModel: {
+    onTrack: 'asphalt'
+    offTrack: 'grass'
+    pitLane: 'pit-lane'
+  }
+  chunks: TrackChunk[]
+  sceneryLayout: {
+    preset: 'park' | 'street' | 'desert' | 'coastal' | 'classic' | 'night-city'
+    landmarks: TrackSceneryObject[]
+    staticObjects: TrackSceneryObject[]
+  }
+  source: {
+    dataset: string
+    license: string
+    url: string
+    transformation: string
+  }
+}
+
 export const raceApi = {
+  getTracks: () => apiRequest<TrackCatalog>('/tracks'),
+  getTrack: (trackId: string) =>
+    apiRequest<TrackDefinition>(`/tracks/${encodeURIComponent(trackId)}`),
   submitLocalResult: (result: LocalRaceResultRequest, token?: string) =>
     apiRequest<LocalRaceResultResponse>(
       '/races/local-result',

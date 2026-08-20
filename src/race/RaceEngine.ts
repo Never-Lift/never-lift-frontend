@@ -8,17 +8,10 @@ import {
   lerp,
   lerpAngle,
   magnitude,
-  normalize,
   normalizeAngle,
   signedAngleDelta,
-  TAU,
 } from '@/race/math'
-import {
-  getBarrierContacts,
-  getCenterlinePoint,
-  getSurfaceAt,
-  getTrackAngle,
-} from '@/race/test-oval'
+import { crossesGate, TrackGeometry } from '@/race/TrackGeometry'
 import type {
   DriverInput,
   InterpolatedVehicleState,
@@ -54,18 +47,12 @@ function createVehicle(
   setup: VehicleSetup,
   index: number,
   handlingMode: RaceEngineOptions['handlingMode'],
+  geometry: TrackGeometry,
 ): VehicleState {
-  const startAngle = -0.07 - Math.floor(index / 2) * 0.11
-  const centerline = getCenterlinePoint(startAngle)
-  const radialNormal = normalize({
-    x: centerline.x / (52 * 52),
-    y: centerline.y / (28 * 28),
-  })
-  const rowOffset = index % 2 === 0 ? -2.1 : 2.1
-  const position = {
-    x: centerline.x + radialNormal.x * rowOffset,
-    y: centerline.y + radialNormal.y * rowOffset,
-  }
+  const gridSlot = geometry.definition.gridSlots[index]
+  if (!gridSlot) throw new Error('A pista não possui posições suficientes no grid.')
+  const position = { ...gridSlot.position }
+  const startAngle = normalizeAngle(gridSlot.angle)
 
   return {
     ...setup,
@@ -73,8 +60,8 @@ function createVehicle(
     position,
     previousPosition: { ...position },
     velocity: { x: 0, y: 0 },
-    angle: normalizeAngle(startAngle + Math.PI / 2),
-    previousAngle: normalizeAngle(startAngle + Math.PI / 2),
+    angle: startAngle,
+    previousAngle: startAngle,
     yawRate: 0,
     surface: 'asphalt',
     damage: {
@@ -86,8 +73,9 @@ function createVehicle(
       impactCount: 0,
       lastImpactSpeed: 0,
     },
-    progressRadians: 0,
-    previousTrackAngle: normalizeAngle(getTrackAngle(position)),
+    nextCheckpointIndex: 0,
+    lapProgressMeters: 0,
+    totalProgressMeters: 0,
     currentLap: 1,
     lapStartedAtSeconds: 0,
     bestLapTimeSeconds: null,
@@ -97,6 +85,7 @@ function createVehicle(
 }
 
 export class RaceEngine {
+  readonly track: RaceEngineOptions['track']
   readonly mode: RaceEngineOptions['mode']
   readonly handlingMode: RaceEngineOptions['handlingMode']
   readonly lapCount: number
@@ -105,6 +94,7 @@ export class RaceEngine {
   private accumulatorSeconds = 0
   private simulationTimeSeconds = 0
   private status: RaceStatus = 'running'
+  private readonly geometry: TrackGeometry
   private readonly vehicles: VehicleState[]
   private readonly inputs = new Map<string, DriverInput>()
 
@@ -113,12 +103,15 @@ export class RaceEngine {
       throw new Error('A corrida precisa ter entre 2 e 4 competidores.')
     }
 
+    this.track = options.track
+    this.geometry = new TrackGeometry(options.track)
     this.mode = options.mode
     this.handlingMode = options.handlingMode
     this.lapCount = options.lapCount ?? 1
-    this.maximumRaceSeconds = options.maximumRaceSeconds ?? 60
+    this.maximumRaceSeconds =
+      options.maximumRaceSeconds ?? Math.max(180, options.track.lengthMeters / 12)
     this.vehicles = options.racers.map((racer, index) =>
-      createVehicle(racer, index, this.handlingMode),
+      createVehicle(racer, index, this.handlingMode, this.geometry),
     )
     for (const vehicle of this.vehicles) {
       this.inputs.set(vehicle.id, { ...NEUTRAL_INPUT })
@@ -175,10 +168,10 @@ export class RaceEngine {
         : vehicle.kind === 'bot'
           ? this.createBotInput(vehicle)
           : (this.inputs.get(vehicle.id) ?? NEUTRAL_INPUT)
-      const surface = getSurfaceAt(vehicle.position)
+      const surface = this.geometry.getSurfaceAt(vehicle.position)
       integrateVehicle(vehicle, input, surface, PHYSICS_STEP_SECONDS)
 
-      for (const contact of getBarrierContacts(
+      for (const contact of this.geometry.getBarrierContacts(
         vehicle.position,
         getCollisionRadius(),
       )) {
@@ -218,10 +211,15 @@ export class RaceEngine {
   private createBotInput(vehicle: VehicleState): DriverInput {
     const difficultyId = vehicle.botDifficulty ?? 'normal'
     const difficulty = PHYSICS_CONSTANTS.bots[difficultyId]
-    const trackAngle = getTrackAngle(vehicle.position)
     const speed = magnitude(vehicle.velocity)
-    const lookAhead = 0.16 + speed * 0.0025
-    const target = getCenterlinePoint(trackAngle + lookAhead)
+    const projection = this.geometry.project(
+      vehicle.position,
+      vehicle.lapProgressMeters,
+    )
+    const lookAheadMeters = 10 + speed * 0.18
+    const target = this.geometry.getRacingLinePoint(
+      projection.distanceMeters + lookAheadMeters,
+    )
     const desiredHeading = Math.atan2(
       target.y - vehicle.position.y,
       target.x - vehicle.position.x,
@@ -232,13 +230,24 @@ export class RaceEngine {
         this.simulationTimeSeconds * 2.1 +
           vehicle.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0),
       ) * difficulty.steeringNoise
-    const steer = clamp(headingError / 0.6 + deterministicNoise, -1, 1)
-    const needsBraking = Math.abs(headingError) > 0.72 && speed > 34
+    const targetSpeed =
+      PHYSICS_CONSTANTS.vehiclePerformance.maxForwardSpeed *
+      target.targetSpeedFactor *
+      difficulty.paceMultiplier *
+      0.6
+    const needsBraking =
+      speed > targetSpeed || Math.abs(headingError) > 0.65
 
     return {
-      throttle: needsBraking ? 0.15 : difficulty.paceMultiplier,
-      brake: needsBraking ? 0.55 * difficulty.brakingSafetyMultiplier : 0,
-      steer,
+      throttle: needsBraking ? 0.05 : difficulty.paceMultiplier * 0.82,
+      brake: needsBraking
+        ? clamp(
+            0.45 + Math.max(0, speed - targetSpeed) / 18,
+            0,
+            0.68 * difficulty.brakingSafetyMultiplier,
+          )
+        : 0,
+      steer: clamp(headingError / 0.42 + deterministicNoise, -1, 1),
       nitro: false,
     }
   }
@@ -246,34 +255,77 @@ export class RaceEngine {
   private updateProgress(vehicle: VehicleState) {
     if (vehicle.finished) return
 
-    const nextTrackAngle = normalizeAngle(getTrackAngle(vehicle.position))
-    const delta = signedAngleDelta(vehicle.previousTrackAngle, nextTrackAngle)
-    vehicle.previousTrackAngle = nextTrackAngle
-    if (Math.abs(delta) < 0.35) {
-      vehicle.progressRadians = Math.max(0, vehicle.progressRadians + delta)
+    const checkpoints = this.track.checkpoints
+    const gateMargin = PHYSICS_CONSTANTS.race.checkpointGateMarginMeters
+    const nextCheckpoint = checkpoints[vehicle.nextCheckpointIndex]
+    if (
+      nextCheckpoint &&
+      crossesGate(
+        vehicle.previousPosition,
+        vehicle.position,
+        nextCheckpoint,
+        gateMargin,
+      )
+    ) {
+      vehicle.nextCheckpointIndex += 1
+      vehicle.lapProgressMeters = Math.max(
+        vehicle.lapProgressMeters,
+        nextCheckpoint.distanceMeters,
+      )
     }
 
-    const completedLaps = Math.floor(vehicle.progressRadians / TAU)
-    const nextLap = Math.min(this.lapCount, completedLaps + 1)
-    if (nextLap > vehicle.currentLap) {
+    const projection = this.geometry.project(
+      vehicle.position,
+      vehicle.lapProgressMeters,
+    )
+    const previousGateDistance =
+      vehicle.nextCheckpointIndex === 0
+        ? 0
+        : checkpoints[vehicle.nextCheckpointIndex - 1].distanceMeters
+    const nextGateDistance =
+      checkpoints[vehicle.nextCheckpointIndex]?.distanceMeters ??
+      this.track.lengthMeters
+    if (
+      projection.distanceMeters >= previousGateDistance - 30 &&
+      projection.distanceMeters <= nextGateDistance + 30
+    ) {
+      vehicle.lapProgressMeters = Math.max(
+        vehicle.lapProgressMeters,
+        clamp(projection.distanceMeters, previousGateDistance, nextGateDistance),
+      )
+    }
+
+    const completedAllCheckpoints =
+      vehicle.nextCheckpointIndex === checkpoints.length
+    if (
+      completedAllCheckpoints &&
+      crossesGate(
+        vehicle.previousPosition,
+        vehicle.position,
+        this.track.startFinish,
+        gateMargin,
+      )
+    ) {
       const lapTime = this.simulationTimeSeconds - vehicle.lapStartedAtSeconds
       vehicle.bestLapTimeSeconds = Math.min(
         vehicle.bestLapTimeSeconds ?? lapTime,
         lapTime,
       )
-      vehicle.lapStartedAtSeconds = this.simulationTimeSeconds
-      vehicle.currentLap = nextLap
+      if (vehicle.currentLap >= this.lapCount) {
+        vehicle.finished = true
+        vehicle.finishTimeSeconds = this.simulationTimeSeconds
+        vehicle.lapProgressMeters = this.track.lengthMeters
+      } else {
+        vehicle.currentLap += 1
+        vehicle.nextCheckpointIndex = 0
+        vehicle.lapProgressMeters = 0
+        vehicle.lapStartedAtSeconds = this.simulationTimeSeconds
+      }
     }
 
-    if (vehicle.progressRadians >= this.lapCount * TAU) {
-      const lapTime = this.simulationTimeSeconds - vehicle.lapStartedAtSeconds
-      vehicle.bestLapTimeSeconds = Math.min(
-        vehicle.bestLapTimeSeconds ?? lapTime,
-        lapTime,
-      )
-      vehicle.finished = true
-      vehicle.finishTimeSeconds = this.simulationTimeSeconds
-    }
+    vehicle.totalProgressMeters =
+      (vehicle.currentLap - 1) * this.track.lengthMeters +
+      vehicle.lapProgressMeters
   }
 
   getStatus() {
@@ -315,7 +367,7 @@ export class RaceEngine {
             (second.finishTimeSeconds ?? Number.POSITIVE_INFINITY)
           )
         }
-        return second.progressRadians - first.progressRadians
+        return second.totalProgressMeters - first.totalProgressMeters
       })
       .map((vehicle, index) => ({
         racerId: vehicle.id,

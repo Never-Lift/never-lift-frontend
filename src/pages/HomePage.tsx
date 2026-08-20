@@ -199,11 +199,11 @@ export function HomePage() {
                 </p>
                 <p className="mt-1 font-bold">Motor de corrida local</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  O laboratório da Parte 2a está disponível com oval técnico,
-                  bots e dois jogadores no mesmo teclado.
+                  As Partes 2a e 2b estão disponíveis com 24 pistas, câmera,
+                  minimapa, bots e split-screen para dois jogadores.
                 </p>
                 <Button asChild className="mt-4" size="sm" variant="secondary">
-                  <Link to="/race">Abrir laboratório</Link>
+                  <Link to="/race">Preparar corrida</Link>
                 </Button>
               </div>
             </div>

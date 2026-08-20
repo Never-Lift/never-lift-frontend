@@ -141,7 +141,7 @@ export function RaceCanvas({
     if (!canvas) return
 
     const controls = new KeyboardControls()
-    const renderer = new RaceRenderer(canvas)
+    const renderer = new RaceRenderer(canvas, engine.track)
     let animationFrame = 0
     let previousTimestamp: number | null = null
     let lastTelemetryUpdate = 0
@@ -156,7 +156,7 @@ export function RaceCanvas({
         engine.setInput('player-2', controls.getPlayerTwoInput())
       }
       engine.advanceFrame(deltaSeconds)
-      renderer.render(engine)
+      renderer.render(engine, deltaSeconds)
 
       if (timestamp - lastTelemetryUpdate >= 150) {
         const humanIds = mode === 'local' ? ['player-1', 'player-2'] : ['player-1']
@@ -202,7 +202,7 @@ export function RaceCanvas({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-info">
-            Oval técnico // 1 volta
+            {engine.track.name} // {engine.lapCount} volta
           </p>
           <h1 className="mt-1 font-display text-3xl font-black uppercase italic">
             {mode === 'solo' ? 'Solo contra bots' : 'Duelo local'}
@@ -221,8 +221,8 @@ export function RaceCanvas({
 
       <div className="overflow-hidden rounded-2xl border border-border bg-[#101b19] shadow-[0_24px_70px_rgb(0_0_0/0.35)]">
         <canvas
-          aria-label="Pista oval com carros em movimento"
-          className="block aspect-[16/10] min-h-[22rem] w-full"
+          aria-label={`Circuito ${engine.track.name} com carros em movimento`}
+          className="block aspect-[4/5] min-h-[30rem] w-full sm:aspect-[16/10] sm:min-h-[22rem]"
           ref={canvasRef}
         />
       </div>

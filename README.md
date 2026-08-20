@@ -30,20 +30,20 @@ Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco 
 
 Como a sessão fica exclusivamente em memória, recarregar a página remove o login atual e, ao voltar para `/`, uma nova sessão guest é criada. Esse comportamento é intencional enquanto o backend não adotar cookie `httpOnly`.
 
-## Módulo 2 — Parte 2a: motor local
+## Módulo 2 — Partes 2a e 2b: motor local e pistas
 
-- `/race` abre o laboratório do `RaceEngine`, com seleção visual entre F1, Supercarro e Drift, paleta predefinida e modo de condução Normal ou Drift escolhido antes da largada para toda a corrida.
+- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.1`, prévia do traçado, país, comprimento e ambiente, além da seleção visual entre F1, Supercarro e Drift, paleta predefinida e modo de condução Normal ou Drift escolhido antes da largada para toda a corrida.
 - O motor usa passo fixo de `1/60s` e o desempenho compartilhado de `contracts/module-2/v1/physics-constants.json`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
 - No contrato v1.2, os três modelos de carro diferem somente em aparência e dimensões visuais: aceleração, velocidade, direção e colisão usam o mesmo perfil físico. O modo Normal/Drift vale igualmente para jogadores e bots e não pode ser alternado durante a corrida.
-- O oval técnico temporário permite validar asfalto, grama, bordas, colisão entre carros, marcas de pneu e dano mecânico determinístico. As geometrias das 24 pistas entram na Parte 2b.
+- O frontend carrega `TrackDefinition` por `GET /api/tracks/{id}` e a injeta no motor. Grid, centerline, largura, barreiras, superfícies, checkpoints direcionais e linha de corrida dos bots vêm da mesma definição métrica usada pelo backend.
+- A câmera acompanha a posição e a direção do movimento com suavização de `0,25s`, enquadra o carro em aproximadamente 60% da altura e mantém o comprimento visual em 5,5%, abaixo do limite de 6%. O minimapa usa as mesmas coordenadas do mundo e nunca gira.
+- O modo local usa câmera própria para cada jogador: divisão vertical em áreas largas e horizontal abaixo da razão `1,35`. A pista é desenhada vetorialmente somente nos `chunks` visíveis, sem bitmap proporcional ao circuito completo.
 - Solo cria dois bots determinísticos. No modo local, o jogador 1 usa WASD e Shift esquerdo, enquanto o jogador 2 usa setas e Shift direito. Em solo, WASD e setas controlam o mesmo carro; A/seta esquerda esterçam para a esquerda e D/seta direita, para a direita.
 - O Shift envia o input reservado de nitro, mas não ativa boost, freio de mão nem troca o modo de condução na Parte 2a. O nitro funcional pertence ao Módulo 5.
 - O dano mecânico v1.2 é cumulativo e aparece na telemetria com a integridade do carro: impactos fracos podem causar desvio persistente da direção, médios reduzem aceleração e velocidade, fortes combinam as duas falhas e impactos críticos ou a perda de toda a integridade causam perda total, que desativa os controles. Batidas menores repetidas também podem levar à perda total.
-- A corrida técnica tem uma volta e limite de 60 segundos. Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result`.
+- Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result` com o `trackId` e a `trackCatalogVersion` efetivamente selecionados.
 
-O identificador `albert-park` é usado provisoriamente para vincular o oval técnico ao catálogo `2026.1` no envio do resultado. A Parte 2b substituirá somente a geometria temporária pela definição oficial carregada da API.
-
-A implementação, os testes automatizados e a validação manual das regras v1.2 estão concluídos. As Partes 2b (pistas) e 2c (ambiente e polimento) ainda não fazem parte da implementação atual.
+As Partes 2a e 2b possuem testes automatizados e validação local contra a API real, incluindo Monaco e Spa-Francorchamps, câmera e minimapa a 30/60/120 FPS e split-screen nos dois formatos. A Parte 2c — ambiente, iluminação e largada — permanece pendente; por isso o Módulo 2 completo ainda não está marcado como pronto.
 
 ## Roadmap
 
@@ -51,7 +51,7 @@ Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está re
 
 A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.
 
-A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md) e [`contracts/module-2/v1/`](contracts/module-2/v1/): catálogo `2026.1`, schemas métricos e constantes físicas compartilhadas. A Parte 2a já consome as constantes diretamente; as geometrias completas pertencem ao backend e serão carregadas por API na Parte 2b.
+A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md) e [`contracts/module-2/v1/`](contracts/module-2/v1/): catálogo `2026.1`, schemas métricos e constantes físicas compartilhadas. O frontend consome as constantes diretamente e mantém somente a pista selecionada em memória; as geometrias completas continuam pertencendo ao backend e chegam pela API.
 
 ## Pré-requisitos
 
