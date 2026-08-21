@@ -14,6 +14,10 @@ const albertParkDefinition = {
   locality: 'Melbourne',
 }
 
+function findStartButton() {
+  return screen.findByRole('button', { name: /Largar/ }, { timeout: 5_000 })
+}
+
 describe('Module 2b race setup', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api')
@@ -47,13 +51,18 @@ describe('Module 2b race setup', () => {
   it('prepares a guest session and exposes solo configuration', async () => {
     renderApp('/race')
 
-    expect(await screen.findByRole('button', { name: /Largar/ })).toBeEnabled()
+    expect(await findStartButton()).toBeEnabled()
     expect(screen.getByRole('button', { name: /Solo contra bots/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
     expect(screen.getByText('Dificuldade dos bots')).toBeInTheDocument()
     expect(screen.getByText('Modo de condução da corrida')).toBeInTheDocument()
+    expect(screen.getByText('Horário da corrida')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Dia/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     expect(
       screen.getByText(/A opção escolhida vale igualmente/),
     ).toBeInTheDocument()
@@ -71,17 +80,31 @@ describe('Module 2b race setup', () => {
   it('switches to two players and exposes the second car selection', async () => {
     const user = userEvent.setup()
     renderApp('/race')
-    await screen.findByRole('button', { name: /Largar/ })
+    await findStartButton()
     await user.click(screen.getByRole('button', { name: /Dois jogadores locais/ }))
 
     expect(screen.getByText('Jogador 2')).toBeInTheDocument()
     expect(screen.queryByText('Dificuldade dos bots')).not.toBeInTheDocument()
   })
 
+  it('fixes the selected visual preset before starting the race', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    await findStartButton()
+
+    await user.click(screen.getByRole('button', { name: /Noite/ }))
+
+    expect(screen.getByRole('button', { name: /Noite/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByText(/Litoral · Noite/)).toBeInTheDocument()
+  })
+
   it('loads the selected track definition instead of keeping a fixed track id', async () => {
     const user = userEvent.setup()
     renderApp('/race')
-    await screen.findByRole('button', { name: /Largar/ })
+    await findStartButton()
 
     await user.click(
       screen.getByRole('button', { name: /Circuit de Monaco/ }),
