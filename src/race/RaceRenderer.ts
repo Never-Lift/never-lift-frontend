@@ -17,6 +17,7 @@ import {
   worldToMinimap,
 } from '@/race/camera'
 import { PHYSICS_CONSTANTS } from '@/race/constants'
+import type { LocalRaceOverlayState } from '@/race/LocalRaceSession'
 import { dot, magnitude } from '@/race/math'
 import type { RaceEngine } from '@/race/RaceEngine'
 import {
@@ -24,6 +25,12 @@ import {
   trackSideEnvironmentWidth,
 } from '@/race/TrackGeometry'
 import type { InterpolatedVehicleState, Vector2 } from '@/race/types'
+import {
+  AMBIENT_PARTICLE_BUDGET,
+  DEFAULT_GRAPHICS_QUALITY,
+  type GraphicsQuality,
+  type TimeOfDayPreset,
+} from '@/race/visual-settings'
 
 type TireMark = {
   position: Vector2
@@ -34,6 +41,12 @@ type TireMark = {
 export type RenderStats = {
   totalChunks: number
   visibleChunksByViewport: number[]
+  ambientParticlesByViewport: number[]
+}
+
+export type RaceRendererOptions = {
+  timeOfDay?: TimeOfDayPreset
+  quality?: GraphicsQuality
 }
 
 const SURFACE_COLORS: Record<TrackSurfaceMaterial, string> = {
@@ -72,30 +85,64 @@ const FENCE_STYLE = {
 }
 const FENCE_GAP_METERS = 0.18
 
+const AMBIENT_PARTICLE_COLORS: Record<
+  TrackDefinition['sceneryLayout']['preset'],
+  string
+> = {
+  park: 'rgba(180, 211, 151, 0.34)',
+  street: 'rgba(185, 199, 218, 0.24)',
+  desert: 'rgba(226, 190, 124, 0.34)',
+  coastal: 'rgba(184, 226, 230, 0.28)',
+  classic: 'rgba(196, 215, 159, 0.3)',
+  'night-city': 'rgba(118, 192, 255, 0.3)',
+}
+
+function deterministicHash(seed: string) {
+  let hash = 2166136261
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
 export class RaceRenderer {
   private readonly context: CanvasRenderingContext2D
   private readonly canvas: HTMLCanvasElement
   private readonly track: TrackDefinition
   private readonly geometry: TrackGeometry
+  private readonly timeOfDay: TimeOfDayPreset
+  private readonly quality: GraphicsQuality
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
   private frameCount = 0
   private renderStats: RenderStats
 
-  constructor(canvas: HTMLCanvasElement, track: TrackDefinition) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    track: TrackDefinition,
+    options: RaceRendererOptions = {},
+  ) {
     this.canvas = canvas
     this.track = track
     this.geometry = new TrackGeometry(track)
+    this.timeOfDay = options.timeOfDay ?? 'day'
+    this.quality = options.quality ?? DEFAULT_GRAPHICS_QUALITY
     this.renderStats = {
       totalChunks: track.chunks.length,
       visibleChunksByViewport: [],
+      ambientParticlesByViewport: [],
     }
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Canvas 2D não está disponível neste navegador.')
     this.context = context
   }
 
-  render(engine: RaceEngine, deltaSeconds: number) {
+  render(
+    engine: RaceEngine,
+    deltaSeconds: number,
+    overlayState?: LocalRaceOverlayState,
+  ) {
     this.resize()
     const vehicles = engine.getInterpolatedVehicles()
     const focusIds = engine.mode === 'local' ? ['player-1', 'player-2'] : ['player-1']
@@ -108,6 +155,7 @@ export class RaceRenderer {
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height)
     this.collectTireMarks(vehicles)
     const visibleChunksByViewport: number[] = []
+    const ambientParticlesByViewport: number[] = []
     viewports.forEach((viewport, index) => {
       const focusId = focusIds[index]
       const focusedVehicle =
@@ -134,18 +182,20 @@ export class RaceRenderer {
         12,
       )
       visibleChunksByViewport.push(visibleChunks.length)
-      this.drawViewport(
+      ambientParticlesByViewport.push(this.drawViewport(
         viewport,
         transform,
         visibleChunks,
         vehicles,
         focusedVehicle,
-      )
+        overlayState,
+      ))
     })
     this.drawSplitDivider(viewports)
     this.renderStats = {
       totalChunks: this.track.chunks.length,
       visibleChunksByViewport,
+      ambientParticlesByViewport,
     }
     this.frameCount += 1
   }
@@ -154,6 +204,9 @@ export class RaceRenderer {
     return {
       totalChunks: this.renderStats.totalChunks,
       visibleChunksByViewport: [...this.renderStats.visibleChunksByViewport],
+      ambientParticlesByViewport: [
+        ...this.renderStats.ambientParticlesByViewport,
+      ],
     }
   }
 
@@ -187,6 +240,7 @@ export class RaceRenderer {
     visibleChunks: TrackChunk[],
     vehicles: InterpolatedVehicleState[],
     focusedVehicle: InterpolatedVehicleState,
+    overlayState?: LocalRaceOverlayState,
   ) {
     const context = this.context
     context.save()
@@ -254,9 +308,16 @@ export class RaceRenderer {
         }
       }
     }
+    const ambientParticleCount = this.drawAmbientParticles(
+      transform,
+      visibleChunks,
+    )
+    this.drawTimeOfDayLighting(viewport, transform, visibleChunks, vehicles)
     this.drawMinimap(viewport, vehicles, focusedVehicle)
     this.drawDriverLabel(viewport, focusedVehicle.name)
+    this.drawStartProcedure(viewport, focusedVehicle.id, overlayState)
     context.restore()
+    return ambientParticleCount
   }
 
   private getChunkPoints(chunk: TrackChunk) {
@@ -682,6 +743,266 @@ export class RaceRenderer {
       this.context.fillRect(-size / 2, -size / 2, size, size)
       this.context.restore()
     }
+  }
+
+  private drawAmbientParticles(
+    transform: CameraTransform,
+    visibleChunks: TrackChunk[],
+  ) {
+    const budget = AMBIENT_PARTICLE_BUDGET[this.quality]
+    if (budget === 0 || visibleChunks.length === 0) return 0
+
+    const viewport = transform.viewport
+    const candidatesPerChunk = Math.max(
+      8,
+      Math.ceil((budget * 3) / visibleChunks.length),
+    )
+    let drawn = 0
+    this.context.fillStyle =
+      AMBIENT_PARTICLE_COLORS[this.track.sceneryLayout.preset]
+
+    for (const chunk of visibleChunks) {
+      const points = this.getChunkPoints(chunk)
+      if (points.length === 0) continue
+      for (let sample = 0; sample < candidatesPerChunk; sample += 1) {
+        if (drawn >= budget) return drawn
+        const hash = deterministicHash(`${this.track.id}:${chunk.index}:${sample}`)
+        const point = points[hash % points.length]
+        const tangent = this.geometry.getCenterlineTangent(point.distanceMeters)
+        const normal = { x: -tangent.y, y: tangent.x }
+        const offsetRatio = ((hash >>> 8) % 2_001) / 1_000 - 1
+        const offsetMeters =
+          offsetRatio * (point.halfWidthMeters + 6 + ((hash >>> 20) % 18))
+        const screen = worldToCamera(
+          {
+            x: point.x + normal.x * offsetMeters,
+            y: point.y + normal.y * offsetMeters,
+          },
+          transform,
+        )
+        if (
+          screen.x < viewport.x ||
+          screen.x > viewport.x + viewport.width ||
+          screen.y < viewport.y ||
+          screen.y > viewport.y + viewport.height
+        ) {
+          continue
+        }
+
+        this.context.beginPath()
+        this.context.arc(
+          screen.x,
+          screen.y,
+          0.7 + ((hash >>> 16) % 12) / 10,
+          0,
+          Math.PI * 2,
+        )
+        this.context.fill()
+        drawn += 1
+      }
+    }
+    return drawn
+  }
+
+  private drawTimeOfDayLighting(
+    viewport: Viewport,
+    transform: CameraTransform,
+    visibleChunks: TrackChunk[],
+    vehicles: InterpolatedVehicleState[],
+  ) {
+    if (this.timeOfDay === 'day') return
+
+    this.context.save()
+    this.context.beginPath()
+    this.context.rect(viewport.x, viewport.y, viewport.width, viewport.height)
+    this.context.clip()
+    this.context.fillStyle =
+      this.timeOfDay === 'sunset'
+        ? 'rgba(112, 48, 22, 0.2)'
+        : 'rgba(3, 7, 18, 0.68)'
+    this.context.fillRect(viewport.x, viewport.y, viewport.width, viewport.height)
+
+    if (this.timeOfDay === 'night') {
+      for (const vehicle of vehicles) {
+        const vehicleChunk = visibleChunks.find(
+          (chunk) =>
+            vehicle.trackDistanceMeters >= chunk.fromDistanceMeters &&
+            vehicle.trackDistanceMeters <= chunk.toDistanceMeters,
+        )
+        if (vehicleChunk) {
+          this.drawHeadlightCone(vehicle, transform, vehicleChunk)
+        }
+      }
+    }
+    this.context.restore()
+  }
+
+  private drawHeadlightCone(
+    vehicle: InterpolatedVehicleState,
+    transform: CameraTransform,
+    chunk: TrackChunk,
+  ) {
+    const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
+    const point = worldToCamera(vehicle.renderPosition, transform)
+    const forwardPoint = worldToCamera(
+      {
+        x: vehicle.renderPosition.x + Math.cos(vehicle.renderAngle),
+        y: vehicle.renderPosition.y + Math.sin(vehicle.renderAngle),
+      },
+      transform,
+    )
+    const screenAngle = Math.atan2(
+      forwardPoint.y - point.y,
+      forwardPoint.x - point.x,
+    )
+    const vehicleLength = profile.lengthMeters * transform.pixelsPerMeter
+    const beamLength = Math.max(
+      90,
+      Math.min(transform.viewport.height * 0.46, 58 * transform.pixelsPerMeter),
+    )
+    const beamWidth = beamLength * 0.34
+    const beamStart = vehicleLength * 0.35
+    this.context.save()
+    if (!this.clipHeadlightToChunk(vehicle, transform, chunk)) {
+      this.context.restore()
+      return
+    }
+    this.context.translate(point.x, point.y)
+    this.context.rotate(screenAngle)
+    const gradient = this.context.createLinearGradient(
+      beamStart,
+      0,
+      beamLength,
+      0,
+    )
+    gradient.addColorStop(0, 'rgba(255, 244, 196, 0.3)')
+    gradient.addColorStop(0.55, 'rgba(255, 236, 174, 0.13)')
+    gradient.addColorStop(1, 'rgba(255, 229, 158, 0)')
+
+    this.context.fillStyle = gradient
+    this.context.beginPath()
+    this.context.moveTo(beamStart, -vehicleLength * 0.08)
+    this.context.lineTo(beamLength, -beamWidth)
+    this.context.lineTo(beamLength, beamWidth)
+    this.context.lineTo(beamStart, vehicleLength * 0.08)
+    this.context.closePath()
+    this.context.fill()
+    this.context.restore()
+  }
+
+  private clipHeadlightToChunk(
+    vehicle: InterpolatedVehicleState,
+    transform: CameraTransform,
+    chunk: TrackChunk,
+  ) {
+    const points = this.getChunkPoints(chunk).filter(
+      (point) => point.elevationLayer === vehicle.trackLayer,
+    )
+    if (points.length < 2) return false
+
+    const extraLightWidthMeters = 18
+    const left = points.map((point) =>
+      worldToCamera(
+        this.offsetTrackPoint(
+          point,
+          'left',
+          point.halfWidthMeters + extraLightWidthMeters,
+        ),
+        transform,
+      ),
+    )
+    const right = [...points].reverse().map((point) =>
+      worldToCamera(
+        this.offsetTrackPoint(
+          point,
+          'right',
+          point.halfWidthMeters + extraLightWidthMeters,
+        ),
+        transform,
+      ),
+    )
+    this.context.beginPath()
+    this.context.moveTo(left[0].x, left[0].y)
+    for (const point of [...left.slice(1), ...right]) {
+      this.context.lineTo(point.x, point.y)
+    }
+    this.context.closePath()
+    this.context.clip()
+    return true
+  }
+
+  private drawStartProcedure(
+    viewport: Viewport,
+    focusedRacerId: string,
+    overlayState?: LocalRaceOverlayState,
+  ) {
+    if (!overlayState) return
+    const startLights = overlayState.startLights
+    const penalty = overlayState.penalties[focusedRacerId]
+    if (startLights.stage === 'hidden' && !penalty?.throttleLockTicksRemaining) {
+      return
+    }
+
+    const context = this.context
+    const lightRadius = Math.max(8, Math.min(14, viewport.width / 55))
+    const lightGap = lightRadius * 2.55
+    const panelWidth = lightGap * 5 + lightRadius
+    const panelX = viewport.x + (viewport.width - panelWidth) / 2
+    const panelY = viewport.y + Math.max(34, viewport.height * 0.08)
+    context.save()
+    context.fillStyle = 'rgba(7, 11, 20, 0.9)'
+    context.beginPath()
+    context.roundRect(
+      panelX - 12,
+      panelY - lightRadius - 10,
+      panelWidth + 24,
+      lightRadius * 2 + 20,
+      12,
+    )
+    context.fill()
+
+    for (let index = 0; index < 5; index += 1) {
+      context.beginPath()
+      context.arc(
+        panelX + lightRadius + index * lightGap,
+        panelY,
+        lightRadius,
+        0,
+        Math.PI * 2,
+      )
+      context.fillStyle =
+        startLights.stage === 'sequence' && index < startLights.redLights
+          ? '#ff4055'
+          : '#2a303b'
+      context.fill()
+    }
+
+    if (startLights.stage === 'lights-out') {
+      context.fillStyle = '#2bd67b'
+      context.font = `900 ${Math.max(16, lightRadius * 1.7)}px Barlow Condensed`
+      context.textAlign = 'center'
+      context.fillText('LARGUE!', viewport.x + viewport.width / 2, panelY + 48)
+    }
+
+    if (penalty?.throttleLockTicksRemaining) {
+      const seconds = penalty.throttleLockTicksRemaining * PHYSICS_CONSTANTS.simulation.physicsStepSeconds
+      context.fillStyle = 'rgba(7, 11, 20, 0.9)'
+      context.fillRect(
+        viewport.x + viewport.width * 0.2,
+        viewport.y + viewport.height - 54,
+        viewport.width * 0.6,
+        36,
+      )
+      context.fillStyle = '#ffb82e'
+      context.font = `800 ${Math.max(12, lightRadius)}px Barlow`
+      context.textAlign = 'center'
+      context.fillText(
+        `LARGADA QUEIMADA · ACELERADOR BLOQUEADO ${seconds.toFixed(1)}s`,
+        viewport.x + viewport.width / 2,
+        viewport.y + viewport.height - 31,
+      )
+    }
+    context.restore()
   }
 
   private collectTireMarks(vehicles: InterpolatedVehicleState[]) {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { KeyboardControls } from '@/race/KeyboardControls'
+import { LocalRaceSession } from '@/race/LocalRaceSession'
 import type { RaceEngine } from '@/race/RaceEngine'
 import { RaceRenderer } from '@/race/RaceRenderer'
 import type {
@@ -11,10 +12,12 @@ import type {
   RaceMode,
   RaceResultEntry,
 } from '@/race/types'
+import type { TimeOfDayPreset } from '@/race/visual-settings'
 
 type RaceCanvasProps = {
   engine: RaceEngine
   mode: RaceMode
+  timeOfDay: TimeOfDayPreset
   onAbort: () => void
   onFinished: (results: RaceResultEntry[]) => void
 }
@@ -123,6 +126,7 @@ export function DriverTelemetryCard({
 export function RaceCanvas({
   engine,
   mode,
+  timeOfDay,
   onAbort,
   onFinished,
 }: RaceCanvasProps) {
@@ -131,6 +135,7 @@ export function RaceCanvas({
   const onFinishedRef = useRef(onFinished)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [telemetry, setTelemetry] = useState<DriverTelemetry[]>([])
+  const [startAnnouncement, setStartAnnouncement] = useState('Semáforo apagado')
 
   useEffect(() => {
     onFinishedRef.current = onFinished
@@ -141,7 +146,12 @@ export function RaceCanvas({
     if (!canvas) return
 
     const controls = new KeyboardControls()
-    const renderer = new RaceRenderer(canvas, engine.track)
+    const humanIds = mode === 'local' ? ['player-1', 'player-2'] : ['player-1']
+    const session = new LocalRaceSession(engine, humanIds)
+    const renderer = new RaceRenderer(canvas, engine.track, {
+      timeOfDay,
+      quality: 'medium',
+    })
     let animationFrame = 0
     let previousTimestamp: number | null = null
     let lastTelemetryUpdate = 0
@@ -151,15 +161,16 @@ export function RaceCanvas({
         previousTimestamp === null ? 0 : (timestamp - previousTimestamp) / 1000
       previousTimestamp = timestamp
 
-      engine.setInput('player-1', controls.getPlayerOneInput(mode))
-      if (mode === 'local') {
-        engine.setInput('player-2', controls.getPlayerTwoInput())
+      const frameInputs = {
+        'player-1': controls.getPlayerOneInput(mode),
+        ...(mode === 'local'
+          ? { 'player-2': controls.getPlayerTwoInput() }
+          : {}),
       }
-      engine.advanceFrame(deltaSeconds)
-      renderer.render(engine, deltaSeconds)
+      session.advanceFrame(deltaSeconds, frameInputs)
+      renderer.render(engine, deltaSeconds, session.getOverlayState())
 
       if (timestamp - lastTelemetryUpdate >= 150) {
-        const humanIds = mode === 'local' ? ['player-1', 'player-2'] : ['player-1']
         setElapsedSeconds(engine.getSimulationTimeSeconds())
         setTelemetry(
           humanIds.flatMap((racerId) => {
@@ -176,6 +187,19 @@ export function RaceCanvas({
               },
             ]
           }),
+        )
+        const lights = session.getStartLightState()
+        const jumpStarts = humanIds.filter(
+          (racerId) => session.getPenalty(racerId).throttleLockTicksRemaining > 0,
+        )
+        setStartAnnouncement(
+          jumpStarts.length > 0
+            ? `Largada queimada: acelerador bloqueado para ${jumpStarts.join(' e ')}`
+            : lights.stage === 'sequence'
+              ? `Semáforo: ${lights.redLights} de 5 luzes vermelhas`
+              : lights.stage === 'lights-out'
+                ? 'Largue!'
+                : 'Corrida liberada',
         )
         lastTelemetryUpdate = timestamp
       }
@@ -195,14 +219,14 @@ export function RaceCanvas({
       cancelAnimationFrame(animationFrame)
       controls.destroy()
     }
-  }, [engine, mode])
+  }, [engine, mode, timeOfDay])
 
   return (
     <section aria-label="Corrida local em andamento" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-info">
-            {engine.track.name} // {engine.lapCount} volta
+            {engine.track.name} // {engine.lapCount} volta // {timeOfDay === 'day' ? 'Dia' : timeOfDay === 'sunset' ? 'Entardecer' : 'Noite'}
           </p>
           <h1 className="mt-1 font-display text-3xl font-black uppercase italic">
             {mode === 'solo' ? 'Solo contra bots' : 'Duelo local'}
@@ -218,6 +242,10 @@ export function RaceCanvas({
           </Button>
         </div>
       </div>
+
+      <p aria-live="polite" className="sr-only">
+        {startAnnouncement}
+      </p>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-[#101b19] shadow-[0_24px_70px_rgb(0_0_0/0.35)]">
         <canvas

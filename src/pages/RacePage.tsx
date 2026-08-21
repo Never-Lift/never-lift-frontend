@@ -32,6 +32,7 @@ import type {
   VehicleProfileId,
   VehicleSetup,
 } from '@/race/types'
+import type { TimeOfDayPreset } from '@/race/visual-settings'
 
 type PlayerSelection = {
   name: string
@@ -60,6 +61,28 @@ const vehicleOptions: Array<{
 ]
 
 const colorOptions = ['#2d7dff', '#ff2e88', '#2bd67b', '#ffb82e', '#f0f0fa', '#9c6cff']
+
+const timeOfDayOptions: Array<{
+  id: TimeOfDayPreset
+  label: string
+  description: string
+}> = [
+  { id: 'day', label: 'Dia', description: 'Máxima clareza do circuito' },
+  {
+    id: 'sunset',
+    label: 'Entardecer',
+    description: 'Luz quente e contraste suave',
+  },
+  {
+    id: 'night',
+    label: 'Noite',
+    description: 'Pista escurecida e faróis ativos',
+  },
+]
+
+function timeOfDayLabel(timeOfDay: TimeOfDayPreset) {
+  return timeOfDayOptions.find((option) => option.id === timeOfDay)?.label ?? 'Dia'
+}
 
 const defaultPlayerOne: PlayerSelection = {
   name: 'Piloto 1',
@@ -239,6 +262,7 @@ export function RacePage() {
   const [mode, setMode] = useState<RaceMode>('solo')
   const [difficulty, setDifficulty] = useState<BotDifficulty>('normal')
   const [handlingMode, setHandlingMode] = useState<HandlingMode>('normal')
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDayPreset>('day')
   const [playerOne, setPlayerOne] = useState(defaultPlayerOne)
   const [playerTwo, setPlayerTwo] = useState(defaultPlayerTwo)
   const [engine, setEngine] = useState<RaceEngine | null>(null)
@@ -416,10 +440,11 @@ export function RacePage() {
 
   if (engine) {
     return (
-      <AppShell moduleLabel="Módulo 02 // Parte 2b">
+      <AppShell moduleLabel="Módulo 02 // Parte 2c">
         <RaceCanvas
           engine={engine}
           mode={mode}
+          timeOfDay={timeOfDay}
           onAbort={() => setEngine(null)}
           onFinished={finishRace}
         />
@@ -429,7 +454,7 @@ export function RacePage() {
 
   if (results) {
     return (
-      <AppShell moduleLabel="Módulo 02 // Parte 2b">
+      <AppShell moduleLabel="Módulo 02 // Parte 2c">
         <section className="mx-auto max-w-3xl">
           <div className="mb-8 text-center">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">
@@ -499,7 +524,7 @@ export function RacePage() {
   }
 
   return (
-    <AppShell moduleLabel="Módulo 02 // Parte 2b">
+    <AppShell moduleLabel="Módulo 02 // Parte 2c">
       <section className="space-y-7">
         <header className="max-w-3xl">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">
@@ -648,6 +673,35 @@ export function RacePage() {
           </div>
         </fieldset>
 
+        <fieldset className="rounded-2xl border border-border bg-card/55 p-5">
+          <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+            Horário da corrida
+          </legend>
+          <p className="mb-3 text-sm text-muted-foreground">
+            O preset visual permanece fixo da largada até a bandeirada.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {timeOfDayOptions.map((option) => (
+              <button
+                aria-pressed={timeOfDay === option.id}
+                className={`rounded-xl border p-4 text-left transition ${
+                  timeOfDay === option.id
+                    ? 'border-primary bg-primary/12'
+                    : 'border-border bg-background/45 hover:bg-muted/65'
+                }`}
+                key={option.id}
+                onClick={() => setTimeOfDay(option.id)}
+                type="button"
+              >
+                <span className="font-extrabold">{option.label}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                  {option.description}
+                </span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
         <PlayerConfigurator label="Jogador 1" onChange={setPlayerOne} selection={playerOne} />
         {mode === 'local' && (
           <PlayerConfigurator label="Jogador 2" onChange={setPlayerTwo} selection={playerTwo} />
@@ -686,7 +740,7 @@ export function RacePage() {
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <Gamepad2 aria-hidden="true" className="size-5 text-info" />
             {selectedTrack
-              ? `${selectedTrack.name} · ${formatTrackLength(selectedTrack.lengthMeters)} · ${environmentLabels[selectedTrack.sceneryLayout.preset]}`
+              ? `${selectedTrack.name} · ${formatTrackLength(selectedTrack.lengthMeters)} · ${environmentLabels[selectedTrack.sceneryLayout.preset]} · ${timeOfDayLabel(timeOfDay)}`
               : 'Selecione e carregue uma pista para liberar a largada.'}
           </div>
           <Button
