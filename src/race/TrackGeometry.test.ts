@@ -14,6 +14,28 @@ describe('TrackGeometry', () => {
     expect(runoffGeometry.getSurfaceAt({ x: runoffRadius + 9, y: 0 })).toBe('grass')
   })
 
+  it('distinguishes audited asphalt, gravel and grass zones while preserving the v1.2 physics mapping', () => {
+    const definition = structuredClone(LONG_TRACK)
+    definition.trackLimits.segments[0].right = {
+      zones: [
+        { surface: 'asphalt', widthMeters: 4 },
+        { surface: 'gravel', widthMeters: 12 },
+      ],
+      barrier: 'tecpro',
+    }
+    const geometry = new TrackGeometry(definition)
+
+    expect(
+      geometry.getEnvironmentAt({ x: runoffRadius + 2, y: 0 }).material,
+    ).toBe('asphalt')
+    expect(
+      geometry.getEnvironmentAt({ x: runoffRadius + 14, y: 0 }).material,
+    ).toBe('gravel')
+    expect(geometry.getSurfaceAt({ x: runoffRadius + 14, y: 0 })).toBe(
+      'grass',
+    )
+  })
+
   it('keeps a walled circuit closed at the asphalt edge', () => {
     const [contact] = walledGeometry.getBarrierContacts(
       { x: walledRadius + 8, y: 0 },
@@ -25,7 +47,7 @@ describe('TrackGeometry', () => {
     expect(contact?.pushNormal.x).toBeLessThan(0)
   })
 
-  it('allows ten meters of grass before the external barrier on runoff segments', () => {
+  it('places collision at the audited sum of side-zone widths', () => {
     expect(
       runoffGeometry.getBarrierContacts(
         { x: runoffRadius + 9, y: 0 },

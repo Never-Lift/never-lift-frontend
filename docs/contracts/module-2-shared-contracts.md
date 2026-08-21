@@ -6,7 +6,7 @@ Fechar antes da implementação os formatos que atravessam frontend e backend: c
 
 ## Decisões fechadas
 
-- Temporada de referência: calendário original de 24 etapas da Fórmula 1 de 2026, congelado para o catálogo `2026.2`.
+- Temporada de referência: calendário original de 24 etapas da Fórmula 1 de 2026, congelado para o catálogo `2026.3`.
 - O catálogo não muda automaticamente quando o calendário real é alterado durante a temporada.
 - Colisão entre carros existe no modo local.
 - Split-screen usa divisão vertical em telas largas e horizontal abaixo da razão de aspecto `1.35`.
@@ -24,15 +24,27 @@ Cada definição contém:
 
 - centro da pista fechado e amostrado em metros;
 - meia largura dirigível por ponto;
-- limites por trecho e por lado: `barrier` encosta no asfalto e `runoff` oferece 10 m de grama antes da proteção externa;
+- ambiente lateral por trecho e por lado, com zero ou mais zonas ordenadas de asfalto, grama ou brita, a barreira física de impacto ao fim delas e uma grade externa opcional;
 - linha inicial dos bots;
 - largada/chegada, quatro posições de grid e oito checkpoints direcionais;
 - pit lane simplificado e já reservado no contrato, embora sua mecânica completa pertença ao Módulo 5;
 - chunks com caixas delimitadoras para culling;
 - preset e âncoras mínimas de cenário;
-- atribuição e descrição da transformação dos dados de origem.
+- atribuição, descrição da transformação e referências ambientais consultadas por circuito.
 
-O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Fora desse limite, a superfície padrão é grama. O schema `1.1.0` acrescenta `trackLimits`, com cobertura contínua da volta e classificação independente dos lados esquerdo e direito. Em `barrier`, a colisão fica junto ao asfalto; em `runoff`, ela fica 10 m além do asfalto, deixando a grama jogável. Monaco e os circuitos urbanos murados usam barreiras contínuas; circuitos híbridos e permanentes combinam trechos, inclusive Interlagos. Esses perfis são aproximações de gameplay coerentes com o caráter dos circuitos, não levantamentos topográficos. A linha de corrida v1 começa no centro e poderá ser calibrada sem alterar o schema, desde que a `catalogVersion` seja incrementada quando a geometria publicada mudar.
+O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Cada ponto da centerline publica `halfWidthMeters` e `elevationLayer`: a largura pode variar com transições suaves, e a camada impede que a ponte e a passagem inferior de Suzuka misturem projeção, desenho ou colisões. O schema `1.2.0` cobre a volta continuamente em `trackLimits.segments`; cada lado possui `zones[]`, da borda da pista para fora, uma barreira de impacto entre `concrete-wall`, `guardrail`, `tecpro` e `tyre-barrier` e, quando aplicável, `fence: "debris-fence"` como camada externa adicional. A colisão acontece na barreira, depois da soma das larguras das zonas daquele lado; a grade não desloca o limite físico. Uma lista vazia representa barreira praticamente junto ao asfalto. Brita é distinta visualmente, mas usa a tração de grama do contrato físico `1.2.0`; isso evita reabrir a física já validada apenas para esta correção visual/geométrica.
+
+### Auditoria ambiental do catálogo 2026.3
+
+Os antigos perfis genéricos `walled`, `mixed` e `open`, assim como a faixa global de 10 m, foram removidos. O backend registra um perfil exclusivo para cada uma das 24 pistas em `tools/track-catalog/track-environments.mjs`, com intervalos normalizados por lado, larguras conservadoras e pelo menos duas referências. A pesquisa prioriza mapas e notas de prova da FIA de 2025/2026, páginas oficiais dos autódromos e material oficial da Fórmula 1; imagens aéreas e onboards oficiais só complementam o que os documentos não detalham. Uma segunda passagem concluída em 21/08/2026 confrontou os 24 perfis, corrigiu lados e materiais documentados e separou grades externas das barreiras de impacto. As referências usadas em cada pista também são publicadas em `source.environmentReferences` dentro de sua definição.
+
+Grades só viram regra bilateral de toda a volta quando a metragem do fornecedor sustenta essa cobertura, como em Miami e Las Vegas. Jeddah, Baku e Lusail mantêm apenas os setores que as fontes permitem mapear com segurança; ausência de grade em outro trecho do modelo significa evidência insuficiente, não uma afirmação topográfica de que ela inexiste no circuito real.
+
+O utilitário `tools/track-catalog/audit-turns.mjs` do backend calcula apenas âncoras heurísticas sobre a centerline para ajudar a localizar trechos. Numeração, sentido das curvas e lado externo sempre precisam ser confirmados nas referências oficiais; o gerador rejeita intervalos sobrepostos para evitar perfis dependentes da ordem das regras.
+
+As larguras são discretizadas e orientadas à leitura/jogabilidade; não são um levantamento topográfico centimétrico. O gerador usa uma meia largura representativa por pista e somente introduz variação local quando existe fonte confiável, incluindo os 7,6 m totais da passagem do castelo em Baku. Elas distinguem as relações relevantes: muro junto à pista em circuitos urbanos, asfalto antes de brita, grama até guardrail, grandes escapes pavimentados e proteções absorventes nas zonas de impacto. Madrid permanece provisória porque ainda não existe um pacote público de mapa e Competition Notes da FIA detalhando todas as superfícies e proteções do primeiro evento: o perfil usa as áreas asfaltadas e muros presentes no GIS oficial e não inventa grama ou brita. Qualquer revisão posterior exige nova `catalogVersion`, nova fonte e sincronização dos dois repositórios.
+
+A linha de corrida v1 começa no centro e poderá ser calibrada sem alterar o schema, desde que a `catalogVersion` seja incrementada quando a geometria publicada mudar.
 
 ## Calendário congelado
 

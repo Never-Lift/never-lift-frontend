@@ -64,6 +64,8 @@ function createVehicle(
     previousAngle: startAngle,
     yawRate: 0,
     surface: 'asphalt',
+    trackLayer: geometry.getElevationLayerAt(position, 0),
+    trackDistanceMeters: 0,
     damage: {
       kind: 'none',
       health: PHYSICS_CONSTANTS.damage.thresholds.maximumHealth,
@@ -168,12 +170,16 @@ export class RaceEngine {
         : vehicle.kind === 'bot'
           ? this.createBotInput(vehicle)
           : (this.inputs.get(vehicle.id) ?? NEUTRAL_INPUT)
-      const surface = this.geometry.getSurfaceAt(vehicle.position)
+      const surface = this.geometry.getSurfaceAt(
+        vehicle.position,
+        vehicle.trackDistanceMeters,
+      )
       integrateVehicle(vehicle, input, surface, PHYSICS_STEP_SECONDS)
 
       for (const contact of this.geometry.getBarrierContacts(
         vehicle.position,
         getCollisionRadius(),
+        vehicle.trackDistanceMeters,
       )) {
         applyBarrierResponse(
           vehicle,
@@ -181,6 +187,12 @@ export class RaceEngine {
           contact.penetrationMeters,
         )
       }
+      const trackProjection = this.geometry.project(
+        vehicle.position,
+        vehicle.trackDistanceMeters,
+      )
+      vehicle.trackDistanceMeters = trackProjection.distanceMeters
+      vehicle.trackLayer = trackProjection.elevationLayer
     }
 
     for (let firstIndex = 0; firstIndex < this.vehicles.length; firstIndex += 1) {
@@ -189,6 +201,12 @@ export class RaceEngine {
         secondIndex < this.vehicles.length;
         secondIndex += 1
       ) {
+        if (
+          this.vehicles[firstIndex].trackLayer !==
+          this.vehicles[secondIndex].trackLayer
+        ) {
+          continue
+        }
         resolveVehicleCollision(
           this.vehicles[firstIndex],
           this.vehicles[secondIndex],
@@ -214,7 +232,7 @@ export class RaceEngine {
     const speed = magnitude(vehicle.velocity)
     const projection = this.geometry.project(
       vehicle.position,
-      vehicle.lapProgressMeters,
+      vehicle.trackDistanceMeters,
     )
     const steeringLookAheadMeters =
       12 +
@@ -300,7 +318,7 @@ export class RaceEngine {
 
     const projection = this.geometry.project(
       vehicle.position,
-      vehicle.lapProgressMeters,
+      vehicle.trackDistanceMeters,
     )
     const previousGateDistance =
       vehicle.nextCheckpointIndex === 0

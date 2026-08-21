@@ -53,6 +53,8 @@ export type VehicleState = VehicleSetup & {
   previousAngle: number
   yawRate: number
   surface: SurfaceId
+  trackLayer: number
+  trackDistanceMeters: number
   damage: VehicleDamage
   nextCheckpointIndex: number
   lapProgressMeters: number

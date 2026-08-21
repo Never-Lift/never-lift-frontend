@@ -15,23 +15,23 @@ describe('raceApi', () => {
   })
 
   it('loads the versioned track catalog and a selected definition', async () => {
+    const catalogTracks = Array.from({ length: 24 }, (_, index) => ({
+      round: index + 1,
+      id: index === 7 ? 'monaco' : `track-${index + 1}`,
+      name: index === 7 ? 'Circuit de Monaco' : `Track ${index + 1}`,
+      countryCode: index === 7 ? 'MC' : 'TS',
+      countryName: index === 7 ? 'Monaco' : 'Test',
+      locality: index === 7 ? 'Monaco' : `Test ${index + 1}`,
+      lengthMeters: index === 7 ? 3337 : 4000 + index,
+      definitionPath:
+        index === 7 ? 'tracks/monaco.json' : `tracks/track-${index + 1}.json`,
+    }))
     const catalog = {
-      schemaVersion: '1.1.0',
-      catalogVersion: '2026.2',
+      schemaVersion: '1.2.0',
+      catalogVersion: '2026.3',
       seasonReference: 2026,
       calendarPolicy: 'original-24-round-freeze',
-      tracks: [
-        {
-          round: 8,
-          id: 'monaco',
-          name: 'Circuit de Monaco',
-          countryCode: 'MC',
-          countryName: 'Monaco',
-          locality: 'Monaco',
-          lengthMeters: 3337,
-          definitionPath: 'tracks/monaco.json',
-        },
-      ],
+      tracks: catalogTracks,
     }
     const fetchMock = vi
       .fn()
@@ -53,6 +53,27 @@ describe('raceApi', () => {
     )
   })
 
+  it('reports a deploy mismatch before an obsolete definition reaches the race canvas', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          ...SHORT_TRACK,
+          schemaVersion: '1.1.0',
+          catalogVersion: '2026.2',
+          trackLimits: {
+            runoffWidthMeters: 10,
+            segments: [],
+          },
+        }),
+      ),
+    )
+
+    await expect(raceApi.getTrack('monaco')).rejects.toThrow(
+      'faça o deploy do backend com o catálogo 2026.3',
+    )
+  })
+
   it('posts a contract-compatible local result with the in-memory token', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ persistedCount: 2, resultIds: ['result-1', 'result-2'] }, 201),
@@ -60,7 +81,7 @@ describe('raceApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const payload = {
       trackId: 'albert-park',
-      trackCatalogVersion: '2026.2',
+      trackCatalogVersion: '2026.3',
       mode: 'local' as const,
       results: [
         {

@@ -59,6 +59,8 @@ function vehicle(
     previousAngle: options.angle ?? 0,
     yawRate: 0,
     surface: 'asphalt',
+    trackLayer: 0,
+    trackDistanceMeters: 0,
     damage: {
       kind: 'none',
       health: 100,
@@ -155,6 +157,160 @@ function trackInput(state: VehicleState, geometry: TrackGeometry): DriverInput {
 }
 
 describe('RaceEngine fixed-step simulation', () => {
+  it('keeps surface sampling on the current branch at a geometric crossing', () => {
+    const crossingTrack = structuredClone(SHORT_TRACK)
+    crossingTrack.lengthMeters = 120
+    crossingTrack.centerline = [
+      {
+        x: -10,
+        y: 0,
+        distanceMeters: 0,
+        halfWidthMeters: 1,
+        elevationLayer: 0,
+      },
+      {
+        x: 10,
+        y: 0,
+        distanceMeters: 20,
+        halfWidthMeters: 1,
+        elevationLayer: 0,
+      },
+      {
+        x: 10,
+        y: 20,
+        distanceMeters: 40,
+        halfWidthMeters: 1,
+        elevationLayer: 0,
+      },
+      {
+        x: 0,
+        y: 20,
+        distanceMeters: 50,
+        halfWidthMeters: 1,
+        elevationLayer: 1,
+      },
+      {
+        x: 0,
+        y: -20,
+        distanceMeters: 90,
+        halfWidthMeters: 1,
+        elevationLayer: 1,
+      },
+      {
+        x: -10,
+        y: -20,
+        distanceMeters: 100,
+        halfWidthMeters: 1,
+        elevationLayer: 0,
+      },
+      {
+        x: -10,
+        y: 0,
+        distanceMeters: 120,
+        halfWidthMeters: 1,
+        elevationLayer: 0,
+      },
+    ]
+    crossingTrack.racingLine = crossingTrack.centerline.map((point) => ({
+      x: point.x,
+      y: point.y,
+      distanceMeters: point.distanceMeters,
+      targetSpeedFactor: 0.8,
+    }))
+    crossingTrack.gridSlots = [
+      { position: { x: 0, y: 2 }, angle: 0 },
+      { position: { x: -8, y: 0 }, angle: 0 },
+    ]
+    crossingTrack.trackLimits.segments = [
+      {
+        index: 0,
+        fromDistanceMeters: 0,
+        toDistanceMeters: 40,
+        left: {
+          zones: [{ surface: 'grass', widthMeters: 2 }],
+          barrier: 'guardrail',
+        },
+        right: { zones: [], barrier: 'guardrail' },
+      },
+      {
+        index: 1,
+        fromDistanceMeters: 40,
+        toDistanceMeters: 100,
+        left: {
+          zones: [{ surface: 'asphalt', widthMeters: 10 }],
+          barrier: 'guardrail',
+        },
+        right: {
+          zones: [{ surface: 'asphalt', widthMeters: 10 }],
+          barrier: 'guardrail',
+        },
+      },
+      {
+        index: 2,
+        fromDistanceMeters: 100,
+        toDistanceMeters: 120,
+        left: { zones: [], barrier: 'guardrail' },
+        right: { zones: [], barrier: 'guardrail' },
+      },
+    ]
+    crossingTrack.pitLane.path = [
+      { x: 100, y: 100 },
+      { x: 110, y: 100 },
+    ]
+
+    const geometry = new TrackGeometry(crossingTrack)
+    const globallyNearest = geometry.project({ x: 0, y: 2 })
+    const progressBound = geometry.project(
+      { x: 0, y: 2 },
+      crossingTrack.lengthMeters - 5,
+    )
+    expect(globallyNearest.distanceMeters).toBeCloseTo(68)
+    expect(globallyNearest.elevationLayer).toBe(1)
+    expect(progressBound.distanceMeters).toBeCloseTo(10)
+    expect(progressBound.elevationLayer).toBe(0)
+    expect(geometry.getEnvironmentAt({ x: 0, y: 2 }, 0).material).toBe(
+      'grass',
+    )
+    expect(
+      geometry.getBarrierContacts({ x: 0, y: 2 }, 1.1),
+    ).toHaveLength(0)
+    expect(
+      geometry.getBarrierContacts({ x: 0, y: 2 }, 1.1, 0),
+    ).toHaveLength(1)
+
+    const engine = new RaceEngine({
+      track: crossingTrack,
+      mode: 'local',
+      handlingMode: 'normal',
+      racers: [setup('player-1'), setup('player-2')],
+    })
+    engine.stepFixed()
+
+    expect(engine.getVehicleState('player-1')?.surface).toBe('grass')
+
+    const layeredEngine = new RaceEngine({
+      track: crossingTrack,
+      mode: 'local',
+      handlingMode: 'normal',
+      racers: [setup('lower'), setup('upper')],
+    })
+    const layeredVehicles = (
+      layeredEngine as unknown as { vehicles: VehicleState[] }
+    ).vehicles
+    for (const layeredVehicle of layeredVehicles) {
+      layeredVehicle.position = { x: 0, y: 0 }
+      layeredVehicle.previousPosition = { x: 0, y: 0 }
+    }
+    layeredVehicles[0].trackDistanceMeters = 10
+    layeredVehicles[1].trackDistanceMeters = 70
+    layeredEngine.stepFixed()
+
+    expect(layeredVehicles.map((candidate) => candidate.trackLayer)).toEqual([
+      0, 1,
+    ])
+    expect(layeredVehicles[0].position).toEqual(layeredVehicles[1].position)
+  })
+
   it('produces the same physical state at 30, 60 and 120 FPS', () => {
     const at30 = runAtFrameRate(30)
     const at60 = runAtFrameRate(60)

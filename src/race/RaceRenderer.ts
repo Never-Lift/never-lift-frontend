@@ -1,4 +1,10 @@
-import type { TrackChunk, TrackDefinition } from '@/lib/api'
+import type {
+  TrackBarrierType,
+  TrackChunk,
+  TrackDefinition,
+  TrackSideEnvironment,
+  TrackSurfaceMaterial,
+} from '@/lib/api'
 import {
   createCameraTransform,
   createMinimapTransform,
@@ -13,18 +19,58 @@ import {
 import { PHYSICS_CONSTANTS } from '@/race/constants'
 import { dot, magnitude } from '@/race/math'
 import type { RaceEngine } from '@/race/RaceEngine'
-import { TrackGeometry } from '@/race/TrackGeometry'
+import {
+  TrackGeometry,
+  trackSideEnvironmentWidth,
+} from '@/race/TrackGeometry'
 import type { InterpolatedVehicleState, Vector2 } from '@/race/types'
 
 type TireMark = {
   position: Vector2
   onGrass: boolean
+  trackLayer: number
 }
 
 export type RenderStats = {
   totalChunks: number
   visibleChunksByViewport: number[]
 }
+
+const SURFACE_COLORS: Record<TrackSurfaceMaterial, string> = {
+  asphalt: '#39414d',
+  grass: '#24492d',
+  gravel: '#716956',
+}
+
+const BACKGROUND_COLORS: Record<TrackDefinition['sceneryLayout']['preset'], string> = {
+  park: '#142b1d',
+  street: '#222832',
+  desert: '#3b3223',
+  coastal: '#16302c',
+  classic: '#182b1d',
+  'night-city': '#171c25',
+}
+
+const BARRIER_STYLES: Record<
+  TrackBarrierType,
+  { color: string; widthMeters: number; dashMeters?: number[] }
+> = {
+  'concrete-wall': { color: '#d7dce5', widthMeters: 0.48 },
+  guardrail: { color: '#9aa6b8', widthMeters: 0.32 },
+  tecpro: { color: '#5c7da7', widthMeters: 0.62 },
+  'tyre-barrier': {
+    color: '#171b21',
+    widthMeters: 0.72,
+    dashMeters: [0.9, 0.28],
+  },
+}
+
+const FENCE_STYLE = {
+  color: '#697789',
+  widthMeters: 0.22,
+  dashMeters: [0.8, 0.45],
+}
+const FENCE_GAP_METERS = 0.18
 
 export class RaceRenderer {
   private readonly context: CanvasRenderingContext2D
@@ -85,7 +131,7 @@ export class RaceRenderer {
       const visibleChunks = getVisibleTrackChunks(
         this.track.chunks,
         transform,
-        this.maximumTrackMarginPixels(transform),
+        12,
       )
       visibleChunksByViewport.push(visibleChunks.length)
       this.drawViewport(
@@ -135,17 +181,6 @@ export class RaceRenderer {
     return camera
   }
 
-  private maximumTrackMarginPixels(transform: CameraTransform) {
-    const maximumHalfWidth = Math.max(
-      ...this.track.centerline.map((point) => point.halfWidthMeters),
-    )
-    return (
-      (maximumHalfWidth + this.track.trackLimits.runoffWidthMeters) *
-        transform.pixelsPerMeter +
-      12
-    )
-  }
-
   private drawViewport(
     viewport: Viewport,
     transform: CameraTransform,
@@ -158,7 +193,7 @@ export class RaceRenderer {
     context.beginPath()
     context.rect(viewport.x, viewport.y, viewport.width, viewport.height)
     context.clip()
-    context.fillStyle = '#132820'
+    context.fillStyle = BACKGROUND_COLORS[this.track.sceneryLayout.preset]
     context.fillRect(viewport.x, viewport.y, viewport.width, viewport.height)
 
     const gradient = context.createRadialGradient(
@@ -174,19 +209,59 @@ export class RaceRenderer {
     context.fillStyle = gradient
     context.fillRect(viewport.x, viewport.y, viewport.width, viewport.height)
 
-    for (const chunk of visibleChunks) this.drawTrackChunk(chunk, transform)
-    this.drawStartFinish(transform)
+    const visibleTrackSections = visibleChunks.flatMap((chunk) =>
+      this.splitByElevationLayer(this.getChunkPoints(chunk)),
+    )
+
+    // Draw every visible section in material passes. Drawing a complete chunk at
+    // a time would let a later chunk's wide runoff cover asphalt from a nearby branch
+    // (Suzuka's crossover and Monaco's parallel streets are concrete examples).
+    // Boundaries stay above the asphalt so walls and fences remain visible when
+    // they sit directly against the track edge.
+    const elevationLayers = [
+      ...new Set(
+        [
+          ...visibleTrackSections.map((section) => section.elevationLayer),
+          ...vehicles.map((vehicle) => vehicle.trackLayer),
+        ],
+      ),
+    ].sort((first, second) => first - second)
     this.drawScenery(transform)
-    this.drawTireMarks(transform)
-    for (const vehicle of vehicles) this.drawVehicle(vehicle, transform)
+    for (const elevationLayer of elevationLayers) {
+      const sections = visibleTrackSections.filter(
+        (section) => section.elevationLayer === elevationLayer,
+      )
+      for (const { points } of sections) {
+        this.drawTrackEnvironments(points, transform)
+      }
+      for (const { points } of sections) {
+        this.drawTrackAsphalt(points, transform)
+      }
+      for (const { points } of sections) {
+        this.drawTrackFences(points, transform)
+      }
+      for (const { points } of sections) {
+        this.drawTrackBarriers(points, transform)
+      }
+      for (const { points } of sections) {
+        this.drawTrackDetails(points, transform)
+      }
+      if (elevationLayer === 0) this.drawStartFinish(transform)
+      this.drawTireMarks(transform, elevationLayer)
+      for (const vehicle of vehicles) {
+        if (vehicle.trackLayer === elevationLayer) {
+          this.drawVehicle(vehicle, transform)
+        }
+      }
+    }
     this.drawMinimap(viewport, vehicles, focusedVehicle)
     this.drawDriverLabel(viewport, focusedVehicle.name)
     context.restore()
   }
 
-  private drawTrackChunk(chunk: TrackChunk, transform: CameraTransform) {
+  private getChunkPoints(chunk: TrackChunk) {
     const path = this.track.centerline
-    const chunkPoints = path.filter((_, index) => {
+    return path.filter((_, index) => {
       const previousDistance = path[Math.max(0, index - 1)].distanceMeters
       const nextDistance = path[Math.min(path.length - 1, index + 1)].distanceMeters
       return (
@@ -194,18 +269,86 @@ export class RaceRenderer {
         previousDistance <= chunk.toDistanceMeters
       )
     })
-    if (chunkPoints.length < 2) return
-    const screenPoints = chunkPoints.map((point) => worldToCamera(point, transform))
-    const averageHalfWidthMeters =
-      chunkPoints.reduce((sum, point) => sum + point.halfWidthMeters, 0) /
-      chunkPoints.length
+  }
 
-    this.strokePolyline(
-      screenPoints,
-      averageHalfWidthMeters * 2 * transform.pixelsPerMeter,
-      '#29303b',
-    )
-    this.drawTrackBoundaries(chunkPoints, transform)
+  private splitByElevationLayer(
+    points: TrackDefinition['centerline'],
+  ): Array<{
+    elevationLayer: number
+    points: TrackDefinition['centerline']
+  }> {
+    const sections: Array<{
+      elevationLayer: number
+      points: TrackDefinition['centerline']
+    }> = []
+    const appendSegment = (
+      elevationLayer: number,
+      from: TrackDefinition['centerline'][number],
+      to: TrackDefinition['centerline'][number],
+    ) => {
+      const current = sections.at(-1)
+      if (current?.elevationLayer === elevationLayer) {
+        current.points.push(to)
+        return
+      }
+      sections.push({ elevationLayer, points: [from, to] })
+    }
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const from = points[index]
+      const to = points[index + 1]
+      if (from.elevationLayer === to.elevationLayer) {
+        appendSegment(from.elevationLayer, from, to)
+        continue
+      }
+
+      // TrackGeometry assigns the nearest endpoint's layer, switching at
+      // alpha=0.5. Split the rendered segment at that same midpoint so a car
+      // cannot be projected onto one layer while its road is drawn on another.
+      const midpoint = {
+        x: (from.x + to.x) / 2,
+        y: (from.y + to.y) / 2,
+        distanceMeters: (from.distanceMeters + to.distanceMeters) / 2,
+        halfWidthMeters: (from.halfWidthMeters + to.halfWidthMeters) / 2,
+      }
+      appendSegment(from.elevationLayer, from, {
+        ...midpoint,
+        elevationLayer: from.elevationLayer,
+      })
+      appendSegment(
+        to.elevationLayer,
+        { ...midpoint, elevationLayer: to.elevationLayer },
+        to,
+      )
+    }
+    return sections
+  }
+
+  private drawTrackAsphalt(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const from = points[index]
+      const to = points[index + 1]
+      const averageHalfWidthMeters =
+        (from.halfWidthMeters + to.halfWidthMeters) / 2
+      this.strokeSegment(
+        worldToCamera(from, transform),
+        worldToCamera(to, transform),
+        averageHalfWidthMeters * 2 * transform.pixelsPerMeter,
+        '#29303b',
+        index === 0 || index === points.length - 2 ? 'butt' : 'round',
+      )
+    }
+  }
+
+  private drawTrackDetails(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    const screenPoints = points.map((point) => worldToCamera(point, transform))
+    this.drawTrackEdges(points, transform)
     this.context.save()
     this.context.setLineDash([
       1.6 * transform.pixelsPerMeter,
@@ -219,41 +362,237 @@ export class RaceRenderer {
     this.context.restore()
   }
 
-  private drawTrackBoundaries(
+  private drawTrackEnvironments(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const from = points[index]
+      const to = points[index + 1]
+      const distanceMeters = (from.distanceMeters + to.distanceMeters) / 2
+      for (const side of ['left', 'right'] as const) {
+        const environment = this.geometry.getTrackSideEnvironmentAt(
+          distanceMeters,
+          side,
+        )
+        let innerOffset = 0
+        for (const zone of environment.zones) {
+          this.fillTrackZone(
+            from,
+            to,
+            side,
+            innerOffset,
+            innerOffset + zone.widthMeters,
+            transform,
+            SURFACE_COLORS[zone.surface],
+          )
+          innerOffset += zone.widthMeters
+        }
+      }
+    }
+  }
+
+  private fillTrackZone(
+    from: TrackDefinition['centerline'][number],
+    to: TrackDefinition['centerline'][number],
+    side: 'left' | 'right',
+    innerOffsetMeters: number,
+    outerOffsetMeters: number,
+    transform: CameraTransform,
+    color: string,
+  ) {
+    const corners = [
+      this.offsetTrackPoint(
+        from,
+        side,
+        from.halfWidthMeters + innerOffsetMeters,
+      ),
+      this.offsetTrackPoint(
+        to,
+        side,
+        to.halfWidthMeters + innerOffsetMeters,
+      ),
+      this.offsetTrackPoint(
+        to,
+        side,
+        to.halfWidthMeters + outerOffsetMeters,
+      ),
+      this.offsetTrackPoint(
+        from,
+        side,
+        from.halfWidthMeters + outerOffsetMeters,
+      ),
+    ].map((point) => worldToCamera(point, transform))
+
+    this.context.beginPath()
+    this.context.moveTo(corners[0].x, corners[0].y)
+    for (const corner of corners.slice(1)) {
+      this.context.lineTo(corner.x, corner.y)
+    }
+    this.context.closePath()
+    this.context.fillStyle = color
+    this.context.fill()
+  }
+
+  private drawTrackEdges(
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) {
     for (const side of ['left', 'right'] as const) {
-      const direction = side === 'left' ? 1 : -1
-      const boundary = points.map((point) => {
-        const tangent = this.geometry.getCenterlineTangent(
-          point.distanceMeters,
-        )
-        const normal = { x: -tangent.y, y: tangent.x }
-        const limit = this.geometry.getTrackLimitAt(
-          point.distanceMeters,
+      const edge = points.map((point) =>
+        worldToCamera(
+          this.offsetTrackPoint(point, side, point.halfWidthMeters),
+          transform,
+        ),
+      )
+      this.strokePolyline(
+        edge,
+        Math.max(1, 0.14 * transform.pixelsPerMeter),
+        'rgba(240, 240, 250, 0.78)',
+      )
+    }
+  }
+
+  private drawTrackBarriers(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    for (const side of ['left', 'right'] as const) {
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const from = points[index]
+        const to = points[index + 1]
+        const { fromPoint, toPoint, style } = this.getBarrierSegment(
+          from,
+          to,
           side,
-        )
-        const offsetMeters =
-          point.halfWidthMeters + limit.runoffWidthMeters
-        return worldToCamera(
-          {
-            x: point.x + normal.x * offsetMeters * direction,
-            y: point.y + normal.y * offsetMeters * direction,
-          },
           transform,
         )
-      })
-      this.strokePolyline(
-        boundary,
-        Math.max(2, 0.42 * transform.pixelsPerMeter),
-        '#e8edf8',
+        this.drawStyledBoundary(fromPoint, toPoint, style, transform)
+      }
+    }
+  }
+
+  private drawTrackFences(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    for (const side of ['left', 'right'] as const) {
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const from = points[index]
+        const to = points[index + 1]
+        const fromEnvironment = this.geometry.getTrackSideEnvironmentAt(
+          from.distanceMeters,
+          side,
+        )
+        const toEnvironment = this.geometry.getTrackSideEnvironmentAt(
+          to.distanceMeters,
+          side,
+        )
+        const segmentEnvironment = this.geometry.getTrackSideEnvironmentAt(
+          (from.distanceMeters + to.distanceMeters) / 2,
+          side,
+        )
+        if (!segmentEnvironment.fence) continue
+        const fromPoint = worldToCamera(
+          this.offsetTrackPoint(
+            from,
+            side,
+            from.halfWidthMeters + this.fenceOffset(fromEnvironment),
+          ),
+          transform,
+        )
+        const toPoint = worldToCamera(
+          this.offsetTrackPoint(
+            to,
+            side,
+            to.halfWidthMeters + this.fenceOffset(toEnvironment),
+          ),
+          transform,
+        )
+        this.drawStyledBoundary(fromPoint, toPoint, FENCE_STYLE, transform)
+      }
+    }
+  }
+
+  private fenceOffset(environment: TrackSideEnvironment) {
+    return (
+      trackSideEnvironmentWidth(environment) +
+      BARRIER_STYLES[environment.barrier].widthMeters / 2 +
+      FENCE_GAP_METERS +
+      FENCE_STYLE.widthMeters / 2
+    )
+  }
+
+  private getBarrierSegment(
+    from: TrackDefinition['centerline'][number],
+    to: TrackDefinition['centerline'][number],
+    side: 'left' | 'right',
+    transform: CameraTransform,
+  ) {
+    const fromEnvironment = this.geometry.getTrackSideEnvironmentAt(
+      from.distanceMeters,
+      side,
+    )
+    const toEnvironment = this.geometry.getTrackSideEnvironmentAt(
+      to.distanceMeters,
+      side,
+    )
+    const styleEnvironment = this.geometry.getTrackSideEnvironmentAt(
+      (from.distanceMeters + to.distanceMeters) / 2,
+      side,
+    )
+    const style = BARRIER_STYLES[styleEnvironment.barrier]
+    const fromPoint = worldToCamera(
+      this.offsetTrackPoint(
+        from,
+        side,
+        from.halfWidthMeters + trackSideEnvironmentWidth(fromEnvironment),
+      ),
+      transform,
+    )
+    const toPoint = worldToCamera(
+      this.offsetTrackPoint(
+        to,
+        side,
+        to.halfWidthMeters + trackSideEnvironmentWidth(toEnvironment),
+      ),
+      transform,
+    )
+    return { fromPoint, toPoint, style }
+  }
+
+  private drawStyledBoundary(
+    fromPoint: Vector2,
+    toPoint: Vector2,
+    style: { color: string; widthMeters: number; dashMeters?: number[] },
+    transform: CameraTransform,
+  ) {
+    this.context.save()
+    if (style.dashMeters) {
+      this.context.setLineDash(
+        style.dashMeters.map((length) => length * transform.pixelsPerMeter),
       )
-      this.strokePolyline(
-        boundary,
-        Math.max(1, 0.14 * transform.pixelsPerMeter),
-        '#596273',
-      )
+    }
+    this.strokeSegment(
+      fromPoint,
+      toPoint,
+      Math.max(1.5, style.widthMeters * transform.pixelsPerMeter),
+      style.color,
+    )
+    this.context.restore()
+  }
+
+  private offsetTrackPoint(
+    point: TrackDefinition['centerline'][number],
+    side: 'left' | 'right',
+    offsetMeters: number,
+  ): Vector2 {
+    const tangent = this.geometry.getCenterlineTangent(point.distanceMeters)
+    const normal = { x: -tangent.y, y: tangent.x }
+    const direction = side === 'left' ? 1 : -1
+    return {
+      x: point.x + normal.x * offsetMeters * direction,
+      y: point.y + normal.y * offsetMeters * direction,
     }
   }
 
@@ -274,11 +613,12 @@ export class RaceRenderer {
     to: Vector2,
     width: number,
     color: string,
+    lineCap: CanvasLineCap = 'round',
   ) {
     this.context.beginPath()
     this.context.moveTo(from.x, from.y)
     this.context.lineTo(to.x, to.y)
-    this.context.lineCap = 'round'
+    this.context.lineCap = lineCap
     this.context.lineJoin = 'round'
     this.context.lineWidth = Math.max(1, width)
     this.context.strokeStyle = color
@@ -365,6 +705,7 @@ export class RaceRenderer {
           y: vehicle.renderPosition.y - Math.sin(vehicle.renderAngle) * rearOffset,
         },
         onGrass: vehicle.surface === 'grass',
+        trackLayer: vehicle.trackLayer,
       })
     }
     if (this.tireMarks.length > 900) {
@@ -372,9 +713,13 @@ export class RaceRenderer {
     }
   }
 
-  private drawTireMarks(transform: CameraTransform) {
+  private drawTireMarks(
+    transform: CameraTransform,
+    elevationLayer: number,
+  ) {
     const viewport = transform.viewport
     for (const mark of this.tireMarks) {
+      if (mark.trackLayer !== elevationLayer) continue
       const point = worldToCamera(mark.position, transform)
       if (
         point.x < viewport.x ||

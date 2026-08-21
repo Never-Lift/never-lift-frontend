@@ -2,9 +2,10 @@ import type {
   TrackDefinition,
   TrackGate,
   TrackLimitSegment,
-  TrackLimitType,
   TrackPathPoint,
   TrackRacingPoint,
+  TrackSideEnvironment,
+  TrackSurfaceMaterial,
 } from '@/lib/api'
 import { clamp, lerp, normalize, subtract } from '@/race/math'
 import type { SurfaceId, Vector2 } from '@/race/types'
@@ -19,6 +20,25 @@ export type TrackProjection = {
   distanceFromCenterMeters: number
   distanceMeters: number
   halfWidthMeters: number
+  elevationLayer: number
+}
+
+export type TrackSide = 'left' | 'right'
+
+export type TrackEnvironmentSample = {
+  side: TrackSide
+  environment: TrackSideEnvironment
+  material: TrackSurfaceMaterial
+  distanceBeyondTrackMeters: number
+  totalEnvironmentWidthMeters: number
+}
+
+const LOCAL_PROJECTION_WINDOW_METERS = 40
+const LOCAL_PROJECTION_RECOVERY_MARGIN_METERS = 24
+const PROJECTION_DISTANCE_TOLERANCE_METERS = 0.5
+
+export function trackSideEnvironmentWidth(environment: TrackSideEnvironment) {
+  return environment.zones.reduce((sum, zone) => sum + zone.widthMeters, 0)
 }
 
 function projectOntoSegment(
@@ -58,6 +78,64 @@ function distanceToPath(point: Vector2, path: Vector2[]) {
     )
   }
   return minimum
+}
+
+function circularDistanceMeters(
+  firstDistanceMeters: number,
+  secondDistanceMeters: number,
+  trackLengthMeters: number,
+) {
+  const normalizedFirst =
+    ((firstDistanceMeters % trackLengthMeters) + trackLengthMeters) %
+    trackLengthMeters
+  const normalizedSecond =
+    ((secondDistanceMeters % trackLengthMeters) + trackLengthMeters) %
+    trackLengthMeters
+  const directDistance = Math.abs(normalizedFirst - normalizedSecond)
+  return Math.min(directDistance, trackLengthMeters - directDistance)
+}
+
+type ProjectionCandidate = TrackProjection & {
+  preferredDifferenceMeters: number
+}
+
+function elevationLayerOf(point: TrackPathPoint) {
+  return (
+    point as TrackPathPoint & {
+      elevationLayer?: number
+    }
+  ).elevationLayer ?? 0
+}
+
+function projectionWithoutRanking(
+  candidate: ProjectionCandidate,
+): TrackProjection {
+  return {
+    point: candidate.point,
+    distanceFromCenterMeters: candidate.distanceFromCenterMeters,
+    distanceMeters: candidate.distanceMeters,
+    halfWidthMeters: candidate.halfWidthMeters,
+    elevationLayer: candidate.elevationLayer,
+  }
+}
+
+function isBetterProjection(
+  candidate: ProjectionCandidate,
+  current: ProjectionCandidate | null,
+) {
+  if (!current) return true
+  if (
+    candidate.distanceFromCenterMeters <
+    current.distanceFromCenterMeters - PROJECTION_DISTANCE_TOLERANCE_METERS
+  ) {
+    return true
+  }
+  return (
+    Math.abs(
+      candidate.distanceFromCenterMeters - current.distanceFromCenterMeters,
+    ) <= PROJECTION_DISTANCE_TOLERANCE_METERS &&
+    candidate.preferredDifferenceMeters < current.preferredDifferenceMeters
+  )
 }
 
 function pointAtDistance<T extends TrackRacingPoint>(
@@ -138,9 +216,13 @@ export class TrackGeometry {
   }
 
   project(point: Vector2, preferredDistanceMeters?: number): TrackProjection {
-    let best: TrackProjection | null = null
-    let bestPreferredDifference = Number.POSITIVE_INFINITY
+    let globalBest: ProjectionCandidate | null = null
+    let localBest: ProjectionCandidate | null = null
     const path = this.definition.centerline
+    const localWindowMeters = Math.min(
+      LOCAL_PROJECTION_WINDOW_METERS,
+      this.definition.lengthMeters / 2,
+    )
     for (let index = 0; index < path.length - 1; index += 1) {
       const from = path[index]
       const to = path[index + 1]
@@ -153,19 +235,12 @@ export class TrackGeometry {
       const preferredDifference =
         preferredDistanceMeters === undefined
           ? 0
-          : Math.min(
-              Math.abs(distanceMeters - preferredDistanceMeters),
-              this.definition.lengthMeters -
-                Math.abs(distanceMeters - preferredDistanceMeters),
+          : circularDistanceMeters(
+              distanceMeters,
+              preferredDistanceMeters,
+              this.definition.lengthMeters,
             )
-      const geometricallyBetter =
-        !best || projected.distance < best.distanceFromCenterMeters - 0.5
-      const equallyNearAndProgressivelyBetter =
-        best !== null &&
-        Math.abs(projected.distance - best.distanceFromCenterMeters) <= 0.5 &&
-        preferredDifference < bestPreferredDifference
-      if (!geometricallyBetter && !equallyNearAndProgressivelyBetter) continue
-      best = {
+      const candidate: ProjectionCandidate = {
         point: projected.point,
         distanceFromCenterMeters: projected.distance,
         distanceMeters,
@@ -174,57 +249,139 @@ export class TrackGeometry {
           to.halfWidthMeters,
           projected.alpha,
         ),
+        elevationLayer:
+          projected.alpha < 0.5
+            ? elevationLayerOf(from)
+            : elevationLayerOf(to),
+        preferredDifferenceMeters: preferredDifference,
       }
-      bestPreferredDifference = preferredDifference
+      if (isBetterProjection(candidate, globalBest)) globalBest = candidate
+      if (
+        preferredDistanceMeters !== undefined &&
+        preferredDifference <= localWindowMeters &&
+        isBetterProjection(candidate, localBest)
+      ) {
+        localBest = candidate
+      }
     }
 
-    if (!best) throw new Error('Não foi possível projetar a posição na pista.')
-    return best
+    if (!globalBest) {
+      throw new Error('Não foi possível projetar a posição na pista.')
+    }
+    if (!localBest) return projectionWithoutRanking(globalBest)
+
+    const localSegment = this.getTrackLimitSegment(localBest.distanceMeters)
+    const maximumEnvironmentWidthMeters = Math.max(
+      trackSideEnvironmentWidth(localSegment.left),
+      trackSideEnvironmentWidth(localSegment.right),
+    )
+    const maximumPlausibleLocalDistanceMeters =
+      localBest.halfWidthMeters +
+      maximumEnvironmentWidthMeters +
+      LOCAL_PROJECTION_RECOVERY_MARGIN_METERS
+
+    return projectionWithoutRanking(
+      localBest.distanceFromCenterMeters <= maximumPlausibleLocalDistanceMeters
+        ? localBest
+        : globalBest,
+    )
   }
 
-  getSurfaceAt(point: Vector2): SurfaceId {
+  getElevationLayerAt(
+    point: Vector2,
+    preferredDistanceMeters?: number,
+  ) {
+    return this.project(point, preferredDistanceMeters).elevationLayer
+  }
+
+  getSurfaceAt(
+    point: Vector2,
+    preferredDistanceMeters?: number,
+  ): SurfaceId {
     if (
       this.definition.pitLane.path.length >= 2 &&
       distanceToPath(point, this.definition.pitLane.path) <= 3
     ) {
       return this.definition.surfaceModel.pitLane
     }
-    const projection = this.project(point)
-    return projection.distanceFromCenterMeters <= projection.halfWidthMeters
-      ? this.definition.surfaceModel.onTrack
-      : this.definition.surfaceModel.offTrack
+    const material = this.getEnvironmentAt(
+      point,
+      preferredDistanceMeters,
+    ).material
+    return material === 'asphalt' ? 'asphalt' : 'grass'
   }
 
-  getTrackLimitAt(
-    distanceMeters: number,
-    side: 'left' | 'right',
-  ): { type: TrackLimitType; runoffWidthMeters: number } {
-    const segment = this.getTrackLimitSegment(distanceMeters)
-    const type = segment[side]
-    return {
-      type,
-      runoffWidthMeters:
-        type === 'runoff' ? this.definition.trackLimits.runoffWidthMeters : 0,
+  getEnvironmentAt(
+    point: Vector2,
+    preferredDistanceMeters?: number,
+  ): TrackEnvironmentSample {
+    const projection = this.project(point, preferredDistanceMeters)
+    const tangent = this.getCenterlineTangent(projection.distanceMeters)
+    const relative = subtract(point, projection.point)
+    const side: TrackSide =
+      tangent.x * relative.y - tangent.y * relative.x >= 0
+        ? 'left'
+        : 'right'
+    const environment = this.getTrackSideEnvironmentAt(
+      projection.distanceMeters,
+      side,
+    )
+    const distanceBeyondTrackMeters = Math.max(
+      0,
+      projection.distanceFromCenterMeters - projection.halfWidthMeters,
+    )
+    let material: TrackSurfaceMaterial = this.definition.surfaceModel.onTrack
+    if (distanceBeyondTrackMeters > 0) {
+      let zoneEnd = 0
+      for (const zone of environment.zones) {
+        zoneEnd += zone.widthMeters
+        if (distanceBeyondTrackMeters <= zoneEnd) {
+          material = zone.surface
+          break
+        }
+      }
+      if (distanceBeyondTrackMeters > zoneEnd && environment.zones.length > 0) {
+        material = environment.zones.at(-1)!.surface
+      }
     }
+    return {
+      side,
+      environment,
+      material,
+      distanceBeyondTrackMeters,
+      totalEnvironmentWidthMeters: trackSideEnvironmentWidth(environment),
+    }
+  }
+
+  getTrackSideEnvironmentAt(
+    distanceMeters: number,
+    side: TrackSide,
+  ): TrackSideEnvironment {
+    const segment = this.getTrackLimitSegment(distanceMeters)
+    return segment[side]
   }
 
   getBarrierContacts(
     point: Vector2,
     vehicleRadius: number,
+    preferredDistanceMeters?: number,
   ): BarrierContact[] {
-    const projection = this.project(point)
+    const projection = this.project(point, preferredDistanceMeters)
     const tangent = this.getCenterlineTangent(projection.distanceMeters)
     const relative = subtract(point, projection.point)
     const side =
       tangent.x * relative.y - tangent.y * relative.x >= 0
         ? 'left'
         : 'right'
-    const limit = this.getTrackLimitAt(projection.distanceMeters, side)
+    const environment = this.getTrackSideEnvironmentAt(
+      projection.distanceMeters,
+      side,
+    )
     const penetrationMeters =
       projection.distanceFromCenterMeters +
       vehicleRadius -
       projection.halfWidthMeters -
-      limit.runoffWidthMeters
+      trackSideEnvironmentWidth(environment)
     if (penetrationMeters <= 0) return []
 
     let pushNormal = normalize(subtract(projection.point, point))
