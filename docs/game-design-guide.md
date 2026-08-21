@@ -120,7 +120,7 @@ Regras:
 
 ### 6.1 Catálogo e escala compartilhada
 
-- O catálogo `2026.2` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais e traçados reconhecíveis, destinados ao uso pessoal informado pelo proprietário.
+- O catálogo `2026.3` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais, traçados reconhecíveis e ambientes laterais auditados por pista, destinados ao uso pessoal informado pelo proprietário.
 - Se houver decisão futura de distribuição pública, nomes, marcas e apresentação devem ser revistos antes da publicação.
 - Circuitos podem ter comprimentos diferentes e próximos das proporções reais.
 - Unidade compartilhada de mundo: **1 unidade = 1 metro**.
@@ -128,7 +128,7 @@ Regras:
 - Pequenos ajustes aproximados de 10–20% são permitidos quando necessários para legibilidade, física ou diversão, preservando a identidade do traçado.
 - A pista existe em coordenadas de mundo e não precisa caber inteira na tela.
 - Renderização usa trechos, culling e elementos reutilizáveis; tamanho do circuito não pode exigir um bitmap proporcional ao mundo inteiro.
-- Limites são definidos por trecho e por lado. `barrier` coloca a proteção junto ao asfalto; `runoff` mantém 10 m de grama jogável antes da proteção externa. Monaco e circuitos urbanos murados preservam barreiras contínuas; híbridos e autódromos alternam áreas de escape e barreiras de forma coerente com seu caráter, sem alegar reprodução topográfica exata.
+- Limites são definidos por trecho e por lado. Cada lado declara uma sequência ordenada de zonas (`asphalt`, `grass` ou `gravel`) com largura em metros, seguida da barreira de impacto e, quando existir, de uma `debris-fence` externa independente. A grade é visual e nunca substitui nem desloca a barreira usada pela colisão. A largura do asfalto e a distância até a proteção podem variar ao longo da volta; mudanças grandes precisam de transição visual e física legível. Mônaco e circuitos urbanos murados preservam barreiras próximas, enquanto híbridos e autódromos alternam áreas de escape de acordo com as referências auditadas. Cruzamentos em níveis diferentes, como Suzuka, usam camada de elevação explícita para não misturar projeção, desenho nem colisões.
 
 ### 6.2 Aparência
 

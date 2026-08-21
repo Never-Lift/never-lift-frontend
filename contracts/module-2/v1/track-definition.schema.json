@@ -27,7 +27,7 @@
     "source"
   ],
   "properties": {
-    "schemaVersion": { "const": "1.1.0" },
+    "schemaVersion": { "const": "1.2.0" },
     "catalogVersion": { "type": "string", "pattern": "^2026\\.[1-9][0-9]*$" },
     "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "name": { "type": "string", "minLength": 1 },
@@ -96,19 +96,17 @@
     "surfaceModel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["onTrack", "offTrack", "pitLane"],
+      "required": ["onTrack", "pitLane"],
       "properties": {
         "onTrack": { "const": "asphalt" },
-        "offTrack": { "const": "grass" },
         "pitLane": { "const": "pit-lane" }
       }
     },
     "trackLimits": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["runoffWidthMeters", "segments"],
+      "required": ["segments"],
       "properties": {
-        "runoffWidthMeters": { "const": 10 },
         "segments": {
           "type": "array",
           "minItems": 1,
@@ -144,12 +142,26 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dataset", "license", "url", "transformation"],
+      "required": ["dataset", "license", "url", "transformation", "environmentReferences"],
       "properties": {
         "dataset": { "type": "string" },
         "license": { "type": "string" },
         "url": { "type": "string", "pattern": "^https://" },
-        "transformation": { "type": "string" }
+        "transformation": { "type": "string" },
+        "environmentReferences": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "url", "checkedAt"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "url": { "type": "string", "pattern": "^https://" },
+              "checkedAt": { "type": "string", "format": "date" }
+            }
+          }
+        }
       }
     }
   },
@@ -177,12 +189,13 @@
     "pathPoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y", "distanceMeters", "halfWidthMeters"],
+      "required": ["x", "y", "distanceMeters", "halfWidthMeters", "elevationLayer"],
       "properties": {
         "x": { "type": "number" },
         "y": { "type": "number" },
         "distanceMeters": { "type": "number", "minimum": 0 },
-        "halfWidthMeters": { "type": "number", "minimum": 5, "maximum": 12 }
+        "halfWidthMeters": { "type": "number", "minimum": 3.5, "maximum": 13 },
+        "elevationLayer": { "type": "integer", "minimum": 0, "maximum": 3 }
       }
     },
     "racingPoint": {
@@ -204,8 +217,32 @@
         "index": { "type": "integer", "minimum": 0 },
         "fromDistanceMeters": { "type": "number", "minimum": 0 },
         "toDistanceMeters": { "type": "number", "exclusiveMinimum": 0 },
-        "left": { "enum": ["barrier", "runoff"] },
-        "right": { "enum": ["barrier", "runoff"] }
+        "left": { "$ref": "#/$defs/trackSideEnvironment" },
+        "right": { "$ref": "#/$defs/trackSideEnvironment" }
+      }
+    },
+    "trackSideEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zones", "barrier"],
+      "properties": {
+        "zones": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["surface", "widthMeters"],
+            "properties": {
+              "surface": { "enum": ["asphalt", "grass", "gravel"] },
+              "widthMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 }
+            }
+          }
+        },
+        "barrier": {
+          "enum": ["concrete-wall", "guardrail", "tecpro", "tyre-barrier"]
+        },
+        "fence": { "const": "debris-fence" }
       }
     },
     "gate": {

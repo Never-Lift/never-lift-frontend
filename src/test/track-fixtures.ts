@@ -17,6 +17,7 @@ export function createTrackFixture(
       ...pointOnCircle(radius, angle),
       distanceMeters: progress * lengthMeters,
       halfWidthMeters: 8,
+      elevationLayer: 0,
     }
   })
   const racingLine = centerline.map((point, index) => ({
@@ -60,8 +61,8 @@ export function createTrackFixture(
   })
   const start = pointOnCircle(radius, 0)
   return {
-    schemaVersion: '1.1.0',
-    catalogVersion: '2026.2',
+    schemaVersion: '1.2.0',
+    catalogVersion: '2026.3',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
     countryCode: id === 'monaco' ? 'MC' : 'BE',
@@ -110,11 +111,9 @@ export function createTrackFixture(
     },
     surfaceModel: {
       onTrack: 'asphalt',
-      offTrack: 'grass',
       pitLane: 'pit-lane',
     },
     trackLimits: {
-      runoffWidthMeters: 10,
       segments:
         id === 'monaco'
           ? [
@@ -122,8 +121,8 @@ export function createTrackFixture(
                 index: 0,
                 fromDistanceMeters: 0,
                 toDistanceMeters: lengthMeters,
-                left: 'barrier',
-                right: 'barrier',
+                left: { zones: [], barrier: 'concrete-wall' },
+                right: { zones: [], barrier: 'concrete-wall' },
               },
             ]
           : [
@@ -131,15 +130,24 @@ export function createTrackFixture(
                 index: 0,
                 fromDistanceMeters: 0,
                 toDistanceMeters: lengthMeters / 2,
-                left: 'runoff',
-                right: 'runoff',
+                left: {
+                  zones: [{ surface: 'grass', widthMeters: 10 }],
+                  barrier: 'tyre-barrier',
+                },
+                right: {
+                  zones: [{ surface: 'grass', widthMeters: 10 }],
+                  barrier: 'tyre-barrier',
+                },
               },
               {
                 index: 1,
                 fromDistanceMeters: lengthMeters / 2,
                 toDistanceMeters: lengthMeters,
-                left: 'barrier',
-                right: 'runoff',
+                left: { zones: [], barrier: 'concrete-wall' },
+                right: {
+                  zones: [{ surface: 'grass', widthMeters: 10 }],
+                  barrier: 'tyre-barrier',
+                },
               },
             ],
     },
@@ -154,6 +162,18 @@ export function createTrackFixture(
       license: 'test-only',
       url: 'https://never-lift.local/test-fixture',
       transformation: 'circular fixture preserving catalog length',
+      environmentReferences: [
+        {
+          label: 'deterministic fixture',
+          url: 'https://never-lift.local/test-fixture/environment',
+          checkedAt: '2026-08-20',
+        },
+        {
+          label: 'deterministic fixture cross-check',
+          url: 'https://never-lift.local/test-fixture/environment-cross-check',
+          checkedAt: '2026-08-20',
+        },
+      ],
     },
   }
 }

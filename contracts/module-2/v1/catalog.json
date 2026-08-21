@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "1.1.0",
-  "catalogVersion": "2026.2",
+  "schemaVersion": "1.2.0",
+  "catalogVersion": "2026.3",
   "seasonReference": 2026,
   "calendarPolicy": "original-24-round-freeze",
   "tracks": [
@@ -91,7 +91,7 @@
       "countryCode": "ES",
       "countryName": "Spain",
       "locality": "Barcelona",
-      "lengthMeters": 4655,
+      "lengthMeters": 4657,
       "definitionPath": "tracks/barcelona.json"
     },
     {
@@ -101,7 +101,7 @@
       "countryCode": "AT",
       "countryName": "Austria",
       "locality": "Spielberg",
-      "lengthMeters": 4318,
+      "lengthMeters": 4326,
       "definitionPath": "tracks/spielberg.json"
     },
     {
@@ -227,11 +227,11 @@
     {
       "round": 23,
       "id": "lusail",
-      "name": "Losail International Circuit",
+      "name": "Lusail International Circuit",
       "countryCode": "QA",
       "countryName": "Qatar",
       "locality": "Lusail",
-      "lengthMeters": 5380,
+      "lengthMeters": 5419,
       "definitionPath": "tracks/lusail.json"
     },
     {
