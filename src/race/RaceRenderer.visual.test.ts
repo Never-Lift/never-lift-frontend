@@ -210,7 +210,7 @@ describe('RaceRenderer Module 2c visuals', () => {
     },
   )
 
-  it('stops a lower-layer headlight before the full elevated footprint', () => {
+  it('occludes the full elevated footprint and reveals the exit progressively', () => {
     const elevatedFootprintTrack: TrackDefinition = {
       ...SHORT_TRACK,
       trackLimits: {
@@ -270,39 +270,78 @@ describe('RaceRenderer Module 2c visuals', () => {
       },
     ]
     const rendererInternals = renderer as unknown as {
-      getHeadlightOcclusionDistanceMeters: (
+      getHeadlightOcclusionRangesMeters: (
         currentVehicle: InterpolatedVehicleState,
         sections: Array<{
           elevationLayer: number
           points: TrackDefinition['centerline']
         }>,
         maximumDistanceMeters: number,
-      ) => number
+      ) => Array<{
+        fromDistanceMeters: number
+        toDistanceMeters: number
+      }>
+      getVisibleHeadlightRangesMeters: (
+        beamStartMeters: number,
+        beamLengthMeters: number,
+        occlusionRanges: Array<{
+          fromDistanceMeters: number
+          toDistanceMeters: number
+        }>,
+      ) => Array<{
+        fromDistanceMeters: number
+        toDistanceMeters: number
+      }>
     }
 
-    const lowerBeamDistance =
-      rendererInternals.getHeadlightOcclusionDistanceMeters(
-        vehicle,
-        [{ elevationLayer: 1, points: upperCenterline }],
-        58,
-      )
-    const upperBeamDistance =
-      rendererInternals.getHeadlightOcclusionDistanceMeters(
-        { ...vehicle, trackLayer: 1 },
-        [{ elevationLayer: 1, points: upperCenterline }],
-        58,
-      )
-    const beamDistanceUnderOverpass =
-      rendererInternals.getHeadlightOcclusionDistanceMeters(
+    const lowerOcclusion = rendererInternals.getHeadlightOcclusionRangesMeters(
+      vehicle,
+      [{ elevationLayer: 1, points: upperCenterline }],
+      58,
+    )
+    const upperOcclusion = rendererInternals.getHeadlightOcclusionRangesMeters(
+      { ...vehicle, trackLayer: 1 },
+      [{ elevationLayer: 1, points: upperCenterline }],
+      58,
+    )
+    const occlusionUnderOverpass =
+      rendererInternals.getHeadlightOcclusionRangesMeters(
         { ...vehicle, renderPosition: { x: 0, y: 4 } },
         [{ elevationLayer: 1, points: upperCenterline }],
         58,
       )
+    const occlusionNearExit =
+      rendererInternals.getHeadlightOcclusionRangesMeters(
+        { ...vehicle, renderPosition: { x: 0, y: 12 } },
+        [{ elevationLayer: 1, points: upperCenterline }],
+        58,
+      )
+    const visibleUnderOverpass =
+      rendererInternals.getVisibleHeadlightRangesMeters(
+        2,
+        58,
+        occlusionUnderOverpass,
+      )
+    const visibleNearExit = rendererInternals.getVisibleHeadlightRangesMeters(
+      2,
+      58,
+      occlusionNearExit,
+    )
 
-    expect(lowerBeamDistance).toBeGreaterThan(0)
-    expect(lowerBeamDistance).toBeLessThan(1)
-    expect(beamDistanceUnderOverpass).toBe(0)
-    expect(upperBeamDistance).toBe(58)
+    expect(lowerOcclusion[0].fromDistanceMeters).toBeGreaterThan(0)
+    expect(lowerOcclusion[0].fromDistanceMeters).toBeLessThan(1)
+    expect(occlusionUnderOverpass[0].fromDistanceMeters).toBe(0)
+    expect(occlusionNearExit[0].fromDistanceMeters).toBe(0)
+    expect(occlusionNearExit[0].toDistanceMeters).toBeLessThan(
+      occlusionUnderOverpass[0].toDistanceMeters,
+    )
+    expect(occlusionNearExit[0].toDistanceMeters).toBeGreaterThan(0)
+    expect(visibleUnderOverpass).toHaveLength(1)
+    expect(visibleUnderOverpass[0].fromDistanceMeters).toBeGreaterThan(2)
+    expect(visibleNearExit[0].fromDistanceMeters).toBeLessThan(
+      visibleUnderOverpass[0].fromDistanceMeters,
+    )
+    expect(upperOcclusion).toEqual([])
   })
 
   it('unifies adjacent visible sections in the headlight mask', () => {

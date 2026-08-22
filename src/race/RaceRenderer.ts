@@ -43,6 +43,11 @@ type ElevationTrackSection = {
   points: TrackDefinition['centerline']
 }
 
+type HeadlightOcclusionRange = {
+  fromDistanceMeters: number
+  toDistanceMeters: number
+}
+
 export type RenderStats = {
   totalChunks: number
   visibleChunksByViewport: number[]
@@ -837,17 +842,16 @@ export class RaceRenderer {
         )
         if (vehicleChunk) {
           const beamDistanceMeters = this.getHeadlightBeamLengthMeters(transform)
-          const visibleBeamDistanceMeters =
-            this.getHeadlightOcclusionDistanceMeters(
-              vehicle,
-              visibleTrackSections,
-              beamDistanceMeters,
-            )
+          const occlusionRanges = this.getHeadlightOcclusionRangesMeters(
+            vehicle,
+            visibleTrackSections,
+            beamDistanceMeters,
+          )
           this.drawHeadlightCone(
             vehicle,
             transform,
             visibleTrackSections,
-            visibleBeamDistanceMeters,
+            occlusionRanges,
           )
         }
       }
@@ -859,7 +863,7 @@ export class RaceRenderer {
     vehicle: InterpolatedVehicleState,
     transform: CameraTransform,
     visibleTrackSections: ElevationTrackSection[],
-    maximumBeamDistanceMeters: number,
+    occlusionRanges: HeadlightOcclusionRange[],
   ) {
     const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
     const point = worldToCamera(vehicle.renderPosition, transform)
@@ -875,13 +879,19 @@ export class RaceRenderer {
       forwardPoint.x - point.x,
     )
     const vehicleLength = profile.lengthMeters * transform.pixelsPerMeter
-    const beamLength = Math.min(
-      this.getHeadlightBeamLengthMeters(transform) * transform.pixelsPerMeter,
-      maximumBeamDistanceMeters * transform.pixelsPerMeter,
-    )
+    const beamLengthMeters = this.getHeadlightBeamLengthMeters(transform)
+    const beamLength = beamLengthMeters * transform.pixelsPerMeter
     const beamWidth = beamLength * 0.34
     const beamStart = vehicleLength * 0.35
     if (beamLength <= beamStart + 2) return
+    const beamStartMeters = beamStart / transform.pixelsPerMeter
+    const visibleRanges = this.getVisibleHeadlightRangesMeters(
+      beamStartMeters,
+      beamLengthMeters,
+      occlusionRanges,
+    )
+    if (visibleRanges.length === 0) return
+
     this.context.save()
     if (
       !this.clipHeadlightToVisibleTrack(
@@ -906,13 +916,30 @@ export class RaceRenderer {
     gradient.addColorStop(1, 'rgba(255, 229, 158, 0)')
 
     this.context.fillStyle = gradient
-    this.context.beginPath()
-    this.context.moveTo(beamStart, -vehicleLength * 0.08)
-    this.context.lineTo(beamLength, -beamWidth)
-    this.context.lineTo(beamLength, beamWidth)
-    this.context.lineTo(beamStart, vehicleLength * 0.08)
-    this.context.closePath()
-    this.context.fill()
+    const startWidth = vehicleLength * 0.08
+    const widthAt = (distance: number) => {
+      const progress =
+        (distance - beamStart) / Math.max(1, beamLength - beamStart)
+      return startWidth + (beamWidth - startWidth) * progress
+    }
+    for (const visibleRange of visibleRanges) {
+      const from = Math.max(
+        beamStart,
+        visibleRange.fromDistanceMeters * transform.pixelsPerMeter,
+      )
+      const to = Math.min(
+        beamLength,
+        visibleRange.toDistanceMeters * transform.pixelsPerMeter,
+      )
+      if (to <= from + 1) continue
+      this.context.beginPath()
+      this.context.moveTo(from, -widthAt(from))
+      this.context.lineTo(to, -widthAt(to))
+      this.context.lineTo(to, widthAt(to))
+      this.context.lineTo(from, widthAt(from))
+      this.context.closePath()
+      this.context.fill()
+    }
     this.context.restore()
   }
 
@@ -928,12 +955,45 @@ export class RaceRenderer {
     )
   }
 
-  private getHeadlightOcclusionDistanceMeters(
+  private getVisibleHeadlightRangesMeters(
+    beamStartMeters: number,
+    beamLengthMeters: number,
+    occlusionRanges: HeadlightOcclusionRange[],
+  ) {
+    const visibleRanges: HeadlightOcclusionRange[] = []
+    let visibleFromMeters = beamStartMeters
+    for (const occlusion of occlusionRanges) {
+      if (occlusion.toDistanceMeters <= visibleFromMeters) continue
+      if (occlusion.fromDistanceMeters > visibleFromMeters) {
+        visibleRanges.push({
+          fromDistanceMeters: visibleFromMeters,
+          toDistanceMeters: Math.min(
+            occlusion.fromDistanceMeters,
+            beamLengthMeters,
+          ),
+        })
+      }
+      visibleFromMeters = Math.max(
+        visibleFromMeters,
+        occlusion.toDistanceMeters,
+      )
+      if (visibleFromMeters >= beamLengthMeters) break
+    }
+    if (visibleFromMeters < beamLengthMeters) {
+      visibleRanges.push({
+        fromDistanceMeters: visibleFromMeters,
+        toDistanceMeters: beamLengthMeters,
+      })
+    }
+    return visibleRanges
+  }
+
+  private getHeadlightOcclusionRangesMeters(
     vehicle: InterpolatedVehicleState,
     visibleTrackSections: ElevationTrackSection[],
     maximumDistanceMeters: number,
   ) {
-    let visibleDistanceMeters = maximumDistanceMeters
+    const ranges: HeadlightOcclusionRange[] = []
     const forwardX = Math.cos(vehicle.renderAngle)
     const forwardY = Math.sin(vehicle.renderAngle)
     const overpassMarginMeters = 0.75
@@ -954,21 +1014,41 @@ export class RaceRenderer {
         })
         const clippedFootprint = this.clipPolygonToHeadlightCone(
           footprint,
-          visibleDistanceMeters,
+          maximumDistanceMeters,
         )
         if (clippedFootprint.length === 0) continue
 
-        const entryDistanceMeters = Math.min(
-          ...clippedFootprint.map((point) => point.forward),
-        )
-        visibleDistanceMeters = Math.max(
-          0,
-          entryDistanceMeters - overpassMarginMeters,
-        )
+        const distances = clippedFootprint.map((point) => point.forward)
+        ranges.push({
+          fromDistanceMeters: Math.max(
+            0,
+            Math.min(...distances) - overpassMarginMeters,
+          ),
+          toDistanceMeters: Math.min(
+            maximumDistanceMeters,
+            Math.max(...distances) + overpassMarginMeters,
+          ),
+        })
       }
     }
 
-    return visibleDistanceMeters
+    ranges.sort(
+      (first, second) =>
+        first.fromDistanceMeters - second.fromDistanceMeters,
+    )
+    const merged: HeadlightOcclusionRange[] = []
+    for (const range of ranges) {
+      const previous = merged.at(-1)
+      if (previous && range.fromDistanceMeters <= previous.toDistanceMeters) {
+        previous.toDistanceMeters = Math.max(
+          previous.toDistanceMeters,
+          range.toDistanceMeters,
+        )
+      } else {
+        merged.push({ ...range })
+      }
+    }
+    return merged
   }
 
   private getTrackLayerFootprint(
