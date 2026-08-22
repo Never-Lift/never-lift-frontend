@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { TrackDefinition } from '@/lib/api'
 import { RaceEngine } from '@/race/RaceEngine'
 import { RaceRenderer } from '@/race/RaceRenderer'
+import type { InterpolatedVehicleState } from '@/race/types'
 import {
   AMBIENT_PARTICLE_BUDGET,
   type GraphicsQuality,
@@ -200,4 +201,68 @@ describe('RaceRenderer Module 2c visuals', () => {
       }
     },
   )
+
+  it('stops a lower-layer headlight before an elevated crossover', () => {
+    const { context } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK, {
+      timeOfDay: 'night',
+      quality: 'medium',
+    })
+    const vehicle: InterpolatedVehicleState = {
+      ...createEngine(SHORT_TRACK).getInterpolatedVehicles()[0],
+      renderPosition: { x: 0, y: -20 },
+      renderAngle: Math.PI / 2,
+      trackLayer: 0,
+    }
+    const upperCenterline: TrackDefinition['centerline'] = [
+      {
+        x: -30,
+        y: 0,
+        distanceMeters: 100,
+        halfWidthMeters: 8,
+        elevationLayer: 1,
+      },
+      {
+        x: 30,
+        y: 0,
+        distanceMeters: 160,
+        halfWidthMeters: 8,
+        elevationLayer: 1,
+      },
+    ]
+    const rendererInternals = renderer as unknown as {
+      getHeadlightOcclusionDistanceMeters: (
+        currentVehicle: InterpolatedVehicleState,
+        sections: Array<{
+          elevationLayer: number
+          points: TrackDefinition['centerline']
+        }>,
+        maximumDistanceMeters: number,
+      ) => number
+    }
+
+    const lowerBeamDistance =
+      rendererInternals.getHeadlightOcclusionDistanceMeters(
+        vehicle,
+        [{ elevationLayer: 1, points: upperCenterline }],
+        58,
+      )
+    const upperBeamDistance =
+      rendererInternals.getHeadlightOcclusionDistanceMeters(
+        { ...vehicle, trackLayer: 1 },
+        [{ elevationLayer: 1, points: upperCenterline }],
+        58,
+      )
+    const beamDistanceUnderOverpass =
+      rendererInternals.getHeadlightOcclusionDistanceMeters(
+        { ...vehicle, renderPosition: { x: 0, y: 4 } },
+        [{ elevationLayer: 1, points: upperCenterline }],
+        58,
+      )
+
+    expect(lowerBeamDistance).toBeGreaterThan(10)
+    expect(lowerBeamDistance).toBeLessThan(12)
+    expect(beamDistanceUnderOverpass).toBe(0)
+    expect(upperBeamDistance).toBe(58)
+  })
 })
