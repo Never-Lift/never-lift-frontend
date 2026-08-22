@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { TrackDefinition } from '@/lib/api'
+import type { CameraTransform } from '@/race/camera'
 import { RaceEngine } from '@/race/RaceEngine'
 import { RaceRenderer } from '@/race/RaceRenderer'
+import type { InterpolatedVehicleState } from '@/race/types'
 import {
   AMBIENT_PARTICLE_BUDGET,
   type GraphicsQuality,
@@ -18,6 +20,7 @@ function createRecordingContext() {
   const clipStack: Array<ClipRect | null> = []
   const linearGradientClips: Array<ClipRect | null> = []
   let pathClipCount = 0
+  let pathMoveCount = 0
   const noOperation = vi.fn()
   const context = new Proxy(
     {},
@@ -47,6 +50,11 @@ function createRecordingContext() {
             else pathClipCount += 1
           }
         }
+        if (property === 'moveTo') {
+          return () => {
+            pathMoveCount += 1
+          }
+        }
         if (property === 'createLinearGradient') {
           return () => {
             linearGradientClips.push(currentClip ? { ...currentClip } : null)
@@ -65,6 +73,7 @@ function createRecordingContext() {
     context,
     linearGradientClips,
     getPathClipCount: () => pathClipCount,
+    getPathMoveCount: () => pathMoveCount,
   }
 }
 
@@ -200,4 +209,113 @@ describe('RaceRenderer Module 2c visuals', () => {
       }
     },
   )
+
+  it('stops a lower-layer headlight before an elevated crossover', () => {
+    const { context } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK, {
+      timeOfDay: 'night',
+      quality: 'medium',
+    })
+    const vehicle: InterpolatedVehicleState = {
+      ...createEngine(SHORT_TRACK).getInterpolatedVehicles()[0],
+      renderPosition: { x: 0, y: -20 },
+      renderAngle: Math.PI / 2,
+      trackLayer: 0,
+    }
+    const upperCenterline: TrackDefinition['centerline'] = [
+      {
+        x: -30,
+        y: 0,
+        distanceMeters: 100,
+        halfWidthMeters: 8,
+        elevationLayer: 1,
+      },
+      {
+        x: 30,
+        y: 0,
+        distanceMeters: 160,
+        halfWidthMeters: 8,
+        elevationLayer: 1,
+      },
+    ]
+    const rendererInternals = renderer as unknown as {
+      getHeadlightOcclusionDistanceMeters: (
+        currentVehicle: InterpolatedVehicleState,
+        sections: Array<{
+          elevationLayer: number
+          points: TrackDefinition['centerline']
+        }>,
+        maximumDistanceMeters: number,
+      ) => number
+    }
+
+    const lowerBeamDistance =
+      rendererInternals.getHeadlightOcclusionDistanceMeters(
+        vehicle,
+        [{ elevationLayer: 1, points: upperCenterline }],
+        58,
+      )
+    const upperBeamDistance =
+      rendererInternals.getHeadlightOcclusionDistanceMeters(
+        { ...vehicle, trackLayer: 1 },
+        [{ elevationLayer: 1, points: upperCenterline }],
+        58,
+      )
+    const beamDistanceUnderOverpass =
+      rendererInternals.getHeadlightOcclusionDistanceMeters(
+        { ...vehicle, renderPosition: { x: 0, y: 4 } },
+        [{ elevationLayer: 1, points: upperCenterline }],
+        58,
+      )
+
+    expect(lowerBeamDistance).toBeGreaterThan(10)
+    expect(lowerBeamDistance).toBeLessThan(12)
+    expect(beamDistanceUnderOverpass).toBe(0)
+    expect(upperBeamDistance).toBe(58)
+  })
+
+  it('unifies adjacent visible sections in the headlight mask', () => {
+    const { context, getPathClipCount, getPathMoveCount } =
+      createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK, {
+      timeOfDay: 'night',
+      quality: 'medium',
+    })
+    const vehicle: InterpolatedVehicleState = {
+      ...createEngine(SHORT_TRACK).getInterpolatedVehicles()[0],
+      trackLayer: 0,
+    }
+    const firstSection = SHORT_TRACK.centerline.slice(0, 2)
+    const secondSection = SHORT_TRACK.centerline.slice(1, 3)
+    const transform: CameraTransform = {
+      position: { x: 0, y: 0 },
+      orientation: 0,
+      pixelsPerMeter: 4,
+      viewport: { x: 0, y: 0, width: 960, height: 640 },
+      anchor: { x: 480, y: 320 },
+    }
+    const rendererInternals = renderer as unknown as {
+      clipHeadlightToVisibleTrack: (
+        currentVehicle: InterpolatedVehicleState,
+        currentTransform: CameraTransform,
+        sections: Array<{
+          elevationLayer: number
+          points: TrackDefinition['centerline']
+        }>,
+      ) => boolean
+    }
+
+    const clipped = rendererInternals.clipHeadlightToVisibleTrack(
+      vehicle,
+      transform,
+      [
+        { elevationLayer: 0, points: firstSection },
+        { elevationLayer: 0, points: secondSection },
+      ],
+    )
+
+    expect(clipped).toBe(true)
+    expect(getPathMoveCount()).toBe(2)
+    expect(getPathClipCount()).toBe(1)
+  })
 })
