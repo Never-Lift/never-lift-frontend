@@ -936,7 +936,6 @@ export class RaceRenderer {
     let visibleDistanceMeters = maximumDistanceMeters
     const forwardX = Math.cos(vehicle.renderAngle)
     const forwardY = Math.sin(vehicle.renderAngle)
-    const sampleSpacingMeters = 2
     const overpassMarginMeters = 0.75
 
     for (const section of visibleTrackSections) {
@@ -945,45 +944,131 @@ export class RaceRenderer {
       for (let index = 0; index < section.points.length - 1; index += 1) {
         const from = section.points[index]
         const to = section.points[index + 1]
-        const segmentLength = Math.hypot(to.x - from.x, to.y - from.y)
-        const sampleCount = Math.max(
-          1,
-          Math.ceil(segmentLength / sampleSpacingMeters),
-        )
-
-        for (let sample = 0; sample <= sampleCount; sample += 1) {
-          const progress = sample / sampleCount
-          const x = from.x + (to.x - from.x) * progress
-          const y = from.y + (to.y - from.y) * progress
-          const relativeX = x - vehicle.renderPosition.x
-          const relativeY = y - vehicle.renderPosition.y
-          const forwardDistance =
-            relativeX * forwardX + relativeY * forwardY
-          const roadHalfWidth =
-            from.halfWidthMeters +
-            (to.halfWidthMeters - from.halfWidthMeters) * progress
-          if (
-            forwardDistance + roadHalfWidth < 0 ||
-            forwardDistance - roadHalfWidth > visibleDistanceMeters
-          ) {
-            continue
+        const footprint = this.getTrackLayerFootprint(from, to).map((point) => {
+          const relativeX = point.x - vehicle.renderPosition.x
+          const relativeY = point.y - vehicle.renderPosition.y
+          return {
+            forward: relativeX * forwardX + relativeY * forwardY,
+            lateral: -relativeX * forwardY + relativeY * forwardX,
           }
+        })
+        const clippedFootprint = this.clipPolygonToHeadlightCone(
+          footprint,
+          visibleDistanceMeters,
+        )
+        if (clippedFootprint.length === 0) continue
 
-          const lateralDistance = Math.abs(
-            -relativeX * forwardY + relativeY * forwardX,
-          )
-          const beamHalfWidth = Math.max(0, forwardDistance) * 0.34
-          if (lateralDistance > roadHalfWidth + beamHalfWidth) continue
-
-          visibleDistanceMeters = Math.max(
-            0,
-            forwardDistance - roadHalfWidth - overpassMarginMeters,
-          )
-        }
+        const entryDistanceMeters = Math.min(
+          ...clippedFootprint.map((point) => point.forward),
+        )
+        visibleDistanceMeters = Math.max(
+          0,
+          entryDistanceMeters - overpassMarginMeters,
+        )
       }
     }
 
     return visibleDistanceMeters
+  }
+
+  private getTrackLayerFootprint(
+    from: TrackDefinition['centerline'][number],
+    to: TrackDefinition['centerline'][number],
+  ) {
+    const segmentX = to.x - from.x
+    const segmentY = to.y - from.y
+    const segmentLength = Math.hypot(segmentX, segmentY)
+    if (segmentLength <= Number.EPSILON) return []
+
+    const normal = {
+      x: -segmentY / segmentLength,
+      y: segmentX / segmentLength,
+    }
+    const offset = (point: typeof from, side: 'left' | 'right') => {
+      const direction = side === 'left' ? 1 : -1
+      const extent = this.getTrackLayerSideExtent(point, side)
+      return {
+        x: point.x + normal.x * extent * direction,
+        y: point.y + normal.y * extent * direction,
+      }
+    }
+    return [
+      offset(from, 'left'),
+      offset(to, 'left'),
+      offset(to, 'right'),
+      offset(from, 'right'),
+    ]
+  }
+
+  private getTrackLayerSideExtent(
+    point: TrackDefinition['centerline'][number],
+    side: 'left' | 'right',
+  ) {
+    const environment = this.geometry.getTrackSideEnvironmentAt(
+      point.distanceMeters,
+      side,
+    )
+    const environmentWidth = trackSideEnvironmentWidth(environment)
+    const barrierOuterEdge =
+      environmentWidth + BARRIER_STYLES[environment.barrier].widthMeters / 2
+    const fenceOuterEdge = environment.fence
+      ? this.fenceOffset(environment) + FENCE_STYLE.widthMeters / 2
+      : barrierOuterEdge
+    return point.halfWidthMeters + Math.max(barrierOuterEdge, fenceOuterEdge)
+  }
+
+  private clipPolygonToHeadlightCone(
+    polygon: Array<{ forward: number; lateral: number }>,
+    maximumDistanceMeters: number,
+  ) {
+    const beamSlope = 0.34
+    const boundaries = [
+      (point: (typeof polygon)[number]) => point.forward,
+      (point: (typeof polygon)[number]) =>
+        maximumDistanceMeters - point.forward,
+      (point: (typeof polygon)[number]) =>
+        beamSlope * point.forward - point.lateral,
+      (point: (typeof polygon)[number]) =>
+        beamSlope * point.forward + point.lateral,
+    ]
+    return boundaries.reduce(
+      (clipped, signedDistance) =>
+        this.clipPolygonToHalfPlane(clipped, signedDistance),
+      polygon,
+    )
+  }
+
+  private clipPolygonToHalfPlane(
+    polygon: Array<{ forward: number; lateral: number }>,
+    signedDistance: (point: { forward: number; lateral: number }) => number,
+  ) {
+    if (polygon.length === 0) return polygon
+    const clipped: typeof polygon = []
+    const epsilon = 1e-7
+
+    for (let index = 0; index < polygon.length; index += 1) {
+      const current = polygon[index]
+      const next = polygon[(index + 1) % polygon.length]
+      const currentDistance = signedDistance(current)
+      const nextDistance = signedDistance(next)
+      const currentInside = currentDistance >= -epsilon
+      const nextInside = nextDistance >= -epsilon
+
+      if (currentInside && nextInside) {
+        clipped.push(next)
+        continue
+      }
+      if (currentInside === nextInside) continue
+
+      const progress = currentDistance / (currentDistance - nextDistance)
+      clipped.push({
+        forward: current.forward + (next.forward - current.forward) * progress,
+        lateral: current.lateral + (next.lateral - current.lateral) * progress,
+      })
+      if (nextInside) clipped.push(next)
+    }
+
+    return clipped
   }
 
   private clipHeadlightToVisibleTrack(
