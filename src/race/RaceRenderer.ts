@@ -846,7 +846,7 @@ export class RaceRenderer {
           this.drawHeadlightCone(
             vehicle,
             transform,
-            vehicleChunk,
+            visibleTrackSections,
             visibleBeamDistanceMeters,
           )
         }
@@ -858,7 +858,7 @@ export class RaceRenderer {
   private drawHeadlightCone(
     vehicle: InterpolatedVehicleState,
     transform: CameraTransform,
-    chunk: TrackChunk,
+    visibleTrackSections: ElevationTrackSection[],
     maximumBeamDistanceMeters: number,
   ) {
     const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
@@ -883,7 +883,13 @@ export class RaceRenderer {
     const beamStart = vehicleLength * 0.35
     if (beamLength <= beamStart + 2) return
     this.context.save()
-    if (!this.clipHeadlightToChunk(vehicle, transform, chunk)) {
+    if (
+      !this.clipHeadlightToVisibleTrack(
+        vehicle,
+        transform,
+        visibleTrackSections,
+      )
+    ) {
       this.context.restore()
       return
     }
@@ -980,43 +986,47 @@ export class RaceRenderer {
     return visibleDistanceMeters
   }
 
-  private clipHeadlightToChunk(
+  private clipHeadlightToVisibleTrack(
     vehicle: InterpolatedVehicleState,
     transform: CameraTransform,
-    chunk: TrackChunk,
+    visibleTrackSections: ElevationTrackSection[],
   ) {
-    const points = this.getChunkPoints(chunk).filter(
-      (point) => point.elevationLayer === vehicle.trackLayer,
+    const sections = visibleTrackSections.filter(
+      (section) =>
+        section.elevationLayer === vehicle.trackLayer &&
+        section.points.length >= 2,
     )
-    if (points.length < 2) return false
+    if (sections.length === 0) return false
 
     const extraLightWidthMeters = 18
-    const left = points.map((point) =>
-      worldToCamera(
-        this.offsetTrackPoint(
-          point,
-          'left',
-          point.halfWidthMeters + extraLightWidthMeters,
-        ),
-        transform,
-      ),
-    )
-    const right = [...points].reverse().map((point) =>
-      worldToCamera(
-        this.offsetTrackPoint(
-          point,
-          'right',
-          point.halfWidthMeters + extraLightWidthMeters,
-        ),
-        transform,
-      ),
-    )
     this.context.beginPath()
-    this.context.moveTo(left[0].x, left[0].y)
-    for (const point of [...left.slice(1), ...right]) {
-      this.context.lineTo(point.x, point.y)
+    for (const { points } of sections) {
+      const left = points.map((point) =>
+        worldToCamera(
+          this.offsetTrackPoint(
+            point,
+            'left',
+            point.halfWidthMeters + extraLightWidthMeters,
+          ),
+          transform,
+        ),
+      )
+      const right = [...points].reverse().map((point) =>
+        worldToCamera(
+          this.offsetTrackPoint(
+            point,
+            'right',
+            point.halfWidthMeters + extraLightWidthMeters,
+          ),
+          transform,
+        ),
+      )
+      this.context.moveTo(left[0].x, left[0].y)
+      for (const point of [...left.slice(1), ...right]) {
+        this.context.lineTo(point.x, point.y)
+      }
+      this.context.closePath()
     }
-    this.context.closePath()
     this.context.clip()
     return true
   }
