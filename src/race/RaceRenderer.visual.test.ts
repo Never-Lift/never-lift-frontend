@@ -210,14 +210,45 @@ describe('RaceRenderer Module 2c visuals', () => {
     },
   )
 
-  it('stops a lower-layer headlight before an elevated crossover', () => {
+  it('stops a lower-layer headlight before the full elevated footprint', () => {
+    const elevatedFootprintTrack: TrackDefinition = {
+      ...SHORT_TRACK,
+      trackLimits: {
+        segments: [
+          {
+            index: 0,
+            fromDistanceMeters: 0,
+            toDistanceMeters: SHORT_TRACK.lengthMeters,
+            left: {
+              zones: [
+                { surface: 'asphalt', widthMeters: 2 },
+                { surface: 'gravel', widthMeters: 5 },
+                { surface: 'grass', widthMeters: 3 },
+              ],
+              barrier: 'guardrail',
+              fence: 'debris-fence',
+            },
+            right: {
+              zones: [
+                { surface: 'asphalt', widthMeters: 2 },
+                { surface: 'gravel', widthMeters: 5 },
+                { surface: 'grass', widthMeters: 3 },
+              ],
+              barrier: 'guardrail',
+              fence: 'debris-fence',
+            },
+          },
+        ],
+      },
+    }
     const { context } = createRecordingContext()
-    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK, {
-      timeOfDay: 'night',
-      quality: 'medium',
-    })
+    const renderer = new RaceRenderer(
+      createCanvas(context),
+      elevatedFootprintTrack,
+      { timeOfDay: 'night', quality: 'medium' },
+    )
     const vehicle: InterpolatedVehicleState = {
-      ...createEngine(SHORT_TRACK).getInterpolatedVehicles()[0],
+      ...createEngine(elevatedFootprintTrack).getInterpolatedVehicles()[0],
       renderPosition: { x: 0, y: -20 },
       renderAngle: Math.PI / 2,
       trackLayer: 0,
@@ -268,8 +299,8 @@ describe('RaceRenderer Module 2c visuals', () => {
         58,
       )
 
-    expect(lowerBeamDistance).toBeGreaterThan(10)
-    expect(lowerBeamDistance).toBeLessThan(12)
+    expect(lowerBeamDistance).toBeGreaterThan(0)
+    expect(lowerBeamDistance).toBeLessThan(1)
     expect(beamDistanceUnderOverpass).toBe(0)
     expect(upperBeamDistance).toBe(58)
   })
