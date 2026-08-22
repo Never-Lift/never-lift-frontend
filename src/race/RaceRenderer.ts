@@ -38,6 +38,11 @@ type TireMark = {
   trackLayer: number
 }
 
+type ElevationTrackSection = {
+  elevationLayer: number
+  points: TrackDefinition['centerline']
+}
+
 export type RenderStats = {
   totalChunks: number
   visibleChunksByViewport: number[]
@@ -312,7 +317,13 @@ export class RaceRenderer {
       transform,
       visibleChunks,
     )
-    this.drawTimeOfDayLighting(viewport, transform, visibleChunks, vehicles)
+    this.drawTimeOfDayLighting(
+      viewport,
+      transform,
+      visibleChunks,
+      visibleTrackSections,
+      vehicles,
+    )
     this.drawMinimap(viewport, vehicles, focusedVehicle)
     this.drawDriverLabel(viewport, focusedVehicle.name)
     this.drawStartProcedure(viewport, focusedVehicle.id, overlayState)
@@ -334,14 +345,8 @@ export class RaceRenderer {
 
   private splitByElevationLayer(
     points: TrackDefinition['centerline'],
-  ): Array<{
-    elevationLayer: number
-    points: TrackDefinition['centerline']
-  }> {
-    const sections: Array<{
-      elevationLayer: number
-      points: TrackDefinition['centerline']
-    }> = []
+  ): ElevationTrackSection[] {
+    const sections: ElevationTrackSection[] = []
     const appendSegment = (
       elevationLayer: number,
       from: TrackDefinition['centerline'][number],
@@ -808,6 +813,7 @@ export class RaceRenderer {
     viewport: Viewport,
     transform: CameraTransform,
     visibleChunks: TrackChunk[],
+    visibleTrackSections: ElevationTrackSection[],
     vehicles: InterpolatedVehicleState[],
   ) {
     if (this.timeOfDay === 'day') return
@@ -830,7 +836,19 @@ export class RaceRenderer {
             vehicle.trackDistanceMeters <= chunk.toDistanceMeters,
         )
         if (vehicleChunk) {
-          this.drawHeadlightCone(vehicle, transform, vehicleChunk)
+          const beamDistanceMeters = this.getHeadlightBeamLengthMeters(transform)
+          const visibleBeamDistanceMeters =
+            this.getHeadlightOcclusionDistanceMeters(
+              vehicle,
+              visibleTrackSections,
+              beamDistanceMeters,
+            )
+          this.drawHeadlightCone(
+            vehicle,
+            transform,
+            vehicleChunk,
+            visibleBeamDistanceMeters,
+          )
         }
       }
     }
@@ -841,6 +859,7 @@ export class RaceRenderer {
     vehicle: InterpolatedVehicleState,
     transform: CameraTransform,
     chunk: TrackChunk,
+    maximumBeamDistanceMeters: number,
   ) {
     const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
     const point = worldToCamera(vehicle.renderPosition, transform)
@@ -856,12 +875,13 @@ export class RaceRenderer {
       forwardPoint.x - point.x,
     )
     const vehicleLength = profile.lengthMeters * transform.pixelsPerMeter
-    const beamLength = Math.max(
-      90,
-      Math.min(transform.viewport.height * 0.46, 58 * transform.pixelsPerMeter),
+    const beamLength = Math.min(
+      this.getHeadlightBeamLengthMeters(transform) * transform.pixelsPerMeter,
+      maximumBeamDistanceMeters * transform.pixelsPerMeter,
     )
     const beamWidth = beamLength * 0.34
     const beamStart = vehicleLength * 0.35
+    if (beamLength <= beamStart + 2) return
     this.context.save()
     if (!this.clipHeadlightToChunk(vehicle, transform, chunk)) {
       this.context.restore()
@@ -888,6 +908,76 @@ export class RaceRenderer {
     this.context.closePath()
     this.context.fill()
     this.context.restore()
+  }
+
+  private getHeadlightBeamLengthMeters(transform: CameraTransform) {
+    return (
+      Math.max(
+        90,
+        Math.min(
+          transform.viewport.height * 0.46,
+          58 * transform.pixelsPerMeter,
+        ),
+      ) / transform.pixelsPerMeter
+    )
+  }
+
+  private getHeadlightOcclusionDistanceMeters(
+    vehicle: InterpolatedVehicleState,
+    visibleTrackSections: ElevationTrackSection[],
+    maximumDistanceMeters: number,
+  ) {
+    let visibleDistanceMeters = maximumDistanceMeters
+    const forwardX = Math.cos(vehicle.renderAngle)
+    const forwardY = Math.sin(vehicle.renderAngle)
+    const sampleSpacingMeters = 2
+    const overpassMarginMeters = 0.75
+
+    for (const section of visibleTrackSections) {
+      if (section.elevationLayer <= vehicle.trackLayer) continue
+
+      for (let index = 0; index < section.points.length - 1; index += 1) {
+        const from = section.points[index]
+        const to = section.points[index + 1]
+        const segmentLength = Math.hypot(to.x - from.x, to.y - from.y)
+        const sampleCount = Math.max(
+          1,
+          Math.ceil(segmentLength / sampleSpacingMeters),
+        )
+
+        for (let sample = 0; sample <= sampleCount; sample += 1) {
+          const progress = sample / sampleCount
+          const x = from.x + (to.x - from.x) * progress
+          const y = from.y + (to.y - from.y) * progress
+          const relativeX = x - vehicle.renderPosition.x
+          const relativeY = y - vehicle.renderPosition.y
+          const forwardDistance =
+            relativeX * forwardX + relativeY * forwardY
+          const roadHalfWidth =
+            from.halfWidthMeters +
+            (to.halfWidthMeters - from.halfWidthMeters) * progress
+          if (
+            forwardDistance + roadHalfWidth < 0 ||
+            forwardDistance - roadHalfWidth > visibleDistanceMeters
+          ) {
+            continue
+          }
+
+          const lateralDistance = Math.abs(
+            -relativeX * forwardY + relativeY * forwardX,
+          )
+          const beamHalfWidth = Math.max(0, forwardDistance) * 0.34
+          if (lateralDistance > roadHalfWidth + beamHalfWidth) continue
+
+          visibleDistanceMeters = Math.max(
+            0,
+            forwardDistance - roadHalfWidth - overpassMarginMeters,
+          )
+        }
+      }
+    }
+
+    return visibleDistanceMeters
   }
 
   private clipHeadlightToChunk(
