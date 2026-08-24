@@ -118,9 +118,10 @@ export function createSplitViewports(
   width: number,
   height: number,
   playerCount: 1 | 2,
+  layoutAspectRatio = width / height,
 ): Viewport[] {
   if (playerCount === 1) return [{ x: 0, y: 0, width, height }]
-  if (width / height >= 1.35) {
+  if (layoutAspectRatio >= 1.35) {
     const halfWidth = width / 2
     return [
       { x: 0, y: 0, width: halfWidth, height },

@@ -62,7 +62,7 @@ export function createTrackFixture(
   const start = pointOnCircle(radius, 0)
   return {
     schemaVersion: '1.3.0',
-    catalogVersion: '2026.4',
+    catalogVersion: '2026.5',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
     countryCode: id === 'monaco' ? 'MC' : 'BE',

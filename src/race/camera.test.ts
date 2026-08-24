@@ -136,6 +136,16 @@ describe('split-screen and chunk culling', () => {
     ])
   })
 
+  it('uses the available window ratio instead of an artificial canvas ratio', () => {
+    const horizontal = createSplitViewports(824, 515, 2, 1.125)
+    const boundary = createSplitViewports(824, 515, 2, 1.35)
+
+    expect(horizontal[0].height).toBe(257.5)
+    expect(horizontal[1].y).toBe(257.5)
+    expect(boundary[0].width).toBe(412)
+    expect(boundary[1].x).toBe(412)
+  })
+
   it('keeps a chunk whose thick track edge is visible and rejects distant chunks', () => {
     const transform = createCameraTransform(
       { position: { x: 0, y: 0 }, orientation: Math.PI / 2 },

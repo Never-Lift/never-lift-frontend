@@ -1,17 +1,19 @@
 import {
   ArrowRight,
   Flag,
+  Gamepad2,
   LoaderCircle,
   LockKeyhole,
+  Play,
   Radio,
   UserPlus,
-  Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
+import { VehiclePreview } from '@/components/race/VehiclePreview'
 import { Button } from '@/components/ui/button'
 import { getAvatar } from '@/lib/avatars'
 import { getErrorMessage } from '@/lib/error-messages'
@@ -40,7 +42,7 @@ export function HomePage() {
 
   return (
     <AppShell>
-      <section className="grid min-h-[calc(100vh-10rem)] items-center gap-12 lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.72fr)] xl:gap-20">
+      <section className="grid min-h-[calc(100dvh-10.5rem)] items-center gap-12 lg:grid-cols-[minmax(0,1.12fr)_minmax(21rem,0.72fr)] xl:gap-20">
         <div className="relative">
           <div className="absolute -left-8 top-0 hidden h-full w-px bg-gradient-to-b from-primary via-primary/25 to-transparent xl:block" />
 
@@ -50,45 +52,46 @@ export function HomePage() {
             <span className="h-px w-12 bg-info/35" />
           </div>
 
-          <h1 className="display-heading max-w-4xl text-[clamp(4rem,9vw,8.5rem)]">
+          <h1 className="display-heading max-w-4xl text-[clamp(3.5rem,5.5vw,7.5rem)]">
             Corra no limite.
             <span className="block text-primary">Nunca alivie.</span>
           </h1>
 
           <p className="mt-7 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
-            O seu paddock para corridas 2D multiplayer. Configure sua identidade
-            agora; os modos de corrida chegam nos próximos módulos.
+            Escolha um dos 24 circuitos, prepare o carro e dispute agora uma corrida
+            solo contra bots ou em split-screen local.
           </p>
 
           <div className="mt-9 flex flex-wrap gap-3">
+            <Button asChild size="lg">
+              <Link to="/race">
+                <Play aria-hidden="true" className="size-4" />
+                Jogar agora
+              </Link>
+            </Button>
             {isUser ? (
-              <Button asChild size="lg">
+              <Button asChild size="lg" variant="secondary">
                 <Link to="/account">
                   Editar minha conta
                   <ArrowRight aria-hidden="true" className="size-4" />
                 </Link>
               </Button>
             ) : (
-              <>
-                <Button asChild size="lg">
-                  <Link to="/register">
-                    <UserPlus aria-hidden="true" className="size-4" />
-                    Criar conta
-                  </Link>
-                </Button>
-                <Button asChild size="lg" variant="secondary">
-                  <Link to="/login">Já tenho conta</Link>
-                </Button>
-              </>
+              <Button asChild size="lg" variant="secondary">
+                <Link to="/register">
+                  <UserPlus aria-hidden="true" className="size-4" />
+                  Criar conta
+                </Link>
+              </Button>
             )}
           </div>
 
           <div className="mt-12 flex flex-wrap gap-x-8 gap-y-3 border-t border-border/65 pt-5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            <span>Top-down 2D</span>
+            <span>24 circuitos</span>
             <span className="text-border">/</span>
-            <span>Drift controlado</span>
+            <span>Bots ajustáveis</span>
             <span className="text-border">/</span>
-            <span>Multiplayer autoritativo</span>
+            <span>Split-screen local</span>
           </div>
         </div>
 
@@ -98,7 +101,7 @@ export function HomePage() {
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-muted-foreground">
-                  Session // 01
+                  Sessão atual
                 </p>
                 <p className="mt-1 text-sm font-bold text-foreground">
                   Identidade do piloto
@@ -189,23 +192,29 @@ export function HomePage() {
           </div>
 
           <div className="rounded-2xl border border-border/80 bg-card/55 p-5">
-            <div className="flex items-start gap-4">
-              <span className="grid size-10 shrink-0 place-items-center rounded-[10px] border border-accent/30 bg-accent/10 text-accent">
-                <Zap aria-hidden="true" className="size-4" />
-              </span>
-              <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                  Próxima etapa
-                </p>
-                <p className="mt-1 font-bold">Motor de corrida local</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  As Partes 2a e 2b estão disponíveis com 24 pistas, câmera,
-                  minimapa, bots e split-screen para dois jogadores.
-                </p>
-                <Button asChild className="mt-4" size="sm" variant="secondary">
-                  <Link to="/race">Preparar corrida</Link>
-                </Button>
+            <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_10rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_12rem]">
+              <div className="flex items-start gap-4">
+                <span className="grid size-10 shrink-0 place-items-center rounded-[10px] border border-primary/30 bg-primary/10 text-primary">
+                  <Gamepad2 aria-hidden="true" className="size-4" />
+                </span>
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                    Corrida local
+                  </p>
+                  <p className="mt-1 font-bold">Pronto para largar</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    Escolha pista, carro e pintura antes de entrar no grid.
+                  </p>
+                  <Button asChild className="mt-4" size="sm" variant="secondary">
+                    <Link to="/race">Preparar corrida</Link>
+                  </Button>
+                </div>
               </div>
+              <VehiclePreview
+                className="h-36 w-full"
+                color="#2d7dff"
+                profileId="formula"
+              />
             </div>
           </div>
         </aside>

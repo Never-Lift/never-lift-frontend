@@ -120,7 +120,7 @@ Regras:
 
 ### 6.1 Catálogo e escala compartilhada
 
-- O catálogo `2026.4` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais, traçados reconhecíveis e ambientes laterais auditados por pista, destinados ao uso pessoal informado pelo proprietário.
+- O catálogo `2026.5` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais, traçados reconhecíveis, ambientes laterais auditados e landmarks semânticos específicos por pista, destinados ao uso pessoal informado pelo proprietário.
 - Curvas, asfalto, áreas externas, barreiras e grades derivam da mesma centerline métrica suavizada, amostrada a cada aproximadamente 5 m. Zebras são segmentos explícitos do contrato, colocados no lado interno e na saída das curvas conforme o traçado e o número oficial de curvas, com paletas específicas quando a identidade do circuito é conhecida.
 - Se houver decisão futura de distribuição pública, nomes, marcas e apresentação devem ser revistos antes da publicação.
 - Circuitos podem ter comprimentos diferentes e próximos das proporções reais.

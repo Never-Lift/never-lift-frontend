@@ -2,6 +2,7 @@ import { Flag, Gauge, RotateCcw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Brand } from '@/components/Brand'
 import { KeyboardControls } from '@/race/KeyboardControls'
 import { LocalRaceSession } from '@/race/LocalRaceSession'
 import type { RaceEngine } from '@/race/RaceEngine'
@@ -116,7 +117,7 @@ export function DriverTelemetryCard({
           Modo da corrida: {isDrift ? 'Drift' : 'Normal'}
         </p>
         <p className="text-[10px] font-semibold text-muted-foreground">
-          {shiftKey}: boost (disponível no Módulo 5)
+          {shiftKey}: boost indisponível nesta prova
         </p>
       </div>
     </article>
@@ -151,6 +152,7 @@ export function RaceCanvas({
     const renderer = new RaceRenderer(canvas, engine.track, {
       timeOfDay,
       quality: 'medium',
+      splitScreenAspectRatio: () => window.innerWidth / window.innerHeight,
     })
     let animationFrame = 0
     let previousTimestamp: number | null = null
@@ -222,15 +224,29 @@ export function RaceCanvas({
   }, [engine, mode, timeOfDay])
 
   return (
-    <section aria-label="Corrida local em andamento" className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-info">
-            {engine.track.name} // {engine.lapCount} volta // {timeOfDay === 'day' ? 'Dia' : timeOfDay === 'sunset' ? 'Entardecer' : 'Noite'}
-          </p>
-          <h1 className="mt-1 font-display text-3xl font-black uppercase italic">
-            {mode === 'solo' ? 'Solo contra bots' : 'Duelo local'}
-          </h1>
+    <section
+      aria-label="Corrida local em andamento"
+      className="fixed inset-0 z-50 flex h-dvh min-h-0 flex-col overflow-hidden bg-background"
+    >
+      <header className="relative z-20 flex h-20 shrink-0 items-center justify-between gap-4 border-b border-border/75 bg-background/94 px-4 backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <Brand compact />
+          <div className="min-w-0">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-info">
+              {engine.track.name} // {engine.lapCount} volta //{' '}
+              {timeOfDay === 'day'
+                ? 'Dia'
+                : timeOfDay === 'sunset'
+                  ? 'Entardecer'
+                  : 'Noite'}
+            </p>
+            <h1 className="mt-1 truncate font-display text-2xl font-black uppercase italic sm:text-3xl">
+              {mode === 'solo' ? 'Solo contra bots' : 'Duelo local'}
+            </h1>
+            <p className="hidden text-[10px] font-semibold text-muted-foreground xl:block">
+              {mode === 'solo' ? 'WASD ou setas' : 'P1: WASD · P2: setas'}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="rounded-full border border-border bg-card/80 px-4 py-2 font-mono text-sm font-bold">
@@ -238,39 +254,41 @@ export function RaceCanvas({
           </span>
           <Button onClick={onAbort} size="sm" variant="secondary">
             <RotateCcw aria-hidden="true" className="size-4" />
-            Sair do teste
+            Sair da corrida
           </Button>
         </div>
-      </div>
+      </header>
 
       <p aria-live="polite" className="sr-only">
         {startAnnouncement}
       </p>
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-[#101b19] shadow-[0_24px_70px_rgb(0_0_0/0.35)]">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-[#101b19]">
         <canvas
           aria-label={`Circuito ${engine.track.name} com carros em movimento`}
-          className="block aspect-[4/5] min-h-[30rem] w-full sm:aspect-[16/10] sm:min-h-[22rem]"
+          className="absolute inset-0 block size-full"
           ref={canvasRef}
         />
+        <div
+          className={
+            mode === 'local'
+              ? 'race-telemetry-grid pointer-events-none absolute inset-0 z-10 grid'
+              : 'pointer-events-none absolute inset-0 z-10 grid'
+          }
+        >
+          {telemetry.map((driver, index) => (
+            <div className="flex min-h-0 items-end p-3 sm:p-4" key={driver.name}>
+              <div className="w-full max-w-sm">
+                <DriverTelemetryCard
+                  driver={driver}
+                  driverIndex={index}
+                  lapCount={engine.lapCount}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {telemetry.map((driver, index) => (
-          <DriverTelemetryCard
-            driver={driver}
-            driverIndex={index}
-            key={driver.name}
-            lapCount={engine.lapCount}
-          />
-        ))}
-      </div>
-
-      <p className="text-center text-xs font-semibold text-muted-foreground">
-        {mode === 'solo'
-          ? 'WASD ou setas controlam o carro · Shift será o boost no Módulo 5'
-          : 'Jogador 1: WASD + Shift esquerdo · Jogador 2: setas + Shift direito · Shift será o boost no Módulo 5'}
-      </p>
     </section>
   )
 }

@@ -22,13 +22,21 @@ import type { LocalRaceOverlayState } from '@/race/LocalRaceSession'
 import { dot, magnitude } from '@/race/math'
 import type { RaceEngine } from '@/race/RaceEngine'
 import {
+  drawSceneryVisual,
+  getSceneryRenderLayer,
+  getSceneryRotationOffset,
+} from '@/race/scenery-visuals'
+import {
   TrackGeometry,
   trackSideEnvironmentWidth,
 } from '@/race/TrackGeometry'
 import type { InterpolatedVehicleState, Vector2 } from '@/race/types'
+import { drawVehicleVisual } from '@/race/vehicle-visuals'
 import {
   AMBIENT_PARTICLE_BUDGET,
   DEFAULT_GRAPHICS_QUALITY,
+  HEADLIGHT_VISUAL_SETTINGS,
+  VEHICLE_SHADOW_SETTINGS,
   type GraphicsQuality,
   type TimeOfDayPreset,
 } from '@/race/visual-settings'
@@ -53,6 +61,7 @@ export type RenderStats = {
 export type RaceRendererOptions = {
   timeOfDay?: TimeOfDayPreset
   quality?: GraphicsQuality
+  splitScreenAspectRatio?: () => number
 }
 
 const SURFACE_COLORS: Record<TrackSurfaceMaterial, string> = {
@@ -130,6 +139,7 @@ export class RaceRenderer {
   private readonly geometry: TrackGeometry
   private readonly timeOfDay: TimeOfDayPreset
   private readonly quality: GraphicsQuality
+  private readonly splitScreenAspectRatio: () => number
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
   private frameCount = 0
@@ -145,6 +155,8 @@ export class RaceRenderer {
     this.geometry = new TrackGeometry(track)
     this.timeOfDay = options.timeOfDay ?? 'day'
     this.quality = options.quality ?? DEFAULT_GRAPHICS_QUALITY
+    this.splitScreenAspectRatio =
+      options.splitScreenAspectRatio ?? (() => this.canvas.width / this.canvas.height)
     this.renderStats = {
       totalChunks: track.chunks.length,
       visibleChunksByViewport: [],
@@ -167,6 +179,7 @@ export class RaceRenderer {
       this.canvas.width,
       this.canvas.height,
       focusIds.length === 1 ? 1 : 2,
+      this.splitScreenAspectRatio(),
     )
 
     this.context.clearRect(0, 0, this.canvas.width, this.canvas.height)
@@ -297,7 +310,7 @@ export class RaceRenderer {
         ],
       ),
     ].sort((first, second) => first - second)
-    this.drawScenery(transform)
+    this.drawScenery(transform, 'ground')
     for (const elevationLayer of elevationLayers) {
       const sections = visibleTrackSections.filter(
         (section) => section.elevationLayer === elevationLayer,
@@ -325,6 +338,7 @@ export class RaceRenderer {
         }
       }
     }
+    this.drawScenery(transform, 'overhead')
     const ambientParticleCount = this.drawAmbientParticles(
       transform,
       visibleChunks,
@@ -837,30 +851,49 @@ export class RaceRenderer {
     this.context.restore()
   }
 
-  private drawScenery(transform: CameraTransform) {
+  private drawScenery(
+    transform: CameraTransform,
+    layer: 'ground' | 'overhead',
+  ) {
     const objects = [
       ...this.track.sceneryLayout.landmarks,
       ...this.track.sceneryLayout.staticObjects,
-    ]
+    ].filter((object) => getSceneryRenderLayer(object.kind) === layer)
     const viewport = transform.viewport
     for (const object of objects) {
       const point = worldToCamera(object.position, transform)
+      const visualRadius = Math.max(
+        8,
+        object.scale * transform.pixelsPerMeter * 0.9,
+      )
       if (
-        point.x < viewport.x - 30 ||
-        point.x > viewport.x + viewport.width + 30 ||
-        point.y < viewport.y - 30 ||
-        point.y > viewport.y + viewport.height + 30
+        point.x < viewport.x - visualRadius ||
+        point.x > viewport.x + viewport.width + visualRadius ||
+        point.y < viewport.y - visualRadius ||
+        point.y > viewport.y + viewport.height + visualRadius
       ) {
         continue
       }
-      const size = Math.max(2, object.scale * transform.pixelsPerMeter)
+      const visualRotation =
+        object.rotation + getSceneryRotationOffset(object.kind)
+      const direction = worldToCamera(
+        {
+          x: object.position.x + Math.cos(visualRotation),
+          y: object.position.y + Math.sin(visualRotation),
+        },
+        transform,
+      )
       this.context.save()
       this.context.translate(point.x, point.y)
-      this.context.rotate(-object.rotation)
-      this.context.fillStyle = object.kind.includes('tree')
-        ? 'rgba(49, 92, 62, 0.82)'
-        : 'rgba(111, 126, 143, 0.68)'
-      this.context.fillRect(-size / 2, -size / 2, size, size)
+      this.context.rotate(
+        Math.atan2(direction.y - point.y, direction.x - point.x),
+      )
+      drawSceneryVisual({
+        context: this.context,
+        object,
+        pixelsPerMeter: transform.pixelsPerMeter,
+        preset: this.track.sceneryLayout.preset,
+      })
       this.context.restore()
     }
   }
@@ -994,7 +1027,8 @@ export class RaceRenderer {
       this.getHeadlightBeamLengthMeters(transform) * transform.pixelsPerMeter,
       maximumBeamDistanceMeters * transform.pixelsPerMeter,
     )
-    const beamWidth = beamLength * 0.34
+    const beamWidth =
+      beamLength * HEADLIGHT_VISUAL_SETTINGS.widthToLengthRatio
     const beamStart = vehicleLength * 0.35
     if (beamLength <= beamStart + 2) return
     this.context.save()
@@ -1016,16 +1050,22 @@ export class RaceRenderer {
       beamLength,
       0,
     )
-    gradient.addColorStop(0, 'rgba(255, 244, 196, 0.3)')
-    gradient.addColorStop(0.55, 'rgba(255, 236, 174, 0.13)')
-    gradient.addColorStop(1, 'rgba(255, 229, 158, 0)')
+    for (const stop of HEADLIGHT_VISUAL_SETTINGS.colorStops) {
+      gradient.addColorStop(stop.offset, stop.color)
+    }
 
     this.context.fillStyle = gradient
     this.context.beginPath()
-    this.context.moveTo(beamStart, -vehicleLength * 0.08)
+    this.context.moveTo(
+      beamStart,
+      -vehicleLength * HEADLIGHT_VISUAL_SETTINGS.startHalfWidthToVehicleLengthRatio,
+    )
     this.context.lineTo(beamLength, -beamWidth)
     this.context.lineTo(beamLength, beamWidth)
-    this.context.lineTo(beamStart, vehicleLength * 0.08)
+    this.context.lineTo(
+      beamStart,
+      vehicleLength * HEADLIGHT_VISUAL_SETTINGS.startHalfWidthToVehicleLengthRatio,
+    )
     this.context.closePath()
     this.context.fill()
     this.context.restore()
@@ -1136,7 +1176,7 @@ export class RaceRenderer {
     polygon: Array<{ forward: number; lateral: number }>,
     maximumDistanceMeters: number,
   ) {
-    const beamSlope = 0.34
+    const beamSlope = HEADLIGHT_VISUAL_SETTINGS.widthToLengthRatio
     const boundaries = [
       (point: (typeof polygon)[number]) => point.forward,
       (point: (typeof polygon)[number]) =>
@@ -1286,20 +1326,27 @@ export class RaceRenderer {
 
     if (penalty?.throttleLockTicksRemaining) {
       const seconds = penalty.throttleLockTicksRemaining * PHYSICS_CONSTANTS.simulation.physicsStepSeconds
+      const penaltyWidth = Math.min(
+        viewport.width - 32,
+        Math.max(240, viewport.width * 0.58),
+      )
+      const penaltyHeight = 36
+      const penaltyTop =
+        viewport.y + viewport.height * 0.46 - penaltyHeight / 2
       context.fillStyle = 'rgba(7, 11, 20, 0.9)'
       context.fillRect(
-        viewport.x + viewport.width * 0.2,
-        viewport.y + viewport.height - 54,
-        viewport.width * 0.6,
-        36,
+        viewport.x + (viewport.width - penaltyWidth) / 2,
+        penaltyTop,
+        penaltyWidth,
+        penaltyHeight,
       )
       context.fillStyle = '#ffb82e'
       context.font = `800 ${Math.max(12, lightRadius)}px Barlow`
       context.textAlign = 'center'
       context.fillText(
-        `LARGADA QUEIMADA · ACELERADOR BLOQUEADO ${seconds.toFixed(1)}s`,
+        `LARGADA QUEIMADA · BLOQUEIO ${seconds.toFixed(1)}s`,
         viewport.x + viewport.width / 2,
-        viewport.y + viewport.height - 31,
+        penaltyTop + 23,
       )
     }
     context.restore()
@@ -1385,37 +1432,39 @@ export class RaceRenderer {
     )
     const length = profile.lengthMeters * transform.pixelsPerMeter
     const width = profile.widthMeters * transform.pixelsPerMeter
-    context.save()
-    context.translate(point.x, point.y)
-    context.rotate(screenAngle)
-    context.shadowColor = 'rgba(0, 0, 0, 0.55)'
-    context.shadowBlur = Math.max(2, 0.7 * transform.pixelsPerMeter)
-    context.shadowOffsetY = Math.max(1, 0.12 * transform.pixelsPerMeter)
+    const shadowSettings = VEHICLE_SHADOW_SETTINGS[this.timeOfDay]
+    const shadowDirection = worldToCamera(
+      {
+        x:
+          vehicle.renderPosition.x +
+          Math.cos(shadowSettings.worldAngleRadians),
+        y:
+          vehicle.renderPosition.y +
+          Math.sin(shadowSettings.worldAngleRadians),
+      },
+      transform,
+    )
+    drawVehicleVisual(context, {
+      profileId: vehicle.profileId,
+      color: vehicle.color,
+      x: point.x,
+      y: point.y,
+      angleRadians: screenAngle,
+      length,
+      width,
+      detail: 'race',
+      shadowAngleRadians: Math.atan2(
+        shadowDirection.y - point.y,
+        shadowDirection.x - point.x,
+      ),
+      shadowDistanceToWidthRatio: shadowSettings.distanceToWidthRatio,
+      shadowOpacity: shadowSettings.opacity,
+    })
 
-    context.fillStyle = vehicle.color
-    if (vehicle.profileId === 'formula') {
-      context.fillRect(-length * 0.5, -width * 0.19, length, width * 0.38)
-      context.fillRect(-length * 0.4, -width * 0.5, length * 0.2, width)
-      context.fillRect(length * 0.34, -width * 0.52, length * 0.12, width * 1.04)
-      context.beginPath()
-      context.arc(-length * 0.05, 0, width * 0.24, 0, Math.PI * 2)
-      context.fill()
-    } else {
-      context.beginPath()
-      context.roundRect(-length / 2, -width / 2, length, width, width * 0.28)
-      context.fill()
-    }
-
-    context.shadowColor = 'transparent'
-    context.fillStyle = '#101726'
-    context.fillRect(-length * 0.13, -width * 0.32, length * 0.28, width * 0.64)
-    if (vehicle.profileId === 'formula') {
-      context.fillStyle = vehicle.color
-      context.beginPath()
-      context.arc(0, 0, width * 0.2, 0, Math.PI * 2)
-      context.fill()
-    }
     if (vehicle.damage.kind !== 'none') {
+      context.save()
+      context.translate(point.x, point.y)
+      context.rotate(screenAngle)
       context.strokeStyle = 'rgba(7, 11, 20, 0.78)'
       context.lineWidth = Math.max(1, transform.pixelsPerMeter * 0.18)
       context.beginPath()
@@ -1426,8 +1475,8 @@ export class RaceRenderer {
         context.lineTo(length * 0.02, width * 0.35)
       }
       context.stroke()
+      context.restore()
     }
-    context.restore()
 
     context.fillStyle = '#f0f0fa'
     context.font = `700 ${Math.max(9, 1.3 * transform.pixelsPerMeter)}px Barlow`

@@ -28,7 +28,7 @@ describe('raceApi', () => {
     }))
     const catalog = {
       schemaVersion: '1.3.0',
-      catalogVersion: '2026.4',
+      catalogVersion: '2026.5',
       seasonReference: 2026,
       calendarPolicy: 'original-24-round-freeze',
       tracks: catalogTracks,
@@ -70,7 +70,7 @@ describe('raceApi', () => {
     )
 
     await expect(raceApi.getTrack('monaco')).rejects.toThrow(
-      'faça o deploy do backend com o catálogo 2026.4',
+      'não são compatíveis com esta versão do jogo',
     )
   })
 
@@ -81,7 +81,7 @@ describe('raceApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const payload = {
       trackId: 'albert-park',
-      trackCatalogVersion: '2026.4',
+      trackCatalogVersion: '2026.5',
       mode: 'local' as const,
       results: [
         {
