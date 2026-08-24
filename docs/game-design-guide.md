@@ -246,7 +246,7 @@ Regras:
 - Painel lateral fixo resume pista, voltas, clima, horário, tipo de prova e pintura.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
-- A condução usa uma única configuração fixa para todas as corridas e participantes; não existe seletor Normal/Drift nem troca de acerto durante a prova.
+- A condução usa uma única configuração fixa para todas as corridas e participantes, baseada no acerto Normal atual; não existe seletor Normal/Drift nem troca de acerto durante a prova.
 - Shift é reservado ao nitro/boost do Módulo 5. O orçamento depende do total de voltas, é finito e não recarrega.
 - Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa intensidade do impacto: fraco afeta direção, médio afeta motor, alto combina os dois e crítico causa perda total. Batidas menores repetidas também podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica um leve desvio persistente para a esquerda ou direita sem reduzir a capacidade de esterçar, e uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
 

@@ -23,7 +23,7 @@ As issues frontend #90 e backend #72 aprovam uma simplificação incompatível q
 - todas as corridas usam um único modelo F1;
 - a pintura predefinida é a única escolha de veículo feita pelo jogador;
 - Supercarro e Drift deixam de existir no contrato e na apresentação;
-- existe uma única configuração física de condução, sem seleção Normal/Drift;
+- existe uma única configuração física de condução, baseada nos valores atuais do perfil Normal e sem seleção Normal/Drift;
 - `carModel`, `handlingMode` e `driftMode` deixam de existir em tipos, payloads, sala e persistência futura;
 - recordes e fantasmas deixam de separar resultados por modelo ou modo de condução;
 - progressão futura libera pinturas, capacetes e acabamentos do F1, nunca outros carros.
