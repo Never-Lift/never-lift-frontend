@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import type { TrackDefinition } from '@/lib/api'
 import type { CameraTransform } from '@/race/camera'
 import { RaceEngine } from '@/race/RaceEngine'
-import { RaceRenderer } from '@/race/RaceRenderer'
+import {
+  calculateTrackCullMarginMeters,
+  RaceRenderer,
+  sortVehiclesByProjectedDepth,
+} from '@/race/RaceRenderer'
+import type { InterpolatedVehicleState } from '@/race/types'
 import { LONG_TRACK } from '@/test/track-fixtures'
 
 type DrawOperation = {
@@ -11,6 +16,7 @@ type DrawOperation = {
   color: string
   width: number
   lineCap: CanvasLineCap
+  lineDashOffset: number
   path: Array<{ x: number; y: number }>
 }
 
@@ -35,6 +41,10 @@ type RendererInternals = {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) => void
+  drawTrackDetails: (
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) => void
   splitByElevationLayer: (
     points: TrackDefinition['centerline'],
   ) => Array<{
@@ -50,6 +60,7 @@ function createRecordingContext() {
     ['lineWidth', 1],
     ['lineCap', 'butt'],
     ['lineJoin', 'miter'],
+    ['lineDashOffset', 0],
   ])
   const propertyStack: Array<Map<PropertyKey, unknown>> = []
   const operations: DrawOperation[] = []
@@ -72,6 +83,9 @@ function createRecordingContext() {
             currentPath = []
           }
         }
+        if (property === 'setLineDash') {
+          return (dash: number[]) => properties.set('lineDash', [...dash])
+        }
         if (property === 'moveTo' || property === 'lineTo') {
           return (x: number, y: number) => {
             currentPath.push({ x, y })
@@ -87,6 +101,7 @@ function createRecordingContext() {
               ),
               width: Number(properties.get('lineWidth')),
               lineCap: properties.get('lineCap') as CanvasLineCap,
+              lineDashOffset: Number(properties.get('lineDashOffset')),
               path: currentPath.map((point) => ({ ...point })),
             })
           }
@@ -210,6 +225,7 @@ const IDENTITY_TRANSFORM: CameraTransform = {
   position: { x: 0, y: 0 },
   orientation: Math.PI / 2,
   pixelsPerMeter: 1,
+  groundDepthScale: 1,
   viewport: { x: -100, y: -100, width: 200, height: 200 },
   anchor: { x: 0, y: 0 },
 }
@@ -219,6 +235,57 @@ function internals(renderer: RaceRenderer) {
 }
 
 describe('RaceRenderer audited surfaces', () => {
+  it('keeps culling margin outside wide runoff, barrier and fence', () => {
+    const track = createStraightTransitionTrack()
+
+    const margin = calculateTrackCullMarginMeters(track)
+
+    expect(margin).toBeGreaterThan(65)
+    expect(margin).toBeLessThan(66)
+  })
+
+  it('orders same-layer cars by projected depth without mutating input', () => {
+    const vehicles = createEngine(LONG_TRACK).getInterpolatedVehicles()
+    const behind = {
+      ...vehicles[0],
+      id: 'behind',
+      renderPosition: { x: -10, y: 0 },
+    }
+    const ahead = {
+      ...vehicles[1],
+      id: 'ahead',
+      renderPosition: { x: 10, y: 0 },
+    }
+    const input: InterpolatedVehicleState[] = [behind, ahead]
+    const transform: CameraTransform = {
+      ...IDENTITY_TRANSFORM,
+      orientation: 0,
+      groundDepthScale: 0.5,
+    }
+
+    const ordered = sortVehiclesByProjectedDepth(input, transform)
+
+    expect(ordered.map((vehicle) => vehicle.id)).toEqual(['ahead', 'behind'])
+    expect(input.map((vehicle) => vehicle.id)).toEqual(['behind', 'ahead'])
+  })
+
+  it('keeps the centerline dash phase continuous across sampled segments', () => {
+    const track = createStraightTransitionTrack()
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawTrackDetails(track.centerline, IDENTITY_TRANSFORM)
+
+    const centerline = operations.filter(
+      (operation) =>
+        operation.kind === 'stroke' &&
+        operation.color === 'rgba(240, 240, 250, 0.17)',
+    )
+    expect(centerline).toHaveLength(2)
+    expect(centerline[0].lineDashOffset).toBeCloseTo(0, 8)
+    expect(centerline[1].lineDashOffset).toBeCloseTo(-1, 8)
+  })
+
   it('draws material passes in environment, asphalt, fence, barrier order', () => {
     const track = structuredClone(LONG_TRACK)
     for (const segment of track.trackLimits.segments) {

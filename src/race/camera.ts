@@ -16,6 +16,7 @@ export type CameraState = {
 
 export type CameraTransform = CameraState & {
   pixelsPerMeter: number
+  groundDepthScale: number
   viewport: Viewport
   anchor: Vector2
 }
@@ -32,8 +33,16 @@ const CAMERA_SMOOTHING_SECONDS = 0.25
 const MINIMUM_DIRECTION_SPEED = 1.5
 const MAXIMUM_CAMERA_TURN_RADIANS_PER_SECOND = 3
 const REVERSE_ORIENTATION_DELAY_SECONDS = 0.4
+const MAXIMUM_CONTINUOUS_FRAME_SECONDS = 0.25
+const TAB_RESUME_VISUAL_DELTA_SECONDS = 0.1
 export const TARGET_CAR_HEIGHT_RATIO = 0.055
 export const MAXIMUM_CAR_HEIGHT_RATIO = 0.06
+export const CAMERA_GROUND_DEPTH_SCALE =
+  TARGET_CAR_HEIGHT_RATIO / MAXIMUM_CAR_HEIGHT_RATIO
+export const CAMERA_ELEVATION_RADIANS = Math.asin(
+  CAMERA_GROUND_DEPTH_SCALE,
+)
+export const CAMERA_HEIGHT_SCALE = Math.cos(CAMERA_ELEVATION_RADIANS)
 
 export class RaceCamera {
   private state: CameraState
@@ -49,7 +58,6 @@ export class RaceCamera {
   update(
     position: Vector2,
     velocity: Vector2,
-    bodyAngle: number,
     deltaSeconds: number,
   ): CameraState {
     this.state.position = { ...position }
@@ -58,12 +66,19 @@ export class RaceCamera {
       this.reverseMovementSeconds = 0
       return this.getState()
     }
+    const visualDeltaSeconds =
+      deltaSeconds > MAXIMUM_CONTINUOUS_FRAME_SECONDS
+        ? TAB_RESUME_VISUAL_DELTA_SECONDS
+        : deltaSeconds
 
-    const bodyForward = { x: Math.cos(bodyAngle), y: Math.sin(bodyAngle) }
-    const directionDot =
-      (velocity.x * bodyForward.x + velocity.y * bodyForward.y) / speed
-    if (directionDot < -0.2) {
-      this.reverseMovementSeconds += deltaSeconds
+    const movementOrientation = Math.atan2(velocity.y, velocity.x)
+    const difference = signedAngleDelta(
+      this.state.orientation,
+      movementOrientation,
+    )
+    const movementCameraDot = Math.cos(difference)
+    if (movementCameraDot < -0.2) {
+      this.reverseMovementSeconds += visualDeltaSeconds
       if (this.reverseMovementSeconds < REVERSE_ORIENTATION_DELAY_SECONDS) {
         return this.getState()
       }
@@ -71,13 +86,10 @@ export class RaceCamera {
       this.reverseMovementSeconds = 0
     }
 
-    const movementOrientation = Math.atan2(velocity.y, velocity.x)
-    const difference = signedAngleDelta(
-      this.state.orientation,
-      movementOrientation,
-    )
-    const smoothing = 1 - Math.exp(-deltaSeconds / CAMERA_SMOOTHING_SECONDS)
-    const maximumStep = MAXIMUM_CAMERA_TURN_RADIANS_PER_SECOND * deltaSeconds
+    const smoothing =
+      1 - Math.exp(-visualDeltaSeconds / CAMERA_SMOOTHING_SECONDS)
+    const maximumStep =
+      MAXIMUM_CAMERA_TURN_RADIANS_PER_SECOND * visualDeltaSeconds
     this.state.orientation = normalizeAngle(
       this.state.orientation +
         clamp(difference * smoothing, -maximumStep, maximumStep),
@@ -105,8 +117,10 @@ export function createCameraTransform(
   return {
     ...camera,
     viewport,
+    groundDepthScale: CAMERA_GROUND_DEPTH_SCALE,
     pixelsPerMeter:
-      (viewport.height * targetRatio) / focusedVehicleLengthMeters,
+      (viewport.height * targetRatio) /
+      (focusedVehicleLengthMeters * CAMERA_GROUND_DEPTH_SCALE),
     anchor: {
       x: viewport.x + viewport.width * 0.5,
       y: viewport.y + viewport.height * 0.6,
@@ -141,21 +155,79 @@ export function worldToCamera(
 ): Vector2 {
   const relativeX = point.x - transform.position.x
   const relativeY = point.y - transform.position.y
+  const projected = worldVectorToCamera(
+    { x: relativeX, y: relativeY },
+    transform,
+  )
+  return {
+    x: transform.anchor.x + projected.x,
+    y: transform.anchor.y + projected.y,
+  }
+}
+
+export function worldVectorToCamera(
+  vector: Vector2,
+  transform: CameraTransform,
+): Vector2 {
   const forward = {
     x: Math.cos(transform.orientation),
     y: Math.sin(transform.orientation),
   }
   const right = { x: forward.y, y: -forward.x }
   return {
-    x:
-      transform.anchor.x +
-      (relativeX * right.x + relativeY * right.y) *
-        transform.pixelsPerMeter,
+    x: (vector.x * right.x + vector.y * right.y) * transform.pixelsPerMeter,
     y:
-      transform.anchor.y -
-      (relativeX * forward.x + relativeY * forward.y) *
-        transform.pixelsPerMeter,
+      -(vector.x * forward.x + vector.y * forward.y) *
+      transform.pixelsPerMeter *
+      transform.groundDepthScale,
   }
+}
+
+export function projectedTrackWidth(
+  from: Vector2,
+  to: Vector2,
+  widthMeters: number,
+  transform: CameraTransform,
+) {
+  const worldTangent = { x: to.x - from.x, y: to.y - from.y }
+  const tangentLength = Math.hypot(worldTangent.x, worldTangent.y)
+  if (tangentLength <= Number.EPSILON || widthMeters <= 0) return 0
+
+  const unitTangent = {
+    x: worldTangent.x / tangentLength,
+    y: worldTangent.y / tangentLength,
+  }
+  const unitNormal = { x: -unitTangent.y, y: unitTangent.x }
+  const screenTangent = worldVectorToCamera(unitTangent, transform)
+  const screenNormal = worldVectorToCamera(unitNormal, transform)
+  const screenTangentLength = Math.hypot(screenTangent.x, screenTangent.y)
+  if (screenTangentLength <= Number.EPSILON) return 0
+
+  const perpendicular = {
+    x: -screenTangent.y / screenTangentLength,
+    y: screenTangent.x / screenTangentLength,
+  }
+  return (
+    Math.abs(
+      screenNormal.x * perpendicular.x +
+        screenNormal.y * perpendicular.y,
+    ) * widthMeters
+  )
+}
+
+export function projectedSegmentPixelsPerMeter(
+  from: Vector2,
+  to: Vector2,
+  transform: CameraTransform,
+) {
+  const tangent = { x: to.x - from.x, y: to.y - from.y }
+  const length = Math.hypot(tangent.x, tangent.y)
+  if (length <= Number.EPSILON) return 0
+  const projected = worldVectorToCamera(
+    { x: tangent.x / length, y: tangent.y / length },
+    transform,
+  )
+  return Math.hypot(projected.x, projected.y)
 }
 
 export function createMinimapTransform(

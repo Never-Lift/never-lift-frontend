@@ -15,12 +15,16 @@ import {
 import { SHORT_TRACK } from '@/test/track-fixtures'
 
 type ClipRect = { x: number; y: number; width: number; height: number }
+type GradientVector = { fromX: number; fromY: number; toX: number; toY: number }
+type EllipseRecord = { x: number; y: number; radiusX: number; radiusY: number }
 
 function createRecordingContext() {
   let currentClip: ClipRect | null = null
   let latestRect: ClipRect | null = null
   const clipStack: Array<ClipRect | null> = []
   const linearGradientClips: Array<ClipRect | null> = []
+  const linearGradientVectors: GradientVector[] = []
+  const ellipses: EllipseRecord[] = []
   const fillRects: ClipRect[] = []
   let pathClipCount = 0
   let pathMoveCount = 0
@@ -59,10 +63,19 @@ function createRecordingContext() {
           }
         }
         if (property === 'createLinearGradient') {
-          return () => {
+          return (fromX: number, fromY: number, toX: number, toY: number) => {
             linearGradientClips.push(currentClip ? { ...currentClip } : null)
+            linearGradientVectors.push({ fromX, fromY, toX, toY })
             return { addColorStop: noOperation }
           }
+        }
+        if (property === 'ellipse') {
+          return (
+            x: number,
+            y: number,
+            radiusX: number,
+            radiusY: number,
+          ) => ellipses.push({ x, y, radiusX, radiusY })
         }
         if (property === 'fillRect') {
           return (x: number, y: number, width: number, height: number) => {
@@ -81,6 +94,8 @@ function createRecordingContext() {
     context,
     fillRects,
     linearGradientClips,
+    linearGradientVectors,
+    ellipses,
     getPathClipCount: () => pathClipCount,
     getPathMoveCount: () => pathMoveCount,
   }
@@ -216,6 +231,85 @@ describe('RaceRenderer Module 2c visuals', () => {
       { offset: 0.55, color: 'rgba(255, 236, 174, 0.07)' },
       { offset: 1, color: 'rgba(255, 229, 158, 0)' },
     ])
+  })
+
+  it('projects the night beam length through the 2.5D ground scale', () => {
+    const { context, linearGradientVectors } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK, {
+      timeOfDay: 'night',
+      quality: 'medium',
+    })
+    const vehicle = createEngine(SHORT_TRACK).getInterpolatedVehicles()[0]
+    const transform: CameraTransform = {
+      position: { ...vehicle.renderPosition },
+      orientation: vehicle.renderAngle,
+      pixelsPerMeter: 4,
+      groundDepthScale: 0.5,
+      viewport: { x: 0, y: 0, width: 960, height: 640 },
+      anchor: { x: 480, y: 384 },
+    }
+    const rendererInternals = renderer as unknown as {
+      drawHeadlightCone: (
+        currentVehicle: InterpolatedVehicleState,
+        currentTransform: CameraTransform,
+        sections: Array<{
+          elevationLayer: number
+          points: TrackDefinition['centerline']
+        }>,
+        maximumDistanceMeters: number,
+      ) => void
+    }
+
+    rendererInternals.drawHeadlightCone(
+      vehicle,
+      transform,
+      [{ elevationLayer: vehicle.trackLayer, points: SHORT_TRACK.centerline }],
+      20,
+    )
+
+    expect(linearGradientVectors).toHaveLength(1)
+    const gradient = linearGradientVectors[0]
+    expect(
+      Math.hypot(
+        gradient.toX - gradient.fromX,
+        gradient.toY - gradient.fromY,
+      ),
+    ).toBeCloseTo((20 - 5.6 * 0.35) * 4 * 0.5, 8)
+  })
+
+  it('flattens tire marks with the same 2.5D ground scale', () => {
+    const { context, ellipses } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK)
+    const transform: CameraTransform = {
+      position: { x: 0, y: 0 },
+      orientation: 0,
+      pixelsPerMeter: 10,
+      groundDepthScale: 0.5,
+      viewport: { x: 0, y: 0, width: 960, height: 640 },
+      anchor: { x: 480, y: 384 },
+    }
+    const rendererInternals = renderer as unknown as {
+      tireMarks: Array<{
+        position: { x: number; y: number }
+        onGrass: boolean
+        trackLayer: number
+      }>
+      drawTireMarks: (
+        currentTransform: CameraTransform,
+        elevationLayer: number,
+      ) => void
+    }
+    rendererInternals.tireMarks.push({
+      position: { x: 0, y: 0 },
+      onGrass: false,
+      trackLayer: 0,
+    })
+
+    rendererInternals.drawTireMarks(transform, 0)
+
+    expect(ellipses).toHaveLength(1)
+    expect(ellipses[0].radiusX).toBeCloseTo(1.8, 8)
+    expect(ellipses[0].radiusY).toBeCloseTo(0.9, 8)
   })
 
   it('uses the visible beam width for elevated-layer occlusion', () => {
@@ -421,6 +515,7 @@ describe('RaceRenderer Module 2c visuals', () => {
       position: { x: 0, y: 0 },
       orientation: 0,
       pixelsPerMeter: 4,
+      groundDepthScale: 1,
       viewport: { x: 0, y: 0, width: 960, height: 640 },
       anchor: { x: 480, y: 320 },
     }

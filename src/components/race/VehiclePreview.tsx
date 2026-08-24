@@ -45,8 +45,8 @@ export function VehiclePreview({
       drawVehicleVisual(context, {
         color,
         x: width * 0.5,
-        y: height * 0.5,
-        angleRadians: -Math.PI / 15,
+        y: height * 0.57,
+        relativeYawRadians: -Math.PI / 4,
         length: vehicleLength,
         width: vehicleLength / naturalRatio,
         detail: 'preview',
