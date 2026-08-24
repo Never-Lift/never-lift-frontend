@@ -69,7 +69,7 @@ export function AccountPage() {
   }
 
   return (
-    <AppShell>
+    <AppShell moduleLabel="Minha conta">
       <section className="mx-auto max-w-5xl">
         <div className="mb-9 flex flex-col justify-between gap-6 border-b border-border/70 pb-8 sm:flex-row sm:items-end">
           <div>

@@ -1,6 +1,7 @@
 import {
   Bot,
   CheckCircle2,
+  ChevronDown,
   CircleAlert,
   Gamepad2,
   LoaderCircle,
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
 import { RaceCanvas } from '@/components/race/RaceCanvas'
+import { VehiclePreview } from '@/components/race/VehiclePreview'
 import { Button } from '@/components/ui/button'
 import {
   raceApi,
@@ -183,65 +185,111 @@ function TrackOption({
 function PlayerConfigurator({
   label,
   selection,
+  otherSelection,
   onChange,
 }: {
   label: string
   selection: PlayerSelection
+  otherSelection?: PlayerSelection
   onChange: (selection: PlayerSelection) => void
 }) {
+  const [isChanging, setIsChanging] = useState(false)
+  const selectedVehicle =
+    vehicleOptions.find((vehicle) => vehicle.id === selection.profileId) ?? vehicleOptions[0]
+  const duplicatesOther = (profileId: VehicleProfileId, color: string) =>
+    otherSelection?.profileId === profileId && otherSelection.color === color
+
   return (
     <fieldset className="surface-panel p-5 sm:p-6">
       <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-info">
         {label}
       </legend>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {vehicleOptions.map((vehicle) => (
-          <button
-            aria-pressed={selection.profileId === vehicle.id}
-            className={`rounded-xl border p-4 text-left transition ${
-              selection.profileId === vehicle.id
-                ? 'border-primary bg-primary/12 shadow-[inset_0_0_0_1px_rgb(45_125_255/0.3)]'
-                : 'border-border bg-background/45 hover:bg-muted/65'
-            }`}
-            key={vehicle.id}
-            onClick={() => onChange({ ...selection, profileId: vehicle.id })}
+      <div className="grid items-center gap-5 sm:grid-cols-[12rem_minmax(0,1fr)]">
+        <VehiclePreview
+          className="h-32 w-full"
+          color={selection.color}
+          profileId={selection.profileId}
+        />
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+            Carro atual
+          </p>
+          <p className="mt-1 font-display text-3xl font-black uppercase italic">
+            {selectedVehicle.name}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {selectedVehicle.description}
+          </p>
+          <Button
+            aria-expanded={isChanging}
+            className="mt-4"
+            onClick={() => setIsChanging((current) => !current)}
+            size="sm"
             type="button"
+            variant="secondary"
           >
-            <span className="font-extrabold">{vehicle.name}</span>
-            <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-              {vehicle.description}
-            </span>
-          </button>
-        ))}
+            {isChanging ? 'Concluir escolha' : 'Trocar'}
+          </Button>
+        </div>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-5 border-t border-border/70 pt-5">
-        <div>
-          <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.17em] text-muted-foreground">
-            Cor do carro {selection.profileId === 'formula' && 'e capacete'}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {colorOptions.map((color) => (
+      {isChanging && (
+        <div className="mt-5 border-t border-border/70 pt-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {vehicleOptions.map((vehicle) => (
               <button
-                aria-label={`Selecionar cor ${color}`}
-                aria-pressed={selection.color === color}
-                className={`size-8 rounded-full border-2 transition ${
-                  selection.color === color
-                    ? 'scale-110 border-foreground'
-                    : 'border-transparent opacity-75 hover:opacity-100'
+                aria-pressed={selection.profileId === vehicle.id}
+                className={`rounded-xl border p-4 text-left transition ${
+                  selection.profileId === vehicle.id
+                    ? 'border-primary bg-primary/12 shadow-[inset_0_0_0_1px_rgb(45_125_255/0.3)]'
+                    : 'border-border bg-background/45 hover:bg-muted/65 disabled:cursor-not-allowed disabled:opacity-35'
                 }`}
-                key={color}
-                onClick={() => onChange({ ...selection, color })}
-                style={{ backgroundColor: color }}
+                disabled={duplicatesOther(vehicle.id, selection.color)}
+                key={vehicle.id}
+                onClick={() => onChange({ ...selection, profileId: vehicle.id })}
                 type="button"
-              />
+              >
+                <span className="font-extrabold">{vehicle.name}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                  {vehicle.description}
+                </span>
+              </button>
             ))}
           </div>
-        </div>
 
-      </div>
+          <div className="mt-5">
+            <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.17em] text-muted-foreground">
+              Cor do carro {selection.profileId === 'formula' && 'e capacete'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {colorOptions.map((color) => (
+                <button
+                  aria-label={`Selecionar cor ${color}`}
+                  aria-pressed={selection.color === color}
+                  className={`size-8 rounded-full border-2 transition ${
+                    selection.color === color
+                      ? 'scale-110 border-foreground'
+                      : 'border-transparent opacity-75 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25'
+                  }`}
+                  disabled={duplicatesOther(selection.profileId, color)}
+                  key={color}
+                  onClick={() => onChange({ ...selection, color })}
+                  style={{ backgroundColor: color }}
+                  type="button"
+                />
+              ))}
+            </div>
+          </div>
+          {otherSelection && (
+            <p className="mt-4 text-xs font-semibold text-warning">
+              A combinação exata usada pelo outro jogador fica indisponível.
+            </p>
+          )}
+        </div>
+      )}
       <p className="mt-3 text-xs font-semibold text-muted-foreground">
-        A escolha do modelo é somente visual; todos os carros compartilham a mesma física.
+        A escolha do modelo é somente visual; todos os carros compartilham a mesma
+        física.
       </p>
     </fieldset>
   )
@@ -285,7 +333,7 @@ export function RacePage() {
       .getTracks()
       .then((catalog) => {
         if (catalog.tracks.length !== 24) {
-          throw new Error('O catálogo ativo não contém as 24 pistas esperadas.')
+          throw new Error('A lista de circuitos está incompleta. Tente novamente.')
         }
         setTrackCatalog(catalog)
         setSelectedTrackId((current) => current ?? catalog.tracks[0]?.id ?? null)
@@ -318,7 +366,7 @@ export function RacePage() {
           definition.id !== selectedTrackId ||
           definition.catalogVersion !== trackCatalog.catalogVersion
         ) {
-          throw new Error('A definição da pista não corresponde ao catálogo ativo.')
+          throw new Error('Não foi possível confirmar os dados deste circuito.')
         }
         setSelectedTrack(definition)
       })
@@ -402,7 +450,10 @@ export function RacePage() {
       setResults(raceResults)
       setEngine(null)
       if (!session) {
-        setSubmission({ status: 'error', message: 'Sessão ausente; resultado não enviado.' })
+        setSubmission({
+          status: 'error',
+          message: 'Sua sessão terminou. Corra novamente para salvar o resultado.',
+        })
         return
       }
 
@@ -410,7 +461,7 @@ export function RacePage() {
       try {
         const completedTrack = activeTrack.current
         if (!completedTrack) {
-          throw new Error('A definição da pista concluída não está mais em memória.')
+          throw new Error('Não foi possível identificar a pista concluída.')
         }
         const authenticatedUserId =
           session.role === 'user' ? (account?.id ?? session.subject ?? null) : null
@@ -440,21 +491,19 @@ export function RacePage() {
 
   if (engine) {
     return (
-      <AppShell moduleLabel="Módulo 02 // Parte 2c">
-        <RaceCanvas
-          engine={engine}
-          mode={mode}
-          timeOfDay={timeOfDay}
-          onAbort={() => setEngine(null)}
-          onFinished={finishRace}
-        />
-      </AppShell>
+      <RaceCanvas
+        engine={engine}
+        mode={mode}
+        timeOfDay={timeOfDay}
+        onAbort={() => setEngine(null)}
+        onFinished={finishRace}
+      />
     )
   }
 
   if (results) {
     return (
-      <AppShell moduleLabel="Módulo 02 // Parte 2c">
+      <AppShell moduleLabel="Resultado da corrida">
         <section className="mx-auto max-w-3xl">
           <div className="mb-8 text-center">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">
@@ -501,13 +550,13 @@ export function RacePage() {
             )}
             <div>
               <p className="font-bold">
-                {submission.status === 'sending' && 'Enviando resultado ao backend…'}
-                {submission.status === 'success' && 'Resultado persistido no backend'}
-                {submission.status === 'error' && 'Não foi possível persistir o resultado'}
+                {submission.status === 'sending' && 'Salvando resultado…'}
+                {submission.status === 'success' && 'Resultado salvo'}
+                {submission.status === 'error' && 'Não foi possível salvar o resultado'}
               </p>
               {submission.status === 'success' && (
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {submission.response.persistedCount} registros confirmados.
+                  Sua corrida foi registrada com sucesso.
                 </p>
               )}
               {submission.status === 'error' && (
@@ -524,16 +573,16 @@ export function RacePage() {
   }
 
   return (
-    <AppShell moduleLabel="Módulo 02 // Parte 2c">
+    <AppShell moduleLabel="Preparação da corrida">
       <section className="space-y-7">
         <header className="max-w-3xl">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">
             Preparação da corrida
           </p>
-          <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Escolha a pista</h1>
+          <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Prepare a corrida</h1>
           <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">
-            Selecione um dos 24 circuitos oficiais do catálogo ativo. A geometria
-            carregada será usada pela física, pelas câmeras e pelo minimapa.
+            Escolha circuito, modo e carro. O resumo acompanha as decisões até a
+            largada.
           </p>
         </header>
 
@@ -542,7 +591,7 @@ export function RacePage() {
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
-                  Catálogo {trackCatalog?.catalogVersion ?? 'carregando'}
+                  Temporada 2026
                 </p>
                 <h2 className="mt-1 font-display text-2xl font-black uppercase italic">
                   24 circuitos
@@ -554,7 +603,7 @@ export function RacePage() {
             {tracksLoading && (
               <div className="grid min-h-48 place-items-center text-sm text-muted-foreground">
                 <LoaderCircle aria-hidden="true" className="size-6 animate-spin text-info" />
-                Carregando catálogo…
+                Carregando circuitos…
               </div>
             )}
             {!tracksLoading && trackCatalog && (
@@ -578,7 +627,7 @@ export function RacePage() {
             {trackLoading && (
               <div className="grid h-full min-h-[24rem] place-items-center text-sm font-semibold text-muted-foreground">
                 <LoaderCircle aria-hidden="true" className="size-7 animate-spin text-info" />
-                Carregando geometria…
+                Preparando pista…
               </div>
             )}
             {!trackLoading && selectedTrack && (
@@ -605,7 +654,7 @@ export function RacePage() {
                   <TrackPreview track={selectedTrack} />
                 </div>
                 <p className="mt-4 text-xs font-semibold text-muted-foreground">
-                  {selectedTrack.chunks.length} trechos renderizáveis · minimapa de orientação fixa
+                  Traçado completo disponível durante a corrida
                 </p>
               </div>
             )}
@@ -630,132 +679,268 @@ export function RacePage() {
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            aria-pressed={mode === 'solo'}
-            className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'solo' ? 'border-primary/70 bg-primary/8' : ''}`}
-            onClick={() => setMode('solo')}
-            type="button"
-          >
-            <Bot aria-hidden="true" className="size-7 text-primary" />
-            <span><strong className="block">Solo contra bots</strong><small className="text-muted-foreground">WASD e setas habilitados juntos</small></span>
-          </button>
-          <button
-            aria-pressed={mode === 'local'}
-            className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'local' ? 'border-primary/70 bg-primary/8' : ''}`}
-            onClick={() => setMode('local')}
-            type="button"
-          >
-            <Users aria-hidden="true" className="size-7 text-accent" />
-            <span><strong className="block">Dois jogadores locais</strong><small className="text-muted-foreground">WASD contra setas</small></span>
-          </button>
-        </div>
-
-        <fieldset className="rounded-2xl border border-border bg-card/55 p-5">
-          <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-            Modo de condução da corrida
-          </legend>
-          <p className="mb-3 text-sm text-muted-foreground">
-            A opção escolhida vale igualmente para todos os jogadores e bots.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {(['normal', 'drift'] as const).map((option) => (
-              <Button
-                aria-pressed={handlingMode === option}
-                key={option}
-                onClick={() => setHandlingMode(option)}
-                type="button"
-                variant={handlingMode === option ? 'default' : 'secondary'}
-              >
-                {option === 'normal' ? 'Normal' : 'Drift'}
-              </Button>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset className="rounded-2xl border border-border bg-card/55 p-5">
-          <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-            Horário da corrida
-          </legend>
-          <p className="mb-3 text-sm text-muted-foreground">
-            O preset visual permanece fixo da largada até a bandeirada.
-          </p>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {timeOfDayOptions.map((option) => (
+        <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2">
               <button
-                aria-pressed={timeOfDay === option.id}
-                className={`rounded-xl border p-4 text-left transition ${
-                  timeOfDay === option.id
-                    ? 'border-primary bg-primary/12'
-                    : 'border-border bg-background/45 hover:bg-muted/65'
-                }`}
-                key={option.id}
-                onClick={() => setTimeOfDay(option.id)}
+                aria-pressed={mode === 'solo'}
+                className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'solo' ? 'border-primary/70 bg-primary/8' : ''}`}
+                onClick={() => setMode('solo')}
                 type="button"
               >
-                <span className="font-extrabold">{option.label}</span>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                  {option.description}
+                <Bot aria-hidden="true" className="size-7 text-primary" />
+                <span>
+                  <strong className="block">Solo contra bots</strong>
+                  <small className="text-muted-foreground">
+                    Um piloto contra dois adversários
+                  </small>
                 </span>
               </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <PlayerConfigurator label="Jogador 1" onChange={setPlayerOne} selection={playerOne} />
-        {mode === 'local' && (
-          <PlayerConfigurator label="Jogador 2" onChange={setPlayerTwo} selection={playerTwo} />
-        )}
-
-        {mode === 'solo' && (
-          <fieldset className="rounded-2xl border border-border bg-card/55 p-5">
-            <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-              Dificuldade dos bots
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              {(['easy', 'normal', 'hard'] as const).map((option) => (
-                <Button
-                  key={option}
-                  onClick={() => setDifficulty(option)}
-                  type="button"
-                  variant={difficulty === option ? 'default' : 'secondary'}
-                >
-                  {option === 'easy' ? 'Fácil' : option === 'normal' ? 'Normal' : 'Difícil'}
-                </Button>
-              ))}
+              <button
+                aria-pressed={mode === 'local'}
+                className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'local' ? 'border-primary/70 bg-primary/8' : ''}`}
+                onClick={() => {
+                  setMode('local')
+                  if (
+                    playerTwo.profileId === playerOne.profileId &&
+                    playerTwo.color === playerOne.color
+                  ) {
+                    setPlayerTwo({
+                      ...playerTwo,
+                      color:
+                        colorOptions.find((color) => color !== playerOne.color) ??
+                        playerTwo.color,
+                    })
+                  }
+                }}
+                type="button"
+              >
+                <Users aria-hidden="true" className="size-7 text-accent" />
+                <span>
+                  <strong className="block">Dois jogadores locais</strong>
+                  <small className="text-muted-foreground">
+                    WASD contra setas em split-screen
+                  </small>
+                </span>
+              </button>
             </div>
-          </fieldset>
-        )}
 
-        {sessionError && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4" role="alert">
-            <p className="text-sm text-destructive">{sessionError}</p>
-            <Button onClick={requestGuestSession} size="sm" variant="secondary">
-              Tentar sessão novamente
-            </Button>
-          </div>
-        )}
+            <fieldset className="rounded-2xl border border-border bg-card/55 p-5">
+              <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                Modo de condução da corrida
+              </legend>
+              <p className="mb-3 text-sm text-muted-foreground">
+                A opção escolhida vale igualmente para todos os jogadores e bots.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(['normal', 'drift'] as const).map((option) => (
+                  <Button
+                    aria-pressed={handlingMode === option}
+                    key={option}
+                    onClick={() => setHandlingMode(option)}
+                    type="button"
+                    variant={handlingMode === option ? 'default' : 'secondary'}
+                  >
+                    {option === 'normal' ? 'Normal' : 'Drift'}
+                  </Button>
+                ))}
+              </div>
+            </fieldset>
 
-        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/65 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Gamepad2 aria-hidden="true" className="size-5 text-info" />
-            {selectedTrack
-              ? `${selectedTrack.name} · ${formatTrackLength(selectedTrack.lengthMeters)} · ${environmentLabels[selectedTrack.sceneryLayout.preset]} · ${timeOfDayLabel(timeOfDay)}`
-              : 'Selecione e carregue uma pista para liberar a largada.'}
-          </div>
-          <Button
-            disabled={!session || !selectedTrack || trackLoading}
-            onClick={startRace}
-            size="lg"
-          >
-            {session && selectedTrack ? (
-              <Play aria-hidden="true" className="size-4" />
-            ) : (
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+            <PlayerConfigurator
+              label="Jogador 1"
+              onChange={setPlayerOne}
+              otherSelection={mode === 'local' ? playerTwo : undefined}
+              selection={playerOne}
+            />
+            {mode === 'local' && (
+              <PlayerConfigurator
+                label="Jogador 2"
+                onChange={setPlayerTwo}
+                otherSelection={playerOne}
+                selection={playerTwo}
+              />
             )}
-            {session && selectedTrack ? 'Largar' : 'Preparando corrida'}
-          </Button>
-        </div>
+
+            <details className="group rounded-2xl border border-border bg-card/55 p-5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-extrabold marker:content-none">
+                <span>
+                  <span className="block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                    Ajustes da prova
+                  </span>
+                  <span className="mt-1 block">Opções adicionais</span>
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-5 text-info transition-transform group-open:rotate-180"
+                />
+              </summary>
+
+              <div className="mt-5 space-y-5 border-t border-border/70 pt-5">
+                <fieldset>
+                  <legend className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                    Horário da corrida
+                  </legend>
+                  <p className="mb-3 mt-2 text-sm text-muted-foreground">
+                    O preset visual permanece fixo da largada até a bandeirada.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {timeOfDayOptions.map((option) => (
+                      <button
+                        aria-pressed={timeOfDay === option.id}
+                        className={`rounded-xl border p-4 text-left transition ${
+                          timeOfDay === option.id
+                            ? 'border-primary bg-primary/12'
+                            : 'border-border bg-background/45 hover:bg-muted/65'
+                        }`}
+                        key={option.id}
+                        onClick={() => setTimeOfDay(option.id)}
+                        type="button"
+                      >
+                        <span className="font-extrabold">{option.label}</span>
+                        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                          {option.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {mode === 'solo' && (
+                  <fieldset>
+                    <legend className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                      Dificuldade dos bots
+                    </legend>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(['easy', 'normal', 'hard'] as const).map((option) => (
+                        <Button
+                          key={option}
+                          onClick={() => setDifficulty(option)}
+                          type="button"
+                          variant={difficulty === option ? 'default' : 'secondary'}
+                        >
+                          {option === 'easy'
+                            ? 'Fácil'
+                            : option === 'normal'
+                              ? 'Normal'
+                              : 'Difícil'}
+                        </Button>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+              </div>
+            </details>
+
+            {sessionError && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4" role="alert">
+                <p className="text-sm text-destructive">{sessionError}</p>
+                <Button onClick={requestGuestSession} size="sm" variant="secondary">
+                  Tentar sessão novamente
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <aside
+            aria-label="Resumo da corrida"
+            className="surface-panel overflow-hidden lg:sticky lg:top-24"
+          >
+            <div className="border-b border-border/70 bg-primary/8 p-5">
+              <div className="flex items-center gap-3">
+                <Gamepad2 aria-hidden="true" className="size-5 text-info" />
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                    Configuração atual
+                  </p>
+                  <h2 className="font-display text-2xl font-black uppercase italic">
+                    Resumo da corrida
+                  </h2>
+                </div>
+              </div>
+            </div>
+
+            <dl className="space-y-3 p-5 text-sm">
+              <div>
+                <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  Pista
+                </dt>
+                <dd className="mt-1 font-extrabold">
+                  {selectedTrack?.name ?? 'Carregando pista…'}
+                </dd>
+                {selectedTrack && (
+                  <dd className="mt-0.5 text-xs text-muted-foreground">
+                    {formatTrackLength(selectedTrack.lengthMeters)} ·{' '}
+                    {environmentLabels[selectedTrack.sceneryLayout.preset]}
+                  </dd>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-3">
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Modo
+                  </dt>
+                  <dd className="mt-1 font-bold">{mode === 'solo' ? 'Solo' : 'Local'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Condução
+                  </dt>
+                  <dd className="mt-1 font-bold">
+                    {handlingMode === 'normal' ? 'Normal' : 'Drift'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Voltas
+                  </dt>
+                  <dd className="mt-1 font-bold">1 volta</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Horário
+                  </dt>
+                  <dd className="mt-1 font-bold">{timeOfDayLabel(timeOfDay)}</dd>
+                </div>
+              </div>
+              <div className="border-t border-border/60 pt-3">
+                <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  Carros
+                </dt>
+                {[playerOne, ...(mode === 'local' ? [playerTwo] : [])].map((player) => (
+                  <dd className="mt-2 flex items-center gap-2 font-bold" key={player.name}>
+                    <span
+                      aria-hidden="true"
+                      className="size-3 rounded-full border border-foreground/25"
+                      style={{ backgroundColor: player.color }}
+                    />
+                    {player.name} ·{' '}
+                    {
+                      vehicleOptions.find((vehicle) => vehicle.id === player.profileId)
+                        ?.name
+                    }
+                  </dd>
+                ))}
+              </div>
+            </dl>
+
+            <div className="border-t border-border/70 p-5">
+              <Button
+                className="w-full"
+                disabled={!session || !selectedTrack || trackLoading}
+                onClick={startRace}
+                size="lg"
+              >
+                {session && selectedTrack ? (
+                  <Play aria-hidden="true" className="size-4" />
+                ) : (
+                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                )}
+                {session && selectedTrack ? 'Iniciar corrida' : 'Preparando corrida'}
+              </Button>
+            </div>
+          </aside>
+        </section>
       </section>
     </AppShell>
   )

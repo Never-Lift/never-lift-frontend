@@ -138,7 +138,7 @@ describe('track API compatibility guard', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
 
     await expect(raceApi.getTrack('monaco')).rejects.toThrow(
-      'Definição de pista incompatível',
+      'dados desta pista não são compatíveis',
     )
   })
 
@@ -148,7 +148,7 @@ describe('track API compatibility guard', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
 
     await expect(raceApi.getTrack('monaco')).rejects.toThrow(
-      'Definição de pista incompatível',
+      'dados desta pista não são compatíveis',
     )
   })
 
@@ -166,7 +166,7 @@ describe('track API compatibility guard', () => {
     )
 
     await expect(raceApi.getTracks()).rejects.toThrow(
-      'Contrato de pistas incompatível',
+      'lista de circuitos não é compatível',
     )
   })
 
@@ -184,7 +184,7 @@ describe('track API compatibility guard', () => {
     )
 
     await expect(raceApi.getTracks()).rejects.toThrow(
-      'Contrato de pistas incompatível',
+      'lista de circuitos não é compatível',
     )
   })
 })

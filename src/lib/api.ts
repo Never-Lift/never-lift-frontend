@@ -314,7 +314,7 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '1.3.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.4' ||
+    payload.catalogVersion !== '2026.5' ||
     !('seasonReference' in payload) ||
     payload.seasonReference !== 2026 ||
     !('tracks' in payload) ||
@@ -322,7 +322,7 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     payload.tracks.length !== 24
   ) {
     throw new Error(
-      'Contrato de pistas incompatível: o frontend exige TrackDefinition 1.3.0.',
+      'A lista de circuitos não é compatível com esta versão do jogo.',
     )
   }
   return payload as TrackCatalog
@@ -426,7 +426,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '1.3.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.4' ||
+    payload.catalogVersion !== '2026.5' ||
     !('centerline' in payload) ||
     !Array.isArray(payload.centerline) ||
     payload.centerline.length < 2 ||
@@ -482,7 +482,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     payload.source.environmentReferences.length < 2
   ) {
     throw new Error(
-      'Definição de pista incompatível: faça o deploy do backend com o catálogo 2026.4.',
+      'Os dados desta pista não são compatíveis com esta versão do jogo.',
     )
   }
   return payload as TrackDefinition

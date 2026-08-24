@@ -1,4 +1,4 @@
-import { House, LogIn, LogOut, UserRound } from 'lucide-react'
+import { Gamepad2, House, LogIn, LogOut, UserRound } from 'lucide-react'
 import type { PropsWithChildren } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 
@@ -14,7 +14,10 @@ type AppShellProps = PropsWithChildren<{
   moduleLabel?: string
 }>
 
-export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps) {
+export function AppShell({
+  children,
+  moduleLabel = 'Menu principal',
+}: AppShellProps) {
   const { account, isUser, signOut } = useAuth()
   const navigate = useNavigate()
 
@@ -38,6 +41,7 @@ export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps
           className="flex items-center gap-1 lg:mt-12 lg:w-full lg:flex-1 lg:flex-col lg:items-stretch"
         >
           <NavLink
+            aria-label="Início"
             className={({ isActive }) =>
               cn(
                 navItemClass,
@@ -52,9 +56,25 @@ export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps
             <span className="hidden lg:inline">Início</span>
           </NavLink>
 
+          <NavLink
+            aria-label="Jogar"
+            className={({ isActive }) =>
+              cn(
+                navItemClass,
+                isActive &&
+                  'border-primary/30 bg-primary/10 text-foreground shadow-[inset_3px_0_0_var(--primary)]',
+              )
+            }
+            to="/race"
+          >
+            <Gamepad2 aria-hidden="true" className="size-4 text-primary" />
+            <span className="hidden lg:inline">Jogar</span>
+          </NavLink>
+
           {isUser ? (
             <>
               <NavLink
+                aria-label="Minha conta"
                 className={({ isActive }) =>
                   cn(
                     navItemClass,
@@ -69,6 +89,7 @@ export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps
               </NavLink>
 
               <button
+                aria-label="Sair"
                 className={cn(navItemClass, 'lg:mt-auto')}
                 onClick={handleSignOut}
                 type="button"
@@ -79,7 +100,7 @@ export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps
             </>
           ) : (
             <Button asChild className="ml-1 lg:mt-auto lg:ml-0" size="sm">
-              <Link to="/login">
+              <Link aria-label="Entrar" to="/login">
                 <LogIn aria-hidden="true" className="size-4" />
                 <span className="hidden sm:inline">Entrar</span>
               </Link>
@@ -101,7 +122,7 @@ export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps
       <div className="relative z-10 min-w-0">
         <header className="hidden h-[72px] items-center justify-between border-b border-border/60 px-8 lg:flex xl:px-12">
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            Paddock digital <span className="mx-2 text-border">/</span>{' '}
+            Race control <span className="mx-2 text-border">/</span>{' '}
             <span className="text-info">{moduleLabel}</span>
           </p>
           <p className="text-xs font-semibold text-muted-foreground">
@@ -109,7 +130,7 @@ export function AppShell({ children, moduleLabel = 'Módulo 01' }: AppShellProps
           </p>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] px-5 py-10 sm:px-8 sm:py-14 lg:px-10 xl:px-14">
+        <main className="mx-auto w-full max-w-[1400px] px-5 py-10 sm:px-8 sm:py-12 lg:px-10 xl:px-14">
           {children}
         </main>
       </div>

@@ -32,7 +32,7 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 ## Módulo 2 — motor local, pistas e ambiente
 
-- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.4`, prévia do traçado, país, comprimento e ambiente, além da seleção visual entre F1, Supercarro e Drift, paleta predefinida e modo de condução Normal ou Drift escolhido antes da largada para toda a corrida.
+- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.5`, prévia do traçado, país, comprimento e ambiente, além da seleção visual entre F1, Supercarro e Drift, paleta predefinida e modo de condução Normal ou Drift escolhido antes da largada para toda a corrida.
 - O motor usa passo fixo de `1/60s` e o desempenho compartilhado de `contracts/module-2/v1/physics-constants.json`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
 - No contrato v1.2, os três modelos de carro diferem somente em aparência e dimensões visuais: aceleração, velocidade, direção e colisão usam o mesmo perfil físico. O modo Normal/Drift vale igualmente para jogadores e bots e não pode ser alternado durante a corrida.
 - O frontend carrega `TrackDefinition` `1.3.0` por `GET /api/tracks/{id}` e a injeta no motor. Grid, centerline, largura, superfícies, checkpoints direcionais, linha de corrida, zebras e limites por trecho/lado vêm da mesma definição métrica usada pelo backend. A centerline é suavizada e amostrada a cada aproximadamente 5 m para que asfalto, áreas externas, barreiras e grades acompanhem as curvas sem o facetamento anterior. Cada lado pode combinar asfalto externo, grama e brita antes de uma barreira de impacto (`concrete-wall`, `guardrail`, `tecpro` ou `tyre-barrier`) e de uma grade de detritos externa opcional; a colisão permanece na barreira, sem transformar a grade em parede.
@@ -43,7 +43,7 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 - O dano mecânico v1.2 é cumulativo e aparece na telemetria com a integridade do carro: impactos fracos podem causar desvio persistente da direção, médios reduzem aceleração e velocidade, fortes combinam as duas falhas e impactos críticos ou a perda de toda a integridade causam perda total, que desativa os controles. Batidas menores repetidas também podem levar à perda total.
 - Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result` com o `trackId` e a `trackCatalogVersion` efetivamente selecionados.
 
-As Partes 2a, 2b e 2c estão implementadas e passaram pela validação manual anterior. A revisão `2026.4` acrescenta o polimento final das 24 pistas: curvas suavizadas, geometria mais densa, zebras por lado/trecho, transições externas sem cortes bruscos e uma ferramenta de atlas para auditoria visual reproduzível. O código e os testes desta revisão estão prontos, mas ela ainda precisa ser revalidada no fluxo integrado publicado; por isso o Módulo 2 completo permanece em andamento.
+As Partes 2a, 2b e 2c e a revisão `2026.4` passaram pela validação manual integrada em 24/08/2026. O catálogo `2026.5` preserva curvas, zebras, superfícies e proteções já aprovadas e acrescenta landmarks semânticos específicos dos 24 circuitos; o código, os testes e a auditoria visual automatizada desta rodada estão concluídos, mas a validação manual final após o deploy ainda é necessária antes de marcar o Módulo 2 completo como pronto.
 
 ## Roadmap
 
@@ -51,7 +51,7 @@ Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está re
 
 A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.
 
-A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md) e [`contracts/module-2/v1/`](contracts/module-2/v1/): catálogo `2026.4`, schema de pista `1.3.0` e constantes físicas `1.2.0`. O frontend consome as constantes diretamente e mantém somente a pista selecionada em memória; as geometrias completas continuam pertencendo ao backend e chegam pela API.
+A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md) e [`contracts/module-2/v1/`](contracts/module-2/v1/): catálogo `2026.5`, schema de pista `1.3.0` e constantes físicas `1.2.0`. O frontend consome as constantes diretamente e mantém somente a pista selecionada em memória; as geometrias completas continuam pertencendo ao backend e chegam pela API.
 
 ## Pré-requisitos
 

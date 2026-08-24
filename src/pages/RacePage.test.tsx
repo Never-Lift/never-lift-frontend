@@ -1,4 +1,4 @@
-import { cleanup, screen } from '@testing-library/react'
+import { cleanup, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -15,7 +15,7 @@ const albertParkDefinition = {
 }
 
 function findStartButton() {
-  return screen.findByRole('button', { name: /Largar/ }, { timeout: 5_000 })
+  return screen.findByRole('button', { name: /Iniciar corrida/ }, { timeout: 5_000 })
 }
 
 describe('Module 2b race setup', () => {
@@ -49,6 +49,7 @@ describe('Module 2b race setup', () => {
   })
 
   it('prepares a guest session and exposes solo configuration', async () => {
+    const user = userEvent.setup()
     renderApp('/race')
 
     expect(await findStartButton()).toBeEnabled()
@@ -59,6 +60,7 @@ describe('Module 2b race setup', () => {
     expect(screen.getByText('Dificuldade dos bots')).toBeInTheDocument()
     expect(screen.getByText('Modo de condução da corrida')).toBeInTheDocument()
     expect(screen.getByText('Horário da corrida')).toBeInTheDocument()
+    await user.click(screen.getByText('Opções adicionais'))
     expect(screen.getByRole('button', { name: /Dia/ })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -73,8 +75,15 @@ describe('Module 2b race setup', () => {
     expect(
       screen.getByRole('img', { name: 'Prévia do traçado Albert Park Circuit' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('5.278 km')).toBeInTheDocument()
-    expect(screen.getByText('Litoral')).toBeInTheDocument()
+    expect(screen.getAllByText('5.278 km').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Litoral').length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('complementary', { name: 'Resumo da corrida' }),
+    ).toHaveTextContent('1 volta')
+    expect(screen.getByRole('button', { name: 'Trocar' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
   })
 
   it('switches to two players and exposes the second car selection', async () => {
@@ -87,18 +96,54 @@ describe('Module 2b race setup', () => {
     expect(screen.queryByText('Dificuldade dos bots')).not.toBeInTheDocument()
   })
 
+  it('blocks only an identical model and paint combination in local mode', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    await findStartButton()
+    await user.click(screen.getByRole('button', { name: /Dois jogadores locais/ }))
+
+    const playerTwo = screen.getByRole('group', { name: 'Jogador 2' })
+    await user.click(within(playerTwo).getByRole('button', { name: 'Trocar' }))
+    await user.click(
+      within(playerTwo).getByRole('button', { name: 'Selecionar cor #2d7dff' }),
+    )
+
+    expect(within(playerTwo).getByRole('button', { name: /F1/ })).toBeDisabled()
+    expect(
+      within(playerTwo).getByRole('button', { name: /Supercarro/ }),
+    ).toBeEnabled()
+  })
+
   it('fixes the selected visual preset before starting the race', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
 
+    await user.click(screen.getByText('Opções adicionais'))
     await user.click(screen.getByRole('button', { name: /Noite/ }))
 
     expect(screen.getByRole('button', { name: /Noite/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    expect(screen.getByText(/Litoral · Noite/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('complementary', { name: 'Resumo da corrida' }),
+    ).toHaveTextContent('Noite')
+  })
+
+  it('keeps the current car visible and expands its compact chooser on demand', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    await findStartButton()
+
+    expect(screen.queryByRole('button', { name: /Supercarro/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Trocar' }))
+
+    expect(screen.getByRole('button', { name: /Supercarro/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Supercarro/ }))
+    expect(
+      screen.getByRole('complementary', { name: 'Resumo da corrida' }),
+    ).toHaveTextContent('Piloto 1 · Supercarro')
   })
 
   it('loads the selected track definition instead of keeping a fixed track id', async () => {
