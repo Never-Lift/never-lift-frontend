@@ -59,7 +59,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Parte 2a pronta; Parte 2b com catálogo auditado `2026.3`, superfícies/proteções por pista e revalidação visual integrada concluída em 21/08/2026; Parte 2c pendente |
+| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c implementadas; catálogo `2026.4`/schema de pista `1.3.0` com curvas suavizadas, zebras e transições visuais pronto em código e testes; revalidação manual integrada desta revisão pendente |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/nitro/pits/HUD) | não iniciado |

@@ -31,6 +31,10 @@ type RendererInternals = {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) => void
+  drawTrackCurbs: (
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) => void
   splitByElevationLayer: (
     points: TrackDefinition['centerline'],
   ) => Array<{
@@ -335,6 +339,47 @@ describe('RaceRenderer audited surfaces', () => {
         (stroke) => Math.abs(stroke.path[1].y - stroke.path[0].y) > 40,
       ),
     ).toBe(true)
+  })
+
+  it('draws alternating curb stripes inside the selected track edge', () => {
+    const track = createStraightTransitionTrack()
+    track.curbs = [
+      {
+        index: 0,
+        fromDistanceMeters: 0,
+        toDistanceMeters: 10,
+        side: 'left',
+        widthMeters: 1,
+        stripeLengthMeters: 2.5,
+        palette: 'red-white',
+      },
+    ]
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawTrackCurbs(
+      track.centerline.slice(0, 2),
+      IDENTITY_TRANSFORM,
+    )
+
+    const curbStrokes = operations.filter(
+      (operation) =>
+        operation.kind === 'stroke' &&
+        ['#d9283b', '#f0f0fa'].includes(operation.color),
+    )
+    expect(curbStrokes).toHaveLength(4)
+    expect(curbStrokes.map((stroke) => stroke.color)).toEqual([
+      '#d9283b',
+      '#f0f0fa',
+      '#d9283b',
+      '#f0f0fa',
+    ])
+    for (const stroke of curbStrokes) {
+      expect(stroke.lineCap).toBe('butt')
+      expect(stroke.path).toHaveLength(2)
+      expect(stroke.path[0].y).toBeCloseTo(-4.5, 8)
+      expect(stroke.path[1].y).toBeCloseTo(-4.5, 8)
+    }
   })
 
   it('does not extend a fence into the next unfenced segment', () => {

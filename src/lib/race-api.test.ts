@@ -27,8 +27,8 @@ describe('raceApi', () => {
         index === 7 ? 'tracks/monaco.json' : `tracks/track-${index + 1}.json`,
     }))
     const catalog = {
-      schemaVersion: '1.2.0',
-      catalogVersion: '2026.3',
+      schemaVersion: '1.3.0',
+      catalogVersion: '2026.4',
       seasonReference: 2026,
       calendarPolicy: 'original-24-round-freeze',
       tracks: catalogTracks,
@@ -70,7 +70,7 @@ describe('raceApi', () => {
     )
 
     await expect(raceApi.getTrack('monaco')).rejects.toThrow(
-      'faça o deploy do backend com o catálogo 2026.3',
+      'faça o deploy do backend com o catálogo 2026.4',
     )
   })
 
@@ -81,7 +81,7 @@ describe('raceApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const payload = {
       trackId: 'albert-park',
-      trackCatalogVersion: '2026.3',
+      trackCatalogVersion: '2026.4',
       mode: 'local' as const,
       results: [
         {

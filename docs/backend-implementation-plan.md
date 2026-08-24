@@ -112,7 +112,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
-**Contrato de entrada:** `contracts/module-2/v1/` contém o schema de pista `1.2.0`, catálogo `2026.3`, constantes físicas `1.2.0` e, no backend, as 24 definições métricas geradas de forma reproduzível. O Módulo 2 transforma esses dados canônicos em seed/migration e API; não redesenha circuitos durante a implementação.
+**Contrato de entrada:** `contracts/module-2/v1/` contém o schema de pista `1.3.0`, catálogo `2026.4`, constantes físicas `1.2.0` e, no backend, as 24 definições métricas geradas de forma reproduzível. O schema inclui centerline suavizada com amostragem aproximada de 5 m e zebras segmentadas por distância/lado. O Módulo 2 transforma esses dados canônicos em seed/migration e API; não redesenha circuitos durante a implementação.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
 **Nota:** o motor de física em si (solo/local) roda **inteiramente no frontend** neste módulo — ver plano de frontend, Módulo 2. O backend fornece o catálogo versionado de pistas e persiste o resultado no fim; não participa da simulação local.
 **Endpoints:**

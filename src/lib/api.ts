@@ -159,7 +159,7 @@ export type TrackCatalogEntry = {
 }
 
 export type TrackCatalog = {
-  schemaVersion: '1.2.0'
+  schemaVersion: '1.3.0'
   catalogVersion: string
   seasonReference: 2026
   calendarPolicy?: 'original-24-round-freeze'
@@ -215,6 +215,26 @@ export type TrackBarrierType =
 
 export type TrackFenceType = 'debris-fence'
 
+export type TrackCurbPalette =
+  | 'red-white'
+  | 'orange-white'
+  | 'red-white-blue'
+  | 'green-white-red'
+  | 'red-yellow'
+  | 'green-yellow'
+  | 'maroon-white'
+  | 'blue-white'
+
+export type TrackCurbSegment = {
+  index: number
+  fromDistanceMeters: number
+  toDistanceMeters: number
+  side: 'left' | 'right'
+  widthMeters: number
+  stripeLengthMeters: number
+  palette: TrackCurbPalette
+}
+
 export type TrackSideEnvironment = {
   zones: Array<{
     surface: TrackSurfaceMaterial
@@ -233,7 +253,7 @@ export type TrackLimitSegment = {
 }
 
 export type TrackDefinition = {
-  schemaVersion: '1.2.0'
+  schemaVersion: '1.3.0'
   catalogVersion: string
   id: string
   name: string
@@ -264,6 +284,7 @@ export type TrackDefinition = {
     onTrack: 'asphalt'
     pitLane: 'pit-lane'
   }
+  curbs: TrackCurbSegment[]
   trackLimits: {
     segments: TrackLimitSegment[]
   }
@@ -291,9 +312,9 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     typeof payload !== 'object' ||
     payload === null ||
     !('schemaVersion' in payload) ||
-    payload.schemaVersion !== '1.2.0' ||
+    payload.schemaVersion !== '1.3.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.3' ||
+    payload.catalogVersion !== '2026.4' ||
     !('seasonReference' in payload) ||
     payload.seasonReference !== 2026 ||
     !('tracks' in payload) ||
@@ -301,7 +322,7 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     payload.tracks.length !== 24
   ) {
     throw new Error(
-      'Contrato de pistas incompatível: o frontend exige TrackDefinition 1.2.0.',
+      'Contrato de pistas incompatível: o frontend exige TrackDefinition 1.3.0.',
     )
   }
   return payload as TrackCatalog
@@ -319,6 +340,53 @@ const TRACK_BARRIER_TYPES = new Set<TrackBarrierType>([
   'tyre-barrier',
 ])
 const TRACK_FENCE_TYPES = new Set<TrackFenceType>(['debris-fence'])
+const TRACK_CURB_PALETTES = new Set<TrackCurbPalette>([
+  'red-white',
+  'orange-white',
+  'red-white-blue',
+  'green-white-red',
+  'red-yellow',
+  'green-yellow',
+  'maroon-white',
+  'blue-white',
+])
+
+function isCompatibleTrackCurb(
+  value: unknown,
+  index: number,
+  lengthMeters: number,
+): value is TrackCurbSegment {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'index' in value &&
+    value.index === index &&
+    'fromDistanceMeters' in value &&
+    typeof value.fromDistanceMeters === 'number' &&
+    Number.isFinite(value.fromDistanceMeters) &&
+    value.fromDistanceMeters >= 0 &&
+    'toDistanceMeters' in value &&
+    typeof value.toDistanceMeters === 'number' &&
+    Number.isFinite(value.toDistanceMeters) &&
+    value.toDistanceMeters > value.fromDistanceMeters &&
+    value.toDistanceMeters <= lengthMeters &&
+    'side' in value &&
+    (value.side === 'left' || value.side === 'right') &&
+    'widthMeters' in value &&
+    typeof value.widthMeters === 'number' &&
+    Number.isFinite(value.widthMeters) &&
+    value.widthMeters >= 0.3 &&
+    value.widthMeters <= 2.5 &&
+    'stripeLengthMeters' in value &&
+    typeof value.stripeLengthMeters === 'number' &&
+    Number.isFinite(value.stripeLengthMeters) &&
+    value.stripeLengthMeters >= 0.5 &&
+    value.stripeLengthMeters <= 8 &&
+    'palette' in value &&
+    typeof value.palette === 'string' &&
+    TRACK_CURB_PALETTES.has(value.palette as TrackCurbPalette)
+  )
+}
 
 function isCompatibleTrackSide(value: unknown): value is TrackSideEnvironment {
   if (
@@ -356,9 +424,9 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     typeof payload !== 'object' ||
     payload === null ||
     !('schemaVersion' in payload) ||
-    payload.schemaVersion !== '1.2.0' ||
+    payload.schemaVersion !== '1.3.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.3' ||
+    payload.catalogVersion !== '2026.4' ||
     !('centerline' in payload) ||
     !Array.isArray(payload.centerline) ||
     payload.centerline.length < 2 ||
@@ -376,6 +444,20 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
         !Number.isInteger(point.elevationLayer) ||
         point.elevationLayer < 0 ||
         point.elevationLayer > 3,
+    ) ||
+    !('lengthMeters' in payload) ||
+    typeof payload.lengthMeters !== 'number' ||
+    !Number.isFinite(payload.lengthMeters) ||
+    !('curbs' in payload) ||
+    !Array.isArray(payload.curbs) ||
+    payload.curbs.length === 0 ||
+    payload.curbs.some(
+      (curb, index) =>
+        !isCompatibleTrackCurb(
+          curb,
+          index,
+          payload.lengthMeters as number,
+        ),
     ) ||
     !('trackLimits' in payload) ||
     typeof payload.trackLimits !== 'object' ||
@@ -400,7 +482,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     payload.source.environmentReferences.length < 2
   ) {
     throw new Error(
-      'Definição de pista incompatível: faça o deploy do backend com o catálogo 2026.3.',
+      'Definição de pista incompatível: faça o deploy do backend com o catálogo 2026.4.',
     )
   }
   return payload as TrackDefinition
