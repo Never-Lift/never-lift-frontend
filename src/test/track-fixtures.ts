@@ -61,8 +61,8 @@ export function createTrackFixture(
   })
   const start = pointOnCircle(radius, 0)
   return {
-    schemaVersion: '1.2.0',
-    catalogVersion: '2026.3',
+    schemaVersion: '1.3.0',
+    catalogVersion: '2026.4',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
     countryCode: id === 'monaco' ? 'MC' : 'BE',
@@ -113,6 +113,26 @@ export function createTrackFixture(
       onTrack: 'asphalt',
       pitLane: 'pit-lane',
     },
+    curbs: [
+      {
+        index: 0,
+        fromDistanceMeters: 100,
+        toDistanceMeters: 140,
+        side: 'left',
+        widthMeters: 1,
+        stripeLengthMeters: 2.5,
+        palette: 'red-white',
+      },
+      {
+        index: 1,
+        fromDistanceMeters: 200,
+        toDistanceMeters: 250,
+        side: 'right',
+        widthMeters: 1,
+        stripeLengthMeters: 2.5,
+        palette: id === 'monaco' ? 'red-white' : 'red-yellow',
+      },
+    ],
     trackLimits: {
       segments:
         id === 'monaco'

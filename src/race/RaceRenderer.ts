@@ -1,6 +1,7 @@
 import type {
   TrackBarrierType,
   TrackChunk,
+  TrackCurbPalette,
   TrackDefinition,
   TrackSideEnvironment,
   TrackSurfaceMaterial,
@@ -89,6 +90,17 @@ const FENCE_STYLE = {
   dashMeters: [0.8, 0.45],
 }
 const FENCE_GAP_METERS = 0.18
+
+const CURB_PALETTES: Record<TrackCurbPalette, string[]> = {
+  'red-white': ['#d9283b', '#f0f0fa'],
+  'orange-white': ['#ff6a2a', '#f0f0fa'],
+  'red-white-blue': ['#d9283b', '#f0f0fa', '#2574d9'],
+  'green-white-red': ['#169b62', '#f0f0fa', '#d9283b'],
+  'red-yellow': ['#d9283b', '#f4ca28'],
+  'green-yellow': ['#14944f', '#f4ca28'],
+  'maroon-white': ['#7d1735', '#f0f0fa'],
+  'blue-white': ['#277bd8', '#f0f0fa'],
+}
 
 const AMBIENT_PARTICLE_COLORS: Record<
   TrackDefinition['sceneryLayout']['preset'],
@@ -414,6 +426,7 @@ export class RaceRenderer {
     transform: CameraTransform,
   ) {
     const screenPoints = points.map((point) => worldToCamera(point, transform))
+    this.drawTrackCurbs(points, transform)
     this.drawTrackEdges(points, transform)
     this.context.save()
     this.context.setLineDash([
@@ -428,6 +441,91 @@ export class RaceRenderer {
     this.context.restore()
   }
 
+  private drawTrackCurbs(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    for (let pointIndex = 0; pointIndex < points.length - 1; pointIndex += 1) {
+      const from = points[pointIndex]
+      const to = points[pointIndex + 1]
+      if (to.distanceMeters <= from.distanceMeters) continue
+
+      for (const curb of this.track.curbs) {
+        const overlapFrom = Math.max(
+          from.distanceMeters,
+          curb.fromDistanceMeters,
+        )
+        const overlapTo = Math.min(to.distanceMeters, curb.toDistanceMeters)
+        if (overlapTo <= overlapFrom) continue
+
+        const colors = CURB_PALETTES[curb.palette]
+        let stripeFrom = overlapFrom
+        while (stripeFrom < overlapTo - Number.EPSILON) {
+          const stripeIndex = Math.floor(
+            (stripeFrom - curb.fromDistanceMeters + 0.0001) /
+              curb.stripeLengthMeters,
+          )
+          const nextBoundary =
+            curb.fromDistanceMeters +
+            (stripeIndex + 1) * curb.stripeLengthMeters
+          const stripeTo = Math.min(overlapTo, nextBoundary)
+          const fromPoint = this.interpolateTrackPointAtDistance(
+            from,
+            to,
+            stripeFrom,
+          )
+          const toPoint = this.interpolateTrackPointAtDistance(
+            from,
+            to,
+            stripeTo,
+          )
+          const insetFrom = Math.max(
+            0,
+            fromPoint.halfWidthMeters - curb.widthMeters / 2,
+          )
+          const insetTo = Math.max(
+            0,
+            toPoint.halfWidthMeters - curb.widthMeters / 2,
+          )
+          this.strokeSegment(
+            worldToCamera(
+              this.offsetTrackPoint(fromPoint, curb.side, insetFrom),
+              transform,
+            ),
+            worldToCamera(
+              this.offsetTrackPoint(toPoint, curb.side, insetTo),
+              transform,
+            ),
+            Math.max(1.5, curb.widthMeters * transform.pixelsPerMeter),
+            colors[stripeIndex % colors.length],
+            'butt',
+          )
+          stripeFrom = stripeTo
+        }
+      }
+    }
+  }
+
+  private interpolateTrackPointAtDistance(
+    from: TrackDefinition['centerline'][number],
+    to: TrackDefinition['centerline'][number],
+    distanceMeters: number,
+  ): TrackDefinition['centerline'][number] {
+    const span = to.distanceMeters - from.distanceMeters
+    const ratio = span <= Number.EPSILON
+      ? 0
+      : (distanceMeters - from.distanceMeters) / span
+    return {
+      x: from.x + (to.x - from.x) * ratio,
+      y: from.y + (to.y - from.y) * ratio,
+      distanceMeters,
+      halfWidthMeters:
+        from.halfWidthMeters +
+        (to.halfWidthMeters - from.halfWidthMeters) * ratio,
+      elevationLayer: ratio < 0.5 ? from.elevationLayer : to.elevationLayer,
+    }
+  }
+
   private drawTrackEnvironments(
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
@@ -437,22 +535,37 @@ export class RaceRenderer {
       const to = points[index + 1]
       const distanceMeters = (from.distanceMeters + to.distanceMeters) / 2
       for (const side of ['left', 'right'] as const) {
+        const fromEnvironment = this.geometry.getTrackSideEnvironmentAt(
+          from.distanceMeters,
+          side,
+        )
+        const toEnvironment = this.geometry.getTrackSideEnvironmentAt(
+          to.distanceMeters,
+          side,
+        )
         const environment = this.geometry.getTrackSideEnvironmentAt(
           distanceMeters,
           side,
         )
+        const environmentWidth = trackSideEnvironmentWidth(environment)
+        if (environmentWidth <= Number.EPSILON) continue
+        const fromEnvironmentWidth = trackSideEnvironmentWidth(fromEnvironment)
+        const toEnvironmentWidth = trackSideEnvironmentWidth(toEnvironment)
         let innerOffset = 0
         for (const zone of environment.zones) {
+          const outerOffset = innerOffset + zone.widthMeters
           this.fillTrackZone(
             from,
             to,
             side,
-            innerOffset,
-            innerOffset + zone.widthMeters,
+            (innerOffset / environmentWidth) * fromEnvironmentWidth,
+            (outerOffset / environmentWidth) * fromEnvironmentWidth,
+            (innerOffset / environmentWidth) * toEnvironmentWidth,
+            (outerOffset / environmentWidth) * toEnvironmentWidth,
             transform,
             SURFACE_COLORS[zone.surface],
           )
-          innerOffset += zone.widthMeters
+          innerOffset = outerOffset
         }
       }
     }
@@ -462,8 +575,10 @@ export class RaceRenderer {
     from: TrackDefinition['centerline'][number],
     to: TrackDefinition['centerline'][number],
     side: 'left' | 'right',
-    innerOffsetMeters: number,
-    outerOffsetMeters: number,
+    fromInnerOffsetMeters: number,
+    fromOuterOffsetMeters: number,
+    toInnerOffsetMeters: number,
+    toOuterOffsetMeters: number,
     transform: CameraTransform,
     color: string,
   ) {
@@ -471,22 +586,22 @@ export class RaceRenderer {
       this.offsetTrackPoint(
         from,
         side,
-        from.halfWidthMeters + innerOffsetMeters,
+        from.halfWidthMeters + fromInnerOffsetMeters,
       ),
       this.offsetTrackPoint(
         to,
         side,
-        to.halfWidthMeters + innerOffsetMeters,
+        to.halfWidthMeters + toInnerOffsetMeters,
       ),
       this.offsetTrackPoint(
         to,
         side,
-        to.halfWidthMeters + outerOffsetMeters,
+        to.halfWidthMeters + toOuterOffsetMeters,
       ),
       this.offsetTrackPoint(
         from,
         side,
-        from.halfWidthMeters + outerOffsetMeters,
+        from.halfWidthMeters + fromOuterOffsetMeters,
       ),
     ].map((point) => worldToCamera(point, transform))
 
