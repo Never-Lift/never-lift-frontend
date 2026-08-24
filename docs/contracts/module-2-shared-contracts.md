@@ -4,7 +4,7 @@
 
 Fechar antes da implementação os formatos que atravessam frontend e backend: catálogo de pistas, coordenadas métricas, versão de física e decisões do modo local. Esta rodada não implementa endpoints nem o `RaceEngine`.
 
-## Decisões fechadas
+## Estado executável atual — contrato físico 1.2.0
 
 - Temporada de referência: calendário original de 24 etapas da Fórmula 1 de 2026, congelado para o catálogo `2026.5`.
 - O catálogo não muda automaticamente quando o calendário real é alterado durante a temporada.
@@ -15,6 +15,20 @@ Fechar antes da implementação os formatos que atravessam frontend e backend: c
 - Dano local é mecânico, cumulativo e determinístico no Módulo 2: a intensidade classifica falhas de direção, motor, combinação das duas ou perda total, e toda colisão relevante reduz a vida.
 - Dificuldade dos bots melhora ritmo, frenagem, trajetória, recuperação e consistência ao mesmo tempo.
 - Física usa subpasso canônico de `1/60 s`. O servidor do Módulo 3 roda a `30 Hz`, executando dois subpassos por tick.
+
+## Próxima revisão aprovada — contrato físico 1.3.0
+
+As issues frontend #90 e backend #72 aprovam uma simplificação incompatível que será implementada somente depois da revisão documental:
+
+- todas as corridas usam um único modelo F1;
+- a pintura predefinida é a única escolha de veículo feita pelo jogador;
+- Supercarro e Drift deixam de existir no contrato e na apresentação;
+- existe uma única configuração física de condução, sem seleção Normal/Drift;
+- `carModel`, `handlingMode` e `driftMode` deixam de existir em tipos, payloads, sala e persistência futura;
+- recordes e fantasmas deixam de separar resultados por modelo ou modo de condução;
+- progressão futura libera pinturas, capacetes e acabamentos do F1, nunca outros carros.
+
+Essa migração deve incrementar `module-2-decisions.json`, `physics-constants.json`, seu schema e os cenários determinísticos para `1.3.0` nos dois repositórios no mesmo trabalho. Até a implementação funcional ser aprovada, os artefatos JSON `1.2.0` permanecem inalterados e canônicos; esta seção registra intenção de migração, não um contrato parcialmente publicado.
 
 ## Catálogo e pista
 

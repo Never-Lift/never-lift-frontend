@@ -154,12 +154,11 @@ Regras:
 
 ### 7.1 Direção dos modelos
 
-- Inspirados em veículos reais, sem copiar exatamente um modelo específico.
-- Proporções semirrealistas: carroceria natural, com largura, pneus, aerofólios e elementos de desempenho ligeiramente enfatizados.
-- Categorias mantêm silhuetas próprias, mas compartilham pinturas, iluminação, acabamentos e detalhes da identidade Never Lift.
-- Mistura de épocas: inspirações modernas, clássicas e retrô modificadas.
-- Preparação de pista plausível, sem peças ou proporções absurdas.
-- F1, supercarro e drift precisam ser reconhecíveis imediatamente pela silhueta.
+- O jogo usa um único modelo de corrida: um monoposto inspirado em carros de F1, sem copiar exatamente um modelo, equipe ou pintura real.
+- Proporções semirrealistas: carroceria natural, pneus expostos, aerofólios e elementos de desempenho ligeiramente enfatizados.
+- Não existe seleção entre categorias ou carrocerias; Supercarro e Drift foram retirados da direção aprovada.
+- A variedade visual vem de pintura, capacete, acabamento e detalhes cosméticos da identidade Never Lift.
+- A preparação de pista permanece plausível, sem peças ou proporções absurdas.
 
 ### 7.2 Detalhe e personalização
 
@@ -178,11 +177,11 @@ Regras:
   - danificado: marcas discretas e fumaça leve;
   - crítico: fumaça mais visível e pequenas faíscas ocasionais;
   - perda total: carro parado, visual escurecido e alerta no HUD.
-- Efeitos de movimento arcade controlados: fumaça proporcional ao drift, marcas de pneu limitadas, faíscas em contatos relevantes e nitro com chama/rastro curtos.
+- Efeitos de movimento arcade controlados: fumaça proporcional à perda de aderência, marcas de pneu limitadas, faíscas em contatos relevantes e nitro com chama/rastro curtos.
 - Iluminação simples: faróis, lanternas, luz de freio e cone noturno, com brilho suave.
-- Jogadores são diferenciados somente por modelo e pintura.
-- A escolha do modelo é exclusivamente visual: F1, supercarro e drift compartilham exatamente a mesma física, colisão e desempenho.
-- A mesma combinação de modelo e pintura não pode se repetir na mesma sala; modelos repetidos exigem cores principais diferentes.
+- Todos os participantes usam o mesmo modelo de F1 e a mesma física, colisão e desempenho.
+- Jogadores são diferenciados somente pela pintura e pelos detalhes cosméticos permitidos.
+- A mesma pintura principal não pode se repetir na mesma sala.
 
 ## 8. Interface e HUD
 
@@ -243,11 +242,11 @@ Regras:
 - Estrutura compartilhada entre solo, local e online, adaptando campos e permissões.
 - Escolhas principais visíveis; opções adicionais em área expansível.
 - Circuitos em lista compacta com prévia grande do traçado, país, comprimento e ambiente.
-- Carro atual visível; “Trocar” abre painel compacto.
-- Painel lateral fixo resume pista, voltas, clima, horário, modo e carro.
+- O F1 atual fica visível; “Personalizar” abre um painel compacto de pintura e capacete, sem seleção de modelo.
+- Painel lateral fixo resume pista, voltas, clima, horário, tipo de prova e pintura.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
-- Normal/drift é uma configuração única da corrida e vale igualmente para todos os participantes; nenhum jogador alterna o próprio acerto durante a prova.
+- A condução usa uma única configuração fixa para todas as corridas e participantes; não existe seletor Normal/Drift nem troca de acerto durante a prova.
 - Shift é reservado ao nitro/boost do Módulo 5. O orçamento depende do total de voltas, é finito e não recarrega.
 - Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa intensidade do impacto: fraco afeta direção, médio afeta motor, alto combina os dois e crítico causa perda total. Batidas menores repetidas também podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica um leve desvio persistente para a esquerda ou direita sem reduzir a capacidade de esterçar, e uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
 
@@ -285,7 +284,7 @@ Regras:
 
 | Módulo | Decisão de composição |
 |---|---|
-| 10 — Garagem | Carro em destaque, carrossel horizontal inferior, painel lateral, rotação manual, informações úteis e carros bloqueados visíveis com requisito |
+| 10 — Personalização | F1 em destaque, painel lateral, rotação manual e cosméticos bloqueados visíveis com requisito; sem carrossel de modelos |
 | 10 — Conquistas | Categorias, cards compactos, progresso e painel com requisito, raridade e recompensa |
 | 10 — Medalhas | Forma ligada à conquista; materiais bronze, prata, ouro e titânio escuro; três ícones com tooltip |
 | 11 — Contrarrelógio | Lista de circuitos e prévia detalhada; separar fantasma próprio dos fantasmas de amigos; um fantasma por tentativa |
@@ -308,7 +307,7 @@ Regras:
 
 ### 11.2 Medalhas
 
-- A forma comunica a conquista: troféu/bandeira para vitórias, louros para campeonatos, pneu para drift, cronômetro/calendário para idade da conta, escudo para corrida limpa e traçado para domínio de circuito.
+- A forma comunica a conquista: troféu/bandeira para vitórias, louros para campeonatos, volante para domínio técnico, cronômetro/calendário para idade da conta, escudo para corrida limpa e traçado para domínio de circuito.
 - O material comunica a raridade: bronze, prata, ouro e titânio escuro com detalhe azul/magenta.
 - Três medalhas equipadas aparecem abaixo da identidade do jogador.
 - Nome, requisito e data ficam em tooltip ou painel curto; lobby e pódio usam versões menores.
@@ -330,7 +329,7 @@ Executar em uma rodada e PR próprios, sem misturar com funcionalidade de corrid
 
 | Módulo | Principais decisões aplicadas |
 |---|---|
-| 2 | física em metros, circuitos extensos, câmera, minimapa local, culling, carro/cores e tela de preparação |
+| 2 | física em metros, circuitos extensos, câmera, minimapa local, culling, F1/pintura e tela de preparação |
 | 3 | lobby, minimapa online, carros remotos e preparação com permissões |
 | 4 | presets de horário, clima otimizado e modo caos |
 | 5 | HUD, dano simples, efeitos de movimento, resultado e pódio |
