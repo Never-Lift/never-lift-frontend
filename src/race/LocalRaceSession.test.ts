@@ -27,20 +27,17 @@ function createSession() {
   const engine = new RaceEngine({
     track: SHORT_TRACK,
     mode: 'local',
-    handlingMode: 'normal',
     racers: [
       {
         id: 'player-1',
         name: 'Player 1',
         kind: 'human',
-        profileId: 'formula',
         color: '#31c7ff',
       },
       {
         id: 'player-2',
         name: 'Player 2',
         kind: 'human',
-        profileId: 'drift',
         color: '#ff2e88',
       },
     ],

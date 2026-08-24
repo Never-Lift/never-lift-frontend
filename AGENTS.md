@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## O que é este projeto
-Jogo de corrida 2D multiplayer (top-down, estilo drift). Existe um protótipo anterior do mesmo autor — **este é um jogo novo, não uma versão dele.** O protótipo serve só como referência visual e de sensação de jogo, nunca como código a reaproveitar diretamente. Este repositório é o **frontend**; o backend vive num repositório separado — o contrato entre os dois está documentado abaixo e em `docs/`.
+Jogo de corrida 2D multiplayer top-down, com condução arcade controlada e um único carro de F1. Existe um protótipo anterior do mesmo autor — **este é um jogo novo, não uma versão dele.** O protótipo serve só como referência visual e de sensação de jogo, nunca como código a reaproveitar diretamente. Este repositório é o **frontend**; o backend vive num repositório separado — o contrato entre os dois está documentado abaixo e em `docs/`.
 
 ## Arquitetura (resumo — detalhe completo em `docs/frontend-implementation-plan.md`)
 - Dois planos: REST (conta, social, campeonato, recordes) e tempo real (WebSocket, um socket por sala — o motor de corrida).
@@ -59,7 +59,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.4`/schema de pista `1.3.0` validados manualmente em 24/08/2026; rodada #88 com catálogo `2026.5` pronta em código, 152 testes e auditoria visual integrada, aguardando validação manual final após o deploy |
+| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único e condução fixa concluída em código/contrato `1.3.0`, aguardando validação manual final após o deploy |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/nitro/pits/HUD) | não iniciado |
@@ -67,7 +67,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 | 7 — Social (amigos/notificações) | não iniciado |
 | 8 — Perfil, recordes e histórico | não iniciado |
 | 9 — Polimento e i18n | não iniciado |
-| 10 — Progressão, carros e medalhas | não iniciado (pós-MVP) |
+| 10 — Progressão, personalização e medalhas | não iniciado (pós-MVP) |
 | 11 — Contrarrelógio e fantasmas | não iniciado (pós-MVP) |
 | 12 — Controles personalizáveis | não iniciado (pós-MVP) |
 | 13 — Modo espectador para amigos | não iniciado (pós-MVP) |

@@ -30,7 +30,7 @@ afterEach(() => {
 })
 
 describe('VehiclePreview', () => {
-  it('renders the selected profile through the shared canvas painter', async () => {
+  it('renders and recolors the single F1 through the shared canvas painter', async () => {
     const { context, operations } = createRecordingContext()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context)
     vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue(
@@ -38,19 +38,19 @@ describe('VehiclePreview', () => {
     )
 
     const { rerender } = render(
-      <VehiclePreview color="#2d7dff" profileId="formula" />,
+      <VehiclePreview color="#2d7dff" />,
     )
 
     expect(
-      screen.getByRole('img', { name: 'Prévia do carro Fórmula' }),
+      screen.getByRole('img', { name: 'Prévia do carro F1' }),
     ).toBeInTheDocument()
     await waitFor(() => expect(operations).toContain('fill:#2d7dff'))
 
     const operationCount = operations.length
-    rerender(<VehiclePreview color="#ff2e88" profileId="drift" />)
+    rerender(<VehiclePreview color="#ff2e88" />)
 
     expect(
-      screen.getByRole('img', { name: 'Prévia do carro Drift' }),
+      screen.getByRole('img', { name: 'Prévia do carro F1' }),
     ).toBeInTheDocument()
     await waitFor(() => {
       expect(operations.length).toBeGreaterThan(operationCount)

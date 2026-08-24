@@ -28,17 +28,14 @@ import { getErrorMessage } from '@/lib/error-messages'
 import { RaceEngine } from '@/race/RaceEngine'
 import type {
   BotDifficulty,
-  HandlingMode,
   RaceMode,
   RaceResultEntry,
-  VehicleProfileId,
   VehicleSetup,
 } from '@/race/types'
 import type { TimeOfDayPreset } from '@/race/visual-settings'
 
 type PlayerSelection = {
   name: string
-  profileId: VehicleProfileId
   color: string
 }
 
@@ -47,20 +44,6 @@ type SubmissionState =
   | { status: 'sending' }
   | { status: 'success'; response: LocalRaceResultResponse }
   | { status: 'error'; message: string }
-
-const vehicleOptions: Array<{
-  id: VehicleProfileId
-  name: string
-  description: string
-}> = [
-  { id: 'formula', name: 'F1', description: 'Silhueta monoposto' },
-  {
-    id: 'supercar',
-    name: 'Supercarro',
-    description: 'Silhueta esportiva fechada',
-  },
-  { id: 'drift', name: 'Drift', description: 'Silhueta urbana preparada' },
-]
 
 const colorOptions = ['#2d7dff', '#ff2e88', '#2bd67b', '#ffb82e', '#f0f0fa', '#9c6cff']
 
@@ -88,13 +71,11 @@ function timeOfDayLabel(timeOfDay: TimeOfDayPreset) {
 
 const defaultPlayerOne: PlayerSelection = {
   name: 'Piloto 1',
-  profileId: 'formula',
   color: colorOptions[0],
 }
 
 const defaultPlayerTwo: PlayerSelection = {
   name: 'Piloto 2',
-  profileId: 'drift',
   color: colorOptions[1],
 }
 
@@ -194,10 +175,7 @@ function PlayerConfigurator({
   onChange: (selection: PlayerSelection) => void
 }) {
   const [isChanging, setIsChanging] = useState(false)
-  const selectedVehicle =
-    vehicleOptions.find((vehicle) => vehicle.id === selection.profileId) ?? vehicleOptions[0]
-  const duplicatesOther = (profileId: VehicleProfileId, color: string) =>
-    otherSelection?.profileId === profileId && otherSelection.color === color
+  const duplicatesOther = (color: string) => otherSelection?.color === color
 
   return (
     <fieldset className="surface-panel p-5 sm:p-6">
@@ -208,17 +186,16 @@ function PlayerConfigurator({
         <VehiclePreview
           className="h-32 w-full"
           color={selection.color}
-          profileId={selection.profileId}
         />
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
             Carro atual
           </p>
           <p className="mt-1 font-display text-3xl font-black uppercase italic">
-            {selectedVehicle.name}
+            F1 Never Lift
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {selectedVehicle.description}
+            Monoposto único com pintura personalizável
           </p>
           <Button
             aria-expanded={isChanging}
@@ -228,38 +205,16 @@ function PlayerConfigurator({
             type="button"
             variant="secondary"
           >
-            {isChanging ? 'Concluir escolha' : 'Trocar'}
+            {isChanging ? 'Concluir' : 'Personalizar'}
           </Button>
         </div>
       </div>
 
       {isChanging && (
         <div className="mt-5 border-t border-border/70 pt-5">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {vehicleOptions.map((vehicle) => (
-              <button
-                aria-pressed={selection.profileId === vehicle.id}
-                className={`rounded-xl border p-4 text-left transition ${
-                  selection.profileId === vehicle.id
-                    ? 'border-primary bg-primary/12 shadow-[inset_0_0_0_1px_rgb(45_125_255/0.3)]'
-                    : 'border-border bg-background/45 hover:bg-muted/65 disabled:cursor-not-allowed disabled:opacity-35'
-                }`}
-                disabled={duplicatesOther(vehicle.id, selection.color)}
-                key={vehicle.id}
-                onClick={() => onChange({ ...selection, profileId: vehicle.id })}
-                type="button"
-              >
-                <span className="font-extrabold">{vehicle.name}</span>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                  {vehicle.description}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-5">
+          <div>
             <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.17em] text-muted-foreground">
-              Cor do carro {selection.profileId === 'formula' && 'e capacete'}
+              Cor do carro e capacete
             </p>
             <div className="flex flex-wrap gap-2">
               {colorOptions.map((color) => (
@@ -271,7 +226,7 @@ function PlayerConfigurator({
                       ? 'scale-110 border-foreground'
                       : 'border-transparent opacity-75 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25'
                   }`}
-                  disabled={duplicatesOther(selection.profileId, color)}
+                  disabled={duplicatesOther(color)}
                   key={color}
                   onClick={() => onChange({ ...selection, color })}
                   style={{ backgroundColor: color }}
@@ -282,14 +237,13 @@ function PlayerConfigurator({
           </div>
           {otherSelection && (
             <p className="mt-4 text-xs font-semibold text-warning">
-              A combinação exata usada pelo outro jogador fica indisponível.
+              A pintura usada pelo outro jogador fica indisponível.
             </p>
           )}
         </div>
       )}
       <p className="mt-3 text-xs font-semibold text-muted-foreground">
-        A escolha do modelo é somente visual; todos os carros compartilham a mesma
-        física.
+        Todos os participantes usam o mesmo modelo e a mesma física.
       </p>
     </fieldset>
   )
@@ -309,7 +263,6 @@ export function RacePage() {
   const [trackLoading, setTrackLoading] = useState(false)
   const [mode, setMode] = useState<RaceMode>('solo')
   const [difficulty, setDifficulty] = useState<BotDifficulty>('normal')
-  const [handlingMode, setHandlingMode] = useState<HandlingMode>('normal')
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDayPreset>('day')
   const [playerOne, setPlayerOne] = useState(defaultPlayerOne)
   const [playerTwo, setPlayerTwo] = useState(defaultPlayerTwo)
@@ -388,7 +341,6 @@ export function RacePage() {
         id: 'player-1',
         name: primaryName,
         kind: 'human',
-        profileId: playerOne.profileId,
         color: playerOne.color,
       },
     ]
@@ -398,25 +350,23 @@ export function RacePage() {
         id: 'player-2',
         name: playerTwo.name,
         kind: 'human',
-        profileId: playerTwo.profileId,
         color: playerTwo.color,
       })
     } else {
+      const botColors = colorOptions.filter((color) => color !== playerOne.color)
       racers.push(
         {
           id: 'bot-apex',
           name: 'Bot Apex',
           kind: 'bot',
-          profileId: 'supercar',
-          color: '#ffb82e',
+          color: botColors[0],
           botDifficulty: difficulty,
         },
         {
-          id: 'bot-slide',
-          name: 'Bot Slide',
+          id: 'bot-vector',
+          name: 'Bot Vector',
           kind: 'bot',
-          profileId: 'drift',
-          color: '#2bd67b',
+          color: botColors[1],
           botDifficulty: difficulty,
         },
       )
@@ -429,7 +379,6 @@ export function RacePage() {
       new RaceEngine({
         track: selectedTrack,
         mode,
-        handlingMode,
         racers,
         lapCount: 1,
       }),
@@ -437,7 +386,6 @@ export function RacePage() {
   }, [
     account?.displayName,
     difficulty,
-    handlingMode,
     mode,
     playerOne,
     playerTwo,
@@ -581,13 +529,12 @@ export function RacePage() {
           </p>
           <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Prepare a corrida</h1>
           <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">
-            Escolha circuito, modo e carro. O resumo acompanha as decisões até a
-            largada.
+            Escolha circuito e pintura. O resumo acompanha as decisões até a largada.
           </p>
         </header>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
-          <div className="surface-panel p-4 sm:p-5">
+          <div className="surface-panel min-w-0 p-4 sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
@@ -623,7 +570,7 @@ export function RacePage() {
             )}
           </div>
 
-          <div className="surface-panel min-h-[28rem] overflow-hidden p-5 sm:p-6">
+          <div className="surface-panel min-h-[28rem] min-w-0 overflow-hidden p-5 sm:p-6">
             {trackLoading && (
               <div className="grid h-full min-h-[24rem] place-items-center text-sm font-semibold text-muted-foreground">
                 <LoaderCircle aria-hidden="true" className="size-7 animate-spin text-info" />
@@ -701,10 +648,7 @@ export function RacePage() {
                 className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'local' ? 'border-primary/70 bg-primary/8' : ''}`}
                 onClick={() => {
                   setMode('local')
-                  if (
-                    playerTwo.profileId === playerOne.profileId &&
-                    playerTwo.color === playerOne.color
-                  ) {
+                  if (playerTwo.color === playerOne.color) {
                     setPlayerTwo({
                       ...playerTwo,
                       color:
@@ -724,28 +668,6 @@ export function RacePage() {
                 </span>
               </button>
             </div>
-
-            <fieldset className="rounded-2xl border border-border bg-card/55 p-5">
-              <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                Modo de condução da corrida
-              </legend>
-              <p className="mb-3 text-sm text-muted-foreground">
-                A opção escolhida vale igualmente para todos os jogadores e bots.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {(['normal', 'drift'] as const).map((option) => (
-                  <Button
-                    aria-pressed={handlingMode === option}
-                    key={option}
-                    onClick={() => setHandlingMode(option)}
-                    type="button"
-                    variant={handlingMode === option ? 'default' : 'secondary'}
-                  >
-                    {option === 'normal' ? 'Normal' : 'Drift'}
-                  </Button>
-                ))}
-              </div>
-            </fieldset>
 
             <PlayerConfigurator
               label="Jogador 1"
@@ -884,11 +806,9 @@ export function RacePage() {
                 </div>
                 <div>
                   <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Condução
+                    Carro
                   </dt>
-                  <dd className="mt-1 font-bold">
-                    {handlingMode === 'normal' ? 'Normal' : 'Drift'}
-                  </dd>
+                  <dd className="mt-1 font-bold">F1</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
@@ -905,7 +825,7 @@ export function RacePage() {
               </div>
               <div className="border-t border-border/60 pt-3">
                 <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  Carros
+                  Pinturas
                 </dt>
                 {[playerOne, ...(mode === 'local' ? [playerTwo] : [])].map((player) => (
                   <dd className="mt-2 flex items-center gap-2 font-bold" key={player.name}>
@@ -914,11 +834,7 @@ export function RacePage() {
                       className="size-3 rounded-full border border-foreground/25"
                       style={{ backgroundColor: player.color }}
                     />
-                    {player.name} ·{' '}
-                    {
-                      vehicleOptions.find((vehicle) => vehicle.id === player.profileId)
-                        ?.name
-                    }
+                    {player.name} · F1
                   </dd>
                 ))}
               </div>

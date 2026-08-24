@@ -58,7 +58,7 @@ describe('Module 2b race setup', () => {
       'true',
     )
     expect(screen.getByText('Dificuldade dos bots')).toBeInTheDocument()
-    expect(screen.getByText('Modo de condução da corrida')).toBeInTheDocument()
+    expect(screen.queryByText('Modo de condução da corrida')).not.toBeInTheDocument()
     expect(screen.getByText('Horário da corrida')).toBeInTheDocument()
     await user.click(screen.getByText('Opções adicionais'))
     expect(screen.getByRole('button', { name: /Dia/ })).toHaveAttribute(
@@ -66,10 +66,7 @@ describe('Module 2b race setup', () => {
       'true',
     )
     expect(
-      screen.getByText(/A opção escolhida vale igualmente/),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/A escolha do modelo é somente visual/),
+      screen.getByText(/Todos os participantes usam o mesmo modelo/),
     ).toBeInTheDocument()
     expect(screen.getByText('24 circuitos')).toBeInTheDocument()
     expect(
@@ -80,13 +77,13 @@ describe('Module 2b race setup', () => {
     expect(
       screen.getByRole('complementary', { name: 'Resumo da corrida' }),
     ).toHaveTextContent('1 volta')
-    expect(screen.getByRole('button', { name: 'Trocar' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Personalizar' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
   })
 
-  it('switches to two players and exposes the second car selection', async () => {
+  it('switches to two players and exposes the second paint selection', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
@@ -96,21 +93,20 @@ describe('Module 2b race setup', () => {
     expect(screen.queryByText('Dificuldade dos bots')).not.toBeInTheDocument()
   })
 
-  it('blocks only an identical model and paint combination in local mode', async () => {
+  it('blocks a paint already used by the other local player', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
     await user.click(screen.getByRole('button', { name: /Dois jogadores locais/ }))
 
     const playerTwo = screen.getByRole('group', { name: 'Jogador 2' })
-    await user.click(within(playerTwo).getByRole('button', { name: 'Trocar' }))
-    await user.click(
-      within(playerTwo).getByRole('button', { name: 'Selecionar cor #2d7dff' }),
-    )
+    await user.click(within(playerTwo).getByRole('button', { name: 'Personalizar' }))
 
-    expect(within(playerTwo).getByRole('button', { name: /F1/ })).toBeDisabled()
     expect(
-      within(playerTwo).getByRole('button', { name: /Supercarro/ }),
+      within(playerTwo).getByRole('button', { name: 'Selecionar cor #2d7dff' }),
+    ).toBeDisabled()
+    expect(
+      within(playerTwo).getByRole('button', { name: 'Selecionar cor #ff2e88' }),
     ).toBeEnabled()
   })
 
@@ -131,19 +127,19 @@ describe('Module 2b race setup', () => {
     ).toHaveTextContent('Noite')
   })
 
-  it('keeps the current car visible and expands its compact chooser on demand', async () => {
+  it('keeps the F1 visible and expands its compact paint chooser on demand', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
 
-    expect(screen.queryByRole('button', { name: /Supercarro/ })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Trocar' }))
+    expect(screen.getByText('F1 Never Lift')).toBeInTheDocument()
+    expect(screen.queryByText(/Supercarro|Drift/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Personalizar' }))
 
-    expect(screen.getByRole('button', { name: /Supercarro/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Supercarro/ }))
+    await user.click(screen.getByRole('button', { name: 'Selecionar cor #ff2e88' }))
     expect(
       screen.getByRole('complementary', { name: 'Resumo da corrida' }),
-    ).toHaveTextContent('Piloto 1 · Supercarro')
+    ).toHaveTextContent('Piloto 1 · F1')
   })
 
   it('loads the selected track definition instead of keeping a fixed track id', async () => {

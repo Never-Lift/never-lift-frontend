@@ -4,17 +4,19 @@
 
 Fechar antes da implementação os formatos que atravessam frontend e backend: catálogo de pistas, coordenadas métricas, versão de física e decisões do modo local. Esta rodada não implementa endpoints nem o `RaceEngine`.
 
-## Decisões fechadas
+## Estado executável atual — contrato físico 1.3.0
 
 - Temporada de referência: calendário original de 24 etapas da Fórmula 1 de 2026, congelado para o catálogo `2026.5`.
 - O catálogo não muda automaticamente quando o calendário real é alterado durante a temporada.
 - Colisão entre carros existe no modo local.
 - Split-screen usa divisão vertical em telas largas e horizontal abaixo da razão de aspecto `1.35`.
-- F1, Supercarro e Drift são escolhas estritamente visuais; todos usam um único perfil de física e colisão.
-- Normal/drift pertence à corrida inteira e é aplicado igualmente a todos os participantes.
+- Todos os participantes usam um único modelo F1; a pintura predefinida é a única escolha visual de veículo.
+- Existe uma única configuração de condução, baseada exatamente nos valores do antigo perfil Normal e aplicada a todas as corridas.
 - Dano local é mecânico, cumulativo e determinístico no Módulo 2: a intensidade classifica falhas de direção, motor, combinação das duas ou perda total, e toda colisão relevante reduz a vida.
 - Dificuldade dos bots melhora ritmo, frenagem, trajetória, recuperação e consistência ao mesmo tempo.
 - Física usa subpasso canônico de `1/60 s`. O servidor do Módulo 3 roda a `30 Hz`, executando dois subpassos por tick.
+
+As issues frontend #90 e backend #72 publicaram esta revisão incompatível de forma sincronizada. `module-2-decisions.json`, `physics-constants.json`, seu schema e os cenários determinísticos usam `1.3.0`; `carModel`, `handlingMode`, `driftMode`, Supercarro e Drift não fazem parte do contrato. Recordes e fantasmas não segmentam resultados por modelo ou modo, e a progressão futura libera apenas pinturas, capacetes e acabamentos do F1.
 
 ## Catálogo e pista
 
@@ -32,7 +34,7 @@ Cada definição contém:
 - preset e âncoras mínimas de cenário;
 - atribuição, descrição da transformação e referências ambientais consultadas por circuito.
 
-O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Cada ponto da centerline publica `halfWidthMeters` e `elevationLayer`: a largura pode variar com transições suaves, e a camada impede que a ponte e a passagem inferior de Suzuka misturem projeção, desenho ou colisões. O schema de pista `1.3.0` suaviza a fonte fechada, arredonda os vértices e reamostra a volta a cada aproximadamente 5 m; asfalto, entornos, barreiras, grades, física, câmera e minimapa derivam dessa mesma geometria. `trackLimits.segments` cobre a volta continuamente; cada lado possui `zones[]`, da borda da pista para fora, uma barreira de impacto entre `concrete-wall`, `guardrail`, `tecpro` e `tyre-barrier` e, quando aplicável, `fence: "debris-fence"` como camada externa adicional. A colisão acontece na barreira, depois da soma das larguras das zonas daquele lado; a grade não desloca o limite físico. Uma lista vazia representa barreira praticamente junto ao asfalto. `curbs[]` descreve cada zebra por intervalo métrico, lado, largura, comprimento de faixa e paleta; a geração usa a curvatura da centerline e a contagem oficial de curvas, com perfil de cores por circuito. Brita é distinta visualmente, mas usa a tração de grama do contrato físico `1.2.0`; isso evita reabrir a física já validada apenas para esta correção visual/geométrica.
+O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Cada ponto da centerline publica `halfWidthMeters` e `elevationLayer`: a largura pode variar com transições suaves, e a camada impede que a ponte e a passagem inferior de Suzuka misturem projeção, desenho ou colisões. O schema de pista `1.3.0` suaviza a fonte fechada, arredonda os vértices e reamostra a volta a cada aproximadamente 5 m; asfalto, entornos, barreiras, grades, física, câmera e minimapa derivam dessa mesma geometria. `trackLimits.segments` cobre a volta continuamente; cada lado possui `zones[]`, da borda da pista para fora, uma barreira de impacto entre `concrete-wall`, `guardrail`, `tecpro` e `tyre-barrier` e, quando aplicável, `fence: "debris-fence"` como camada externa adicional. A colisão acontece na barreira, depois da soma das larguras das zonas daquele lado; a grade não desloca o limite físico. Uma lista vazia representa barreira praticamente junto ao asfalto. `curbs[]` descreve cada zebra por intervalo métrico, lado, largura, comprimento de faixa e paleta; a geração usa a curvatura da centerline e a contagem oficial de curvas, com perfil de cores por circuito. Brita é distinta visualmente, mas usa a tração de grama do contrato físico `1.3.0`; isso evita reabrir a física já validada apenas para esta correção visual/geométrica.
 
 ### Auditoria ambiental, geométrica e de cenário do catálogo 2026.5
 
@@ -87,7 +89,7 @@ O frontend M2 deve:
 
 O backend M3 deve reproduzir os mesmos cenários dentro das tolerâncias declaradas. Divergência é bug.
 
-O contrato físico `1.2.0` separa as silhuetas visuais de um único perfil mecânico compartilhado e fixa limiares de impacto, vida e efeitos moderados de dano. Impacto fraco danifica direção, médio danifica motor, alto combina ambos e crítico causa perda total; a vida cumulativa também permite que colisões menores repetidas terminem a corrida. Motor danificado reduz moderadamente aceleração e velocidade máxima, direção danificada aplica um leve desvio persistente para um lado sem retirar autoridade de esterço, e perda total ignora inputs e aumenta o arrasto até a parada. O frontend aplica essas regras na corrida local; o backend deve consumir os mesmos valores ao implementar a simulação autoritativa.
+O contrato físico `1.3.0` define um único F1, uma única condução e fixa limiares de impacto, vida e efeitos moderados de dano. Impacto fraco danifica direção, médio danifica motor, alto combina ambos e crítico causa perda total; a vida cumulativa também permite que colisões menores repetidas terminem a corrida. Motor danificado reduz moderadamente aceleração e velocidade máxima, direção danificada aplica um leve desvio persistente para um lado sem retirar autoridade de esterço, e perda total ignora inputs e aumenta o arrasto até a parada. O frontend aplica essas regras na corrida local; o backend deve consumir os mesmos valores ao implementar a simulação autoritativa.
 
 ## Resultado local e segurança
 

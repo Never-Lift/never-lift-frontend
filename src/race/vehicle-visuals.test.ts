@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import type { VehicleProfileId } from '@/race/types'
 import { drawVehicleVisual } from '@/race/vehicle-visuals'
 
 function createRecordingContext() {
@@ -57,10 +56,9 @@ function createRecordingContext() {
   }
 }
 
-function paint(profileId: VehicleProfileId, detail: 'race' | 'preview' = 'race') {
+function paint(detail: 'race' | 'preview' = 'race') {
   const recording = createRecordingContext()
   drawVehicleVisual(recording.context, {
-    profileId,
     color: '#2d7dff',
     x: 160,
     y: 90,
@@ -72,65 +70,48 @@ function paint(profileId: VehicleProfileId, detail: 'race' | 'preview' = 'race')
   return recording
 }
 
-describe('vehicle visual painter', () => {
-  it('draws immediately distinct optimized silhouettes for all three profiles', () => {
-    const formula = paint('formula').operations
-    const supercar = paint('supercar').operations
-    const drift = paint('drift').operations
+describe('single F1 visual painter', () => {
+  it('draws the F1 silhouette with exposed tires and the selected paint', () => {
+    const operations = paint().operations
 
-    const fingerprint = (operations: string[]) =>
-      operations.filter((operation) =>
-        /^(fillRect|ellipse|arc|bezierCurveTo|quadraticCurveTo|fill:|stroke:)/.test(
-          operation,
-        ),
-      )
-
-    expect(fingerprint(formula)).not.toEqual(fingerprint(supercar))
-    expect(fingerprint(formula)).not.toEqual(fingerprint(drift))
-    expect(fingerprint(supercar)).not.toEqual(fingerprint(drift))
-    expect(formula.filter((operation) => operation.startsWith('fillRect:'))).toHaveLength(6)
-    expect(supercar.some((operation) => operation === 'bezierCurveTo')).toBe(true)
-    expect(drift.some((operation) => operation === 'quadraticCurveTo')).toBe(true)
+    expect(operations).toContain('fill:#2d7dff')
+    expect(
+      operations.filter((operation) => operation.startsWith('fillRect:')),
+    ).toHaveLength(6)
+    expect(operations).toContain('ellipse')
+    expect(operations).toContain('arc')
   })
 
-  it.each(['formula', 'supercar', 'drift'] as const)(
-    'keeps the selected paint and balances canvas state for %s',
-    (profileId) => {
-      const { context, operations, getProperty } = createRecordingContext()
-      context.fillStyle = '#abcdef'
+  it('balances canvas state and preserves the caller paint state', () => {
+    const { context, operations, getProperty } = createRecordingContext()
+    context.fillStyle = '#abcdef'
 
-      drawVehicleVisual(context, {
-        profileId,
-        color: '#2d7dff',
-        x: 100,
-        y: 80,
-        angleRadians: 0.4,
-        length: 150,
-        width: 58,
-      })
+    drawVehicleVisual(context, {
+      color: '#2d7dff',
+      x: 100,
+      y: 80,
+      angleRadians: 0.4,
+      length: 150,
+      width: 58,
+    })
 
-      expect(operations).toContain('fill:#2d7dff')
-      expect(operations.filter((operation) => operation === 'save')).toHaveLength(4)
-      expect(operations.filter((operation) => operation === 'restore')).toHaveLength(4)
-      expect(getProperty('fillStyle')).toBe('#abcdef')
-    },
-  )
+    expect(operations).toContain('fill:#2d7dff')
+    expect(operations.filter((operation) => operation === 'save')).toHaveLength(4)
+    expect(operations.filter((operation) => operation === 'restore')).toHaveLength(4)
+    expect(getProperty('fillStyle')).toBe('#abcdef')
+  })
 
-  it.each(['formula', 'supercar', 'drift'] as const)(
-    'adds selection detail without changing the %s silhouette painter',
-    (profileId) => {
-      const raceOperations = paint(profileId, 'race').operations
-      const previewOperations = paint(profileId, 'preview').operations
+  it('adds preview detail without changing the base F1 silhouette', () => {
+    const raceOperations = paint('race').operations
+    const previewOperations = paint('preview').operations
 
-      expect(previewOperations.length).toBeGreaterThan(raceOperations.length)
-      expect(previewOperations.slice(0, 16)).toEqual(raceOperations.slice(0, 16))
-    },
-  )
+    expect(previewOperations.length).toBeGreaterThan(raceOperations.length)
+    expect(previewOperations.slice(0, 16)).toEqual(raceOperations.slice(0, 16))
+  })
 
   it('does not touch the canvas for invalid dimensions', () => {
     const { context, operations } = createRecordingContext()
     drawVehicleVisual(context, {
-      profileId: 'formula',
       color: '#2d7dff',
       x: 0,
       y: 0,
@@ -145,7 +126,6 @@ describe('vehicle visual painter', () => {
   it('keeps contact shadow while applying the requested light direction', () => {
     const { context, operations } = createRecordingContext()
     drawVehicleVisual(context, {
-      profileId: 'supercar',
       color: '#2d7dff',
       x: 100,
       y: 80,

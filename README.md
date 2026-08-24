@@ -1,6 +1,6 @@
 # Never Lift
 
-Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco em drift. Este repositório contém as telas do aplicativo e, nos próximos módulos, o motor de corrida renderizado em Canvas.
+Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com condução arcade controlada e um único carro de F1. Este repositório contém as telas do aplicativo e o motor de corrida renderizado em Canvas.
 
 ## Fundação técnica
 
@@ -32,26 +32,26 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 ## Módulo 2 — motor local, pistas e ambiente
 
-- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.5`, prévia do traçado, país, comprimento e ambiente, além da seleção visual entre F1, Supercarro e Drift, paleta predefinida e modo de condução Normal ou Drift escolhido antes da largada para toda a corrida.
+- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.5`, prévia do traçado, país, comprimento e ambiente, além do F1 único e sua paleta de pinturas predefinidas.
 - O motor usa passo fixo de `1/60s` e o desempenho compartilhado de `contracts/module-2/v1/physics-constants.json`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
-- No contrato v1.2, os três modelos de carro diferem somente em aparência e dimensões visuais: aceleração, velocidade, direção e colisão usam o mesmo perfil físico. O modo Normal/Drift vale igualmente para jogadores e bots e não pode ser alternado durante a corrida.
+- O contrato físico v1.3 define somente o F1 e uma configuração fixa de condução, preservando exatamente os valores do antigo perfil Normal para jogadores e bots.
 - O frontend carrega `TrackDefinition` `1.3.0` por `GET /api/tracks/{id}` e a injeta no motor. Grid, centerline, largura, superfícies, checkpoints direcionais, linha de corrida, zebras e limites por trecho/lado vêm da mesma definição métrica usada pelo backend. A centerline é suavizada e amostrada a cada aproximadamente 5 m para que asfalto, áreas externas, barreiras e grades acompanhem as curvas sem o facetamento anterior. Cada lado pode combinar asfalto externo, grama e brita antes de uma barreira de impacto (`concrete-wall`, `guardrail`, `tecpro` ou `tyre-barrier`) e de uma grade de detritos externa opcional; a colisão permanece na barreira, sem transformar a grade em parede.
 - A câmera acompanha a posição e a direção do movimento com suavização de `0,25s`, enquadra o carro em aproximadamente 60% da altura e mantém o comprimento visual em 5,5%, abaixo do limite de 6%. O minimapa usa as mesmas coordenadas do mundo e nunca gira.
 - O modo local usa câmera própria para cada jogador: divisão vertical em áreas largas e horizontal abaixo da razão `1,35`. A pista é desenhada vetorialmente somente nos `chunks` visíveis, sem bitmap proporcional ao circuito completo.
 - Solo cria dois bots determinísticos. No modo local, o jogador 1 usa WASD e Shift esquerdo, enquanto o jogador 2 usa setas e Shift direito. Em solo, WASD e setas controlam o mesmo carro; A/seta esquerda esterçam para a esquerda e D/seta direita, para a direita.
-- O Shift envia o input reservado de nitro, mas não ativa boost, freio de mão nem troca o modo de condução na Parte 2a. O nitro funcional pertence ao Módulo 5.
-- O dano mecânico v1.2 é cumulativo e aparece na telemetria com a integridade do carro: impactos fracos podem causar desvio persistente da direção, médios reduzem aceleração e velocidade, fortes combinam as duas falhas e impactos críticos ou a perda de toda a integridade causam perda total, que desativa os controles. Batidas menores repetidas também podem levar à perda total.
+- O Shift envia o input reservado de nitro, mas não ativa boost ou freio de mão no Módulo 2. O nitro funcional pertence ao Módulo 5.
+- O dano mecânico v1.3 é cumulativo e aparece na telemetria com a integridade do carro: impactos fracos podem causar desvio persistente da direção, médios reduzem aceleração e velocidade, fortes combinam as duas falhas e impactos críticos ou a perda de toda a integridade causam perda total, que desativa os controles. Batidas menores repetidas também podem levar à perda total.
 - Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result` com o `trackId` e a `trackCatalogVersion` efetivamente selecionados.
 
-As Partes 2a, 2b e 2c e a revisão `2026.4` passaram pela validação manual integrada em 24/08/2026. O catálogo `2026.5` preserva curvas, zebras, superfícies e proteções já aprovadas e acrescenta landmarks semânticos específicos dos 24 circuitos; o código, os testes e a auditoria visual automatizada desta rodada estão concluídos, mas a validação manual final após o deploy ainda é necessária antes de marcar o Módulo 2 completo como pronto.
+As Partes 2a, 2b e 2c e o catálogo `2026.5` passaram pela validação manual integrada em 24/08/2026. A simplificação posterior para F1 único e condução fixa está concluída em código e contrato, mas exige uma nova validação manual após o deploy antes de marcar o Módulo 2 completo como pronto.
 
 ## Roadmap
 
-Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e carros por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
+Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e cosméticos por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
 
 A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.
 
-A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md) e [`contracts/module-2/v1/`](contracts/module-2/v1/): catálogo `2026.5`, schema de pista `1.3.0` e constantes físicas `1.2.0`. O frontend consome as constantes diretamente e mantém somente a pista selecionada em memória; as geometrias completas continuam pertencendo ao backend e chegam pela API.
+A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md) e [`contracts/module-2/v1/`](contracts/module-2/v1/): catálogo `2026.5`, schema de pista `1.3.0` e constantes físicas `1.3.0`. O frontend consome as constantes diretamente e mantém somente a pista selecionada em memória; as geometrias completas continuam pertencendo ao backend e chegam pela API.
 
 ## Pré-requisitos
 
