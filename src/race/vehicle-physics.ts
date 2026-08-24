@@ -19,7 +19,7 @@ export function integrateVehicle(
 ) {
   const profile = PHYSICS_CONSTANTS.vehiclePerformance
   const isTotalLoss = vehicle.damage.kind === 'total-loss'
-  const handling = PHYSICS_CONSTANTS.handlingModes[vehicle.handlingMode]
+  const handling = PHYSICS_CONSTANTS.handling
   const surface = PHYSICS_CONSTANTS.surfaces[surfaceId]
   const accelerationDamageMultiplier =
     vehicle.damage.engineDamaged

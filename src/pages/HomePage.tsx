@@ -213,7 +213,6 @@ export function HomePage() {
               <VehiclePreview
                 className="h-36 w-full"
                 color="#2d7dff"
-                profileId="formula"
               />
             </div>
           </div>

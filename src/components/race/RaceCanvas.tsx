@@ -9,7 +9,6 @@ import type { RaceEngine } from '@/race/RaceEngine'
 import { RaceRenderer } from '@/race/RaceRenderer'
 import type {
   DamageKind,
-  HandlingMode,
   RaceMode,
   RaceResultEntry,
 } from '@/race/types'
@@ -26,7 +25,6 @@ export type DriverTelemetry = {
   name: string
   lap: number
   speedKph: number
-  handlingMode: HandlingMode
   damage: DamageKind
   health: number
 }
@@ -50,7 +48,6 @@ export function DriverTelemetryCard({
   driverIndex,
   lapCount,
 }: DriverTelemetryCardProps) {
-  const isDrift = driver.handlingMode === 'drift'
   const shiftKey = driverIndex === 0 ? 'Shift esquerdo' : 'Shift direito'
   const health = Math.max(0, Math.min(100, Math.round(driver.health)))
 
@@ -108,14 +105,6 @@ export function DriverTelemetryCard({
             />
           </span>
         </div>
-        <p
-          aria-live="polite"
-          className={`mt-2 text-xs font-extrabold uppercase tracking-[0.1em] ${
-            isDrift ? 'text-warning' : 'text-info'
-          }`}
-        >
-          Modo da corrida: {isDrift ? 'Drift' : 'Normal'}
-        </p>
         <p className="text-[10px] font-semibold text-muted-foreground">
           {shiftKey}: boost indisponível nesta prova
         </p>
@@ -183,7 +172,6 @@ export function RaceCanvas({
                 name: vehicle.name,
                 lap: vehicle.currentLap,
                 speedKph: Math.round(Math.hypot(vehicle.velocity.x, vehicle.velocity.y) * 3.6),
-                handlingMode: vehicle.handlingMode,
                 damage: vehicle.damage.kind,
                 health: vehicle.damage.health,
               },

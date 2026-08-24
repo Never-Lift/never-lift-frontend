@@ -59,7 +59,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único e condução única aprovada no planejamento, com implementação funcional pendente |
+| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único e condução fixa concluída em código/contrato `1.3.0`, aguardando validação manual final após o deploy |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/nitro/pits/HUD) | não iniciado |

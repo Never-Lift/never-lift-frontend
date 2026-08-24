@@ -4,8 +4,6 @@ export type Vector2 = {
   x: number
   y: number
 }
-export type VehicleProfileId = 'formula' | 'supercar' | 'drift'
-export type HandlingMode = 'normal' | 'drift'
 export type SurfaceId = 'asphalt' | 'grass' | 'pit-lane'
 export type RaceMode = 'solo' | 'local'
 export type BotDifficulty = 'easy' | 'normal' | 'hard'
@@ -29,7 +27,6 @@ export type VehicleSetup = {
   id: string
   name: string
   kind: RacerKind
-  profileId: VehicleProfileId
   color: string
   botDifficulty?: BotDifficulty
 }
@@ -45,7 +42,6 @@ export type VehicleDamage = {
 }
 
 export type VehicleState = VehicleSetup & {
-  handlingMode: HandlingMode
   position: Vector2
   previousPosition: Vector2
   velocity: Vector2
@@ -76,7 +72,6 @@ export type RaceStatus = 'running' | 'finished'
 export type RaceEngineOptions = {
   track: TrackDefinition
   mode: RaceMode
-  handlingMode: HandlingMode
   racers: VehicleSetup[]
   lapCount?: number
   maximumRaceSeconds?: number

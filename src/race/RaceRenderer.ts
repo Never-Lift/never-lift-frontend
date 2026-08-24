@@ -199,8 +199,7 @@ export class RaceRenderer {
         focusedVehicle.renderAngle,
         deltaSeconds,
       )
-      const profile =
-        PHYSICS_CONSTANTS.vehicleVisualProfiles[focusedVehicle.profileId]
+      const profile = PHYSICS_CONSTANTS.vehicleVisual
       const transform = createCameraTransform(
         cameraState,
         viewport,
@@ -1009,7 +1008,7 @@ export class RaceRenderer {
     visibleTrackSections: ElevationTrackSection[],
     maximumBeamDistanceMeters: number,
   ) {
-    const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
+    const profile = PHYSICS_CONSTANTS.vehicleVisual
     const point = worldToCamera(vehicle.renderPosition, transform)
     const forwardPoint = worldToCamera(
       {
@@ -1361,11 +1360,11 @@ export class RaceRenderer {
       }
       const lateralSpeed = Math.abs(dot(vehicle.velocity, right))
       const speed = magnitude(vehicle.velocity)
-      if (speed < 8 || (vehicle.handlingMode !== 'drift' && lateralSpeed < 3.5)) {
+      if (speed < 8 || lateralSpeed < 3.5) {
         continue
       }
 
-      const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
+      const profile = PHYSICS_CONSTANTS.vehicleVisual
       const rearOffset = profile.lengthMeters * 0.34
       this.tireMarks.push({
         position: {
@@ -1417,7 +1416,7 @@ export class RaceRenderer {
     transform: CameraTransform,
   ) {
     const context = this.context
-    const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[vehicle.profileId]
+    const profile = PHYSICS_CONSTANTS.vehicleVisual
     const point = worldToCamera(vehicle.renderPosition, transform)
     const forwardPoint = worldToCamera(
       {
@@ -1445,7 +1444,6 @@ export class RaceRenderer {
       transform,
     )
     drawVehicleVisual(context, {
-      profileId: vehicle.profileId,
       color: vehicle.color,
       x: point.x,
       y: point.y,

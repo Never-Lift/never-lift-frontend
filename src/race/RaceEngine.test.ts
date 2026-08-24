@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import { resolveVehicleCollision } from '@/race/collision'
-import { PHYSICS_STEP_SECONDS } from '@/race/constants'
+import { PHYSICS_CONSTANTS, PHYSICS_STEP_SECONDS } from '@/race/constants'
 import { clamp, signedAngleDelta } from '@/race/math'
 import { RaceEngine } from '@/race/RaceEngine'
 import { TrackGeometry } from '@/race/TrackGeometry'
 import type {
   DriverInput,
-  HandlingMode,
   SurfaceId,
-  VehicleProfileId,
   VehicleSetup,
   VehicleState,
 } from '@/race/types'
@@ -27,7 +25,6 @@ function setup(id: string, kind: VehicleSetup['kind'] = 'human'): VehicleSetup {
     id,
     name: id,
     kind,
-    profileId: 'formula',
     color: '#2d7dff',
   }
 }
@@ -35,8 +32,6 @@ function setup(id: string, kind: VehicleSetup['kind'] = 'human'): VehicleSetup {
 function vehicle(
   id: string,
   options: {
-    profileId?: VehicleProfileId
-    handlingMode?: HandlingMode
     x?: number
     y?: number
     velocityX?: number
@@ -47,8 +42,6 @@ function vehicle(
   const position = { x: options.x ?? 0, y: options.y ?? 0 }
   return {
     ...setup(id),
-    profileId: options.profileId ?? 'formula',
-    handlingMode: options.handlingMode ?? 'normal',
     position,
     previousPosition: { ...position },
     velocity: {
@@ -85,7 +78,6 @@ function runAtFrameRate(framesPerSecond: number) {
   const engine = new RaceEngine({
     track: SHORT_TRACK,
     mode: 'local',
-    handlingMode: 'normal',
     racers: [setup('player-1'), setup('player-2')],
     maximumRaceSeconds: 120,
   })
@@ -281,7 +273,6 @@ describe('RaceEngine fixed-step simulation', () => {
     const engine = new RaceEngine({
       track: crossingTrack,
       mode: 'local',
-      handlingMode: 'normal',
       racers: [setup('player-1'), setup('player-2')],
     })
     engine.stepFixed()
@@ -291,7 +282,6 @@ describe('RaceEngine fixed-step simulation', () => {
     const layeredEngine = new RaceEngine({
       track: crossingTrack,
       mode: 'local',
-      handlingMode: 'normal',
       racers: [setup('lower'), setup('upper')],
     })
     const layeredVehicles = (
@@ -330,7 +320,6 @@ describe('RaceEngine fixed-step simulation', () => {
     const engine = new RaceEngine({
       track: SHORT_TRACK,
       mode: 'local',
-      handlingMode: 'normal',
       racers: [setup('player-1'), setup('player-2')],
     })
     engine.setInput('player-1', {
@@ -354,19 +343,6 @@ describe('RaceEngine fixed-step simulation', () => {
     )
   })
 
-  it('applies one handling mode to every racer in the race', () => {
-    const engine = new RaceEngine({
-      track: SHORT_TRACK,
-      mode: 'local',
-      handlingMode: 'drift',
-      racers: [setup('player-1'), setup('player-2')],
-    })
-
-    expect(
-      engine.getInterpolatedVehicles().map((candidate) => candidate.handlingMode),
-    ).toEqual(['drift', 'drift'])
-  })
-
   it.each(['solo', 'local'] as const)(
     'runs a %s race from start to classified results',
     (mode) => {
@@ -377,7 +353,6 @@ describe('RaceEngine fixed-step simulation', () => {
       const engine = new RaceEngine({
         track: SHORT_TRACK,
         mode,
-        handlingMode: 'normal',
         racers,
         lapCount: 1,
         maximumRaceSeconds: 60,
@@ -420,7 +395,6 @@ describe('official-size track completion', () => {
     const engine = new RaceEngine({
       track,
       mode: 'solo',
-      handlingMode: 'normal',
       racers: [setup('player-1'), setup('bot-1', 'bot')],
       lapCount: 1,
       maximumRaceSeconds: 240,
@@ -472,33 +446,22 @@ describe('canonical vehicle physics', () => {
     expect(grass.surface).toBe('grass')
   })
 
-  it('uses identical performance for every visual car model', () => {
-    const states = (['formula', 'supercar', 'drift'] as const).map((profileId) =>
-      integrateFor(
-        vehicle(profileId, { profileId }),
-        accelerating,
-        'asphalt',
-        240,
-      ),
-    )
+  it('preserves the approved fixed handling values from the former Normal mode', () => {
+    expect(PHYSICS_CONSTANTS.handling).toEqual({
+      lateralGripMultiplier: 1,
+      longitudinalGripMultiplier: 1,
+      steeringMultiplier: 1,
+      yawDampingPerSecond: 5.5,
+    })
 
-    for (const state of states.slice(1)) {
-      expect(state.position.x).toBeCloseTo(states[0].position.x, 8)
-      expect(state.velocity.x).toBeCloseTo(states[0].velocity.x, 8)
-      expect(state.angle).toBeCloseTo(states[0].angle, 8)
-    }
-  })
-
-  it('retains more lateral slip in drift mode than normal mode', () => {
     const input: DriverInput = {
       throttle: 0.6,
       brake: 0,
       steer: 0,
       nitro: false,
     }
-    const normal = integrateFor(
-      vehicle('normal', {
-        profileId: 'drift',
+    const first = integrateFor(
+      vehicle('first', {
         velocityX: 25,
         velocityY: 8,
       }),
@@ -506,10 +469,8 @@ describe('canonical vehicle physics', () => {
       'asphalt',
       45,
     )
-    const drift = integrateFor(
-      vehicle('drift', {
-        profileId: 'drift',
-        handlingMode: 'drift',
+    const second = integrateFor(
+      vehicle('second', {
         velocityX: 25,
         velocityY: 8,
       }),
@@ -518,13 +479,13 @@ describe('canonical vehicle physics', () => {
       45,
     )
 
-    expect(Math.abs(drift.velocity.y)).toBeGreaterThan(
-      Math.abs(normal.velocity.y),
-    )
+    expect(second.position).toEqual(first.position)
+    expect(second.velocity).toEqual(first.velocity)
+    expect(second.angle).toBe(first.angle)
   })
 })
 
-describe('collisions and v1.2 cumulative mechanical damage', () => {
+describe('collisions and v1.3 cumulative mechanical damage', () => {
   it('separates colliding cars, applies impulse and classifies the impact', () => {
     const first = vehicle('first', { x: -0.5, velocityX: 18 })
     const second = vehicle('second', { x: 0.5, velocityX: -18 })
@@ -636,7 +597,6 @@ describe('collisions and v1.2 cumulative mechanical damage', () => {
 
     expect(Math.hypot(state.velocity.x, state.velocity.y)).toBeLessThan(2.5)
     expect(state.angle).toBeCloseTo(0, 6)
-    expect(state.handlingMode).toBe('normal')
   })
 
   it('pushes a car out of the outer barrier and reflects its velocity', () => {

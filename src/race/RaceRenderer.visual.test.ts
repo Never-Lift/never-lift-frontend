@@ -113,20 +113,17 @@ function createEngine(track: TrackDefinition, mode: 'solo' | 'local' = 'local') 
   return new RaceEngine({
     track,
     mode,
-    handlingMode: 'normal',
     racers: [
       {
         id: 'player-1',
         name: 'Player 1',
         kind: 'human',
-        profileId: 'formula',
         color: '#31c7ff',
       },
       {
         id: 'player-2',
         name: 'Player 2',
         kind: 'human',
-        profileId: 'drift',
         color: '#ff2e88',
       },
     ],

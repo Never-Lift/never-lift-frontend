@@ -40,7 +40,6 @@ function telemetry(
     name: 'Piloto 1',
     lap: 1,
     speedKph: 120,
-    handlingMode: 'normal',
     damage: 'none',
     health: 100,
     ...overrides,
@@ -48,16 +47,16 @@ function telemetry(
 }
 
 describe('DriverTelemetryCard', () => {
-  it('explains the race-wide handling mode and reserves Shift for boost', () => {
+  it('reserves Shift for boost without exposing a handling mode', () => {
     render(
       <DriverTelemetryCard
-        driver={telemetry({ handlingMode: 'drift' })}
+        driver={telemetry()}
         driverIndex={0}
         lapCount={1}
       />,
     )
 
-    expect(screen.getByText('Modo da corrida: Drift')).toBeInTheDocument()
+    expect(screen.queryByText(/Modo da corrida/)).not.toBeInTheDocument()
     expect(
       screen.getByText('Shift esquerdo: boost indisponível nesta prova'),
     ).toBeInTheDocument()
@@ -107,20 +106,17 @@ describe('RaceCanvas layout', () => {
     const engine = new RaceEngine({
       track: SHORT_TRACK,
       mode: 'local',
-      handlingMode: 'normal',
       racers: [
         {
           id: 'player-1',
           name: 'Piloto 1',
           kind: 'human',
-          profileId: 'formula',
           color: '#2d7dff',
         },
         {
           id: 'player-2',
           name: 'Piloto 2',
           kind: 'human',
-          profileId: 'drift',
           color: '#ff2e88',
         },
       ],

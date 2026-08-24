@@ -2,24 +2,15 @@ import { useEffect, useRef } from 'react'
 
 import { cn } from '@/lib/utils'
 import { PHYSICS_CONSTANTS } from '@/race/constants'
-import type { VehicleProfileId } from '@/race/types'
 import { drawVehicleVisual } from '@/race/vehicle-visuals'
 
-const VEHICLE_LABELS: Record<VehicleProfileId, string> = {
-  formula: 'Fórmula',
-  supercar: 'Supercarro',
-  drift: 'Drift',
-}
-
 export type VehiclePreviewProps = {
-  profileId: VehicleProfileId
   color: string
   className?: string
   label?: string
 }
 
 export function VehiclePreview({
-  profileId,
   color,
   className,
   label,
@@ -47,12 +38,11 @@ export function VehiclePreview({
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
       context.clearRect(0, 0, width, height)
 
-      const profile = PHYSICS_CONSTANTS.vehicleVisualProfiles[profileId]
+      const profile = PHYSICS_CONSTANTS.vehicleVisual
       const naturalRatio = profile.lengthMeters / profile.widthMeters
       const vehicleLength = Math.min(width * 0.72, height * 0.7 * naturalRatio)
 
       drawVehicleVisual(context, {
-        profileId,
         color,
         x: width * 0.5,
         y: height * 0.5,
@@ -75,7 +65,7 @@ export function VehiclePreview({
       resizeObserver?.disconnect()
       window.removeEventListener('resize', renderPreview)
     }
-  }, [color, profileId])
+  }, [color])
 
   return (
     <div
@@ -89,7 +79,7 @@ export function VehiclePreview({
         className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgb(138_157_180/0.12)_1px,transparent_1px),linear-gradient(90deg,rgb(138_157_180/0.12)_1px,transparent_1px)] [background-size:20px_20px]"
       />
       <canvas
-        aria-label={label ?? `Prévia do carro ${VEHICLE_LABELS[profileId]}`}
+        aria-label={label ?? 'Prévia do carro F1'}
         className="absolute inset-0 size-full"
         ref={canvasRef}
         role="img"

@@ -46,7 +46,6 @@ function cloneVehicle(vehicle: VehicleState): VehicleState {
 function createVehicle(
   setup: VehicleSetup,
   index: number,
-  handlingMode: RaceEngineOptions['handlingMode'],
   geometry: TrackGeometry,
 ): VehicleState {
   const gridSlot = geometry.definition.gridSlots[index]
@@ -56,7 +55,6 @@ function createVehicle(
 
   return {
     ...setup,
-    handlingMode,
     position,
     previousPosition: { ...position },
     velocity: { x: 0, y: 0 },
@@ -89,7 +87,6 @@ function createVehicle(
 export class RaceEngine {
   readonly track: RaceEngineOptions['track']
   readonly mode: RaceEngineOptions['mode']
-  readonly handlingMode: RaceEngineOptions['handlingMode']
   readonly lapCount: number
   readonly maximumRaceSeconds: number
 
@@ -108,12 +105,11 @@ export class RaceEngine {
     this.track = options.track
     this.geometry = new TrackGeometry(options.track)
     this.mode = options.mode
-    this.handlingMode = options.handlingMode
     this.lapCount = options.lapCount ?? 1
     this.maximumRaceSeconds =
       options.maximumRaceSeconds ?? Math.max(180, options.track.lengthMeters / 12)
     this.vehicles = options.racers.map((racer, index) =>
-      createVehicle(racer, index, this.handlingMode, this.geometry),
+      createVehicle(racer, index, this.geometry),
     )
     for (const vehicle of this.vehicles) {
       this.inputs.set(vehicle.id, { ...NEUTRAL_INPUT })
