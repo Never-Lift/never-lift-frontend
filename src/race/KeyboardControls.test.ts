@@ -9,7 +9,13 @@ afterEach(() => {
   controls = null
 })
 function key(type: 'keydown' | 'keyup', code: string) {
-  window.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true }))
+  const event = new KeyboardEvent(type, {
+    code,
+    bubbles: true,
+    cancelable: true,
+  })
+  window.dispatchEvent(event)
+  return event
 }
 
 describe('KeyboardControls', () => {
@@ -21,7 +27,6 @@ describe('KeyboardControls', () => {
     expect(controls.getPlayerOneInput('solo')).toMatchObject({
       throttle: 1,
       steer: -1,
-      nitro: false,
     })
   })
 
@@ -37,16 +42,25 @@ describe('KeyboardControls', () => {
     expect(controls.getPlayerTwoInput()).toMatchObject({
       throttle: 0,
       steer: 1,
-      nitro: false,
     })
   })
 
-  it('reserves each Shift key for the corresponding player nitro input', () => {
+  it('does not capture Shift or map it to a driving action', () => {
     controls = new KeyboardControls()
-    key('keydown', 'ShiftLeft')
-    key('keydown', 'ShiftRight')
+    const leftShift = key('keydown', 'ShiftLeft')
+    const rightShift = key('keydown', 'ShiftRight')
 
-    expect(controls.getPlayerOneInput('local').nitro).toBe(true)
-    expect(controls.getPlayerTwoInput().nitro).toBe(true)
+    expect(leftShift.defaultPrevented).toBe(false)
+    expect(rightShift.defaultPrevented).toBe(false)
+    expect(controls.getPlayerOneInput('local')).toEqual({
+      throttle: 0,
+      brake: 0,
+      steer: 0,
+    })
+    expect(controls.getPlayerTwoInput()).toEqual({
+      throttle: 0,
+      brake: 0,
+      steer: 0,
+    })
   })
 })

@@ -27,8 +27,9 @@ describe('raceApi', () => {
         index === 7 ? 'tracks/monaco.json' : `tracks/track-${index + 1}.json`,
     }))
     const catalog = {
-      schemaVersion: '1.3.0',
-      catalogVersion: '2026.5',
+      schemaVersion: '2.0.0',
+      catalogVersion: '2026.6',
+      physicsContractVersion: '2.0.0',
       seasonReference: 2026,
       calendarPolicy: 'original-24-round-freeze',
       tracks: catalogTracks,
@@ -61,6 +62,7 @@ describe('raceApi', () => {
           ...SHORT_TRACK,
           schemaVersion: '1.1.0',
           catalogVersion: '2026.2',
+          physicsContractVersion: '1.3.0',
           trackLimits: {
             runoffWidthMeters: 10,
             segments: [],
@@ -81,7 +83,8 @@ describe('raceApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const payload = {
       trackId: 'albert-park',
-      trackCatalogVersion: '2026.5',
+      trackCatalogVersion: '2026.6',
+      physicsContractVersion: '2.0.0',
       mode: 'local' as const,
       results: [
         {

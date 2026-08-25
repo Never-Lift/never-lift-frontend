@@ -48,7 +48,6 @@ export function DriverTelemetryCard({
   driverIndex,
   lapCount,
 }: DriverTelemetryCardProps) {
-  const shiftKey = driverIndex === 0 ? 'Shift esquerdo' : 'Shift direito'
   const health = Math.max(0, Math.min(100, Math.round(driver.health)))
 
   return (
@@ -105,9 +104,6 @@ export function DriverTelemetryCard({
             />
           </span>
         </div>
-        <p className="text-[10px] font-semibold text-muted-foreground">
-          {shiftKey}: boost indisponível nesta prova
-        </p>
       </div>
     </article>
   )

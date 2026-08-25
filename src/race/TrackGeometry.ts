@@ -1,4 +1,7 @@
 import type {
+  TrackBarrierGeometrySegment,
+  TrackBounds,
+  TrackChunk,
   TrackDefinition,
   TrackGate,
   TrackLimitSegment,
@@ -7,12 +10,39 @@ import type {
   TrackSideEnvironment,
   TrackSurfaceMaterial,
 } from '@/lib/api'
-import { clamp, lerp, normalize, subtract } from '@/race/math'
+import {
+  add,
+  clamp,
+  lerp,
+  normalize,
+  perpendicularLeft,
+  scale,
+  subtract,
+} from '@/race/math'
+import {
+  colliderBounds,
+  colliderBoundsIntersect,
+  findCompoundCollisionManifolds,
+  type ColliderBounds,
+  type CollisionManifold,
+} from '@/race/rigid-body-collision'
 import type { SurfaceId, Vector2 } from '@/race/types'
+import type { WorldConvexCollider } from '@/race/vehicle-geometry'
 
-export type BarrierContact = {
-  penetrationMeters: number
-  pushNormal: Vector2
+export type BarrierFaceSegment = {
+  id: string
+  barrierIndex: number
+  side: TrackSide
+  material: TrackBarrierGeometrySegment['material']
+  collisionLayer: 'track-barrier'
+  chunkIndexes: number[]
+  elevationLayer: number
+  fromDistanceMeters: number
+  toDistanceMeters: number
+  thicknessMeters: number
+  from: Vector2
+  to: Vector2
+  inwardNormal: Vector2
 }
 
 export type TrackProjection = {
@@ -36,9 +66,88 @@ export type TrackEnvironmentSample = {
 const LOCAL_PROJECTION_WINDOW_METERS = 40
 const LOCAL_PROJECTION_RECOVERY_MARGIN_METERS = 24
 const PROJECTION_DISTANCE_TOLERANCE_METERS = 0.5
+const BARRIER_BROADPHASE_CELL_METERS = 64
+
+type BarrierColliderRecord = {
+  face: BarrierFaceSegment
+  collider: WorldConvexCollider
+  bounds: ColliderBounds
+}
 
 export function trackSideEnvironmentWidth(environment: TrackSideEnvironment) {
   return environment.zones.reduce((sum, zone) => sum + zone.widthMeters, 0)
+}
+
+function boundsIntersect(first: TrackBounds, second: TrackBounds) {
+  return !(
+    first.maxX < second.minX ||
+    first.minX > second.maxX ||
+    first.maxY < second.minY ||
+    first.minY > second.maxY
+  )
+}
+
+function barrierSegmentNormal(side: TrackSide, from: Vector2, to: Vector2) {
+  const leftNormal = normalize(perpendicularLeft(subtract(to, from)))
+  return side === 'left' ? scale(leftNormal, -1) : leftNormal
+}
+
+/** Builds barrier thickness away from the track-facing canonical path. */
+export function barrierFaceSegmentCollider(
+  segment: BarrierFaceSegment,
+): WorldConvexCollider {
+  const outward = scale(segment.inwardNormal, -segment.thicknessMeters)
+  return {
+    id: segment.id,
+    collisionMaterial: segment.material,
+    vertices: [
+      segment.from,
+      add(segment.from, outward),
+      add(segment.to, outward),
+      segment.to,
+    ],
+  }
+}
+
+function buildBarrierFaceSegments(
+  barriers: readonly TrackBarrierGeometrySegment[],
+  chunks: readonly TrackChunk[],
+) {
+  const segments: BarrierFaceSegment[] = []
+  for (const barrier of barriers) {
+    for (let pathIndex = 0; pathIndex < barrier.path.length - 1; pathIndex += 1) {
+      const from = barrier.path[pathIndex]
+      const to = barrier.path[pathIndex + 1]
+      const inwardNormal = barrierSegmentNormal(barrier.side, from, to)
+      if (inwardNormal.x === 0 && inwardNormal.y === 0) continue
+      const localChunkIndexes = chunks
+        .filter(
+          (chunk) =>
+            chunk.toDistanceMeters >= from.distanceMeters &&
+            chunk.fromDistanceMeters <= to.distanceMeters,
+        )
+        .map((chunk) => chunk.index)
+      segments.push({
+        id: `barrier-${barrier.index}-${pathIndex}`,
+        barrierIndex: barrier.index,
+        side: barrier.side,
+        material: barrier.material,
+        collisionLayer: barrier.collisionLayer,
+        chunkIndexes:
+          localChunkIndexes.length > 0
+            ? localChunkIndexes
+            : barrier.chunkIndexes,
+        elevationLayer: from.elevationLayer,
+        fromDistanceMeters: from.distanceMeters,
+        toDistanceMeters: to.distanceMeters,
+        thicknessMeters: barrier.thicknessMeters,
+        from: { x: from.x, y: from.y },
+        to: { x: to.x, y: to.y },
+        inwardNormal,
+      })
+    }
+  }
+  return segments
 }
 
 function projectOntoSegment(
@@ -207,84 +316,191 @@ export function crossesGate(
 
 export class TrackGeometry {
   readonly definition: TrackDefinition
+  private readonly barrierFaces: readonly TrackBarrierGeometrySegment[]
+  private readonly explicitBarrierFaceSegments: BarrierFaceSegment[]
+  private readonly barrierColliderRecords: BarrierColliderRecord[]
+  private readonly barrierRecordsByCell = new Map<string, BarrierColliderRecord[]>()
+  private readonly expandedChunkBounds = new Map<number, TrackBounds>()
 
   constructor(definition: TrackDefinition) {
     if (definition.centerline.length < 2 || definition.racingLine.length < 2) {
       throw new Error('A definição da pista não possui geometria suficiente.')
     }
     this.definition = definition
+    this.barrierFaces = definition.barrierGeometry.segments
+    if (this.barrierFaces.length === 0) {
+      throw new Error('A definição v2 não possui faces canônicas de barreira.')
+    }
+    this.explicitBarrierFaceSegments = buildBarrierFaceSegments(
+      this.barrierFaces,
+      definition.chunks,
+    )
+    this.barrierColliderRecords = this.explicitBarrierFaceSegments.map(
+      (face) => {
+        const collider = barrierFaceSegmentCollider(face)
+        return { face, collider, bounds: colliderBounds(collider) }
+      },
+    )
+    for (const chunk of definition.chunks) {
+      this.expandedChunkBounds.set(chunk.index, { ...chunk.bounds })
+    }
+    for (const record of this.barrierColliderRecords) {
+      for (const chunkIndex of record.face.chunkIndexes) {
+        const chunkBounds = this.expandedChunkBounds.get(chunkIndex)
+        if (chunkBounds) {
+          chunkBounds.minX = Math.min(chunkBounds.minX, record.bounds.minX)
+          chunkBounds.minY = Math.min(chunkBounds.minY, record.bounds.minY)
+          chunkBounds.maxX = Math.max(chunkBounds.maxX, record.bounds.maxX)
+          chunkBounds.maxY = Math.max(chunkBounds.maxY, record.bounds.maxY)
+        }
+      }
+      const minimumCellX = Math.floor(
+        record.bounds.minX / BARRIER_BROADPHASE_CELL_METERS,
+      )
+      const maximumCellX = Math.floor(
+        record.bounds.maxX / BARRIER_BROADPHASE_CELL_METERS,
+      )
+      const minimumCellY = Math.floor(
+        record.bounds.minY / BARRIER_BROADPHASE_CELL_METERS,
+      )
+      const maximumCellY = Math.floor(
+        record.bounds.maxY / BARRIER_BROADPHASE_CELL_METERS,
+      )
+      for (let cellX = minimumCellX; cellX <= maximumCellX; cellX += 1) {
+        for (let cellY = minimumCellY; cellY <= maximumCellY; cellY += 1) {
+          const key = `${cellX}:${cellY}`
+          const bucket = this.barrierRecordsByCell.get(key) ?? []
+          bucket.push(record)
+          this.barrierRecordsByCell.set(key, bucket)
+        }
+      }
+    }
+  }
+
+  private centerlineSegmentIndexesNear(
+    preferredDistanceMeters: number,
+    windowMeters: number,
+  ) {
+    const path = this.definition.centerline
+    const length = this.definition.lengthMeters
+    const normalized = ((preferredDistanceMeters % length) + length) % length
+    const ranges: Array<{ from: number; to: number }> = []
+    const from = normalized - windowMeters
+    const to = normalized + windowMeters
+    if (from < 0) ranges.push({ from: length + from, to: length })
+    if (to > length) ranges.push({ from: 0, to: to - length })
+    ranges.push({ from: Math.max(0, from), to: Math.min(length, to) })
+
+    const indexes = new Set<number>()
+    for (const range of ranges) {
+      let low = 0
+      let high = path.length
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2)
+        if (path[middle].distanceMeters < range.from) low = middle + 1
+        else high = middle
+      }
+      for (
+        let index = Math.max(0, low - 1);
+        index < path.length - 1 &&
+        path[index].distanceMeters <= range.to;
+        index += 1
+      ) {
+        if (path[index + 1].distanceMeters >= range.from) indexes.add(index)
+      }
+    }
+    return [...indexes].sort((first, second) => first - second)
   }
 
   project(point: Vector2, preferredDistanceMeters?: number): TrackProjection {
-    let globalBest: ProjectionCandidate | null = null
-    let localBest: ProjectionCandidate | null = null
     const path = this.definition.centerline
     const localWindowMeters = Math.min(
       LOCAL_PROJECTION_WINDOW_METERS,
       this.definition.lengthMeters / 2,
     )
-    for (let index = 0; index < path.length - 1; index += 1) {
-      const from = path[index]
-      const to = path[index + 1]
-      const projected = projectOntoSegment(point, from, to)
-      const distanceMeters = lerp(
-        from.distanceMeters,
-        to.distanceMeters,
-        projected.alpha,
-      )
-      const preferredDifference =
-        preferredDistanceMeters === undefined
-          ? 0
-          : circularDistanceMeters(
-              distanceMeters,
-              preferredDistanceMeters,
-              this.definition.lengthMeters,
-            )
-      const candidate: ProjectionCandidate = {
-        point: projected.point,
-        distanceFromCenterMeters: projected.distance,
-        distanceMeters,
-        halfWidthMeters: lerp(
-          from.halfWidthMeters,
-          to.halfWidthMeters,
+    const projectIndexes = (
+      indexes: readonly number[],
+      maximumPreferredDifferenceMeters?: number,
+    ) => {
+      let best: ProjectionCandidate | null = null
+      for (const index of indexes) {
+        const from = path[index]
+        const to = path[index + 1]
+        const projected = projectOntoSegment(point, from, to)
+        const distanceMeters = lerp(
+          from.distanceMeters,
+          to.distanceMeters,
           projected.alpha,
-        ),
-        elevationLayer:
-          projected.alpha < 0.5
-            ? elevationLayerOf(from)
-            : elevationLayerOf(to),
-        preferredDifferenceMeters: preferredDifference,
+        )
+        const preferredDifference =
+          preferredDistanceMeters === undefined
+            ? 0
+            : circularDistanceMeters(
+                distanceMeters,
+                preferredDistanceMeters,
+                this.definition.lengthMeters,
+              )
+        const candidate: ProjectionCandidate = {
+          point: projected.point,
+          distanceFromCenterMeters: projected.distance,
+          distanceMeters,
+          halfWidthMeters: lerp(
+            from.halfWidthMeters,
+            to.halfWidthMeters,
+            projected.alpha,
+          ),
+          elevationLayer:
+            projected.alpha < 0.5
+              ? elevationLayerOf(from)
+              : elevationLayerOf(to),
+          preferredDifferenceMeters: preferredDifference,
+        }
+        if (
+          maximumPreferredDifferenceMeters !== undefined &&
+          preferredDifference > maximumPreferredDifferenceMeters
+        ) {
+          continue
+        }
+        if (isBetterProjection(candidate, best)) best = candidate
       }
-      if (isBetterProjection(candidate, globalBest)) globalBest = candidate
-      if (
-        preferredDistanceMeters !== undefined &&
-        preferredDifference <= localWindowMeters &&
-        isBetterProjection(candidate, localBest)
-      ) {
-        localBest = candidate
+      return best
+    }
+
+    if (preferredDistanceMeters !== undefined) {
+      const localBest = projectIndexes(
+        this.centerlineSegmentIndexesNear(
+          preferredDistanceMeters,
+          localWindowMeters,
+        ),
+        localWindowMeters,
+      )
+      if (localBest) {
+        const localSegment = this.getTrackLimitSegment(localBest.distanceMeters)
+        const maximumEnvironmentWidthMeters = Math.max(
+          trackSideEnvironmentWidth(localSegment.left),
+          trackSideEnvironmentWidth(localSegment.right),
+        )
+        const maximumPlausibleLocalDistanceMeters =
+          localBest.halfWidthMeters +
+          maximumEnvironmentWidthMeters +
+          LOCAL_PROJECTION_RECOVERY_MARGIN_METERS
+
+        if (
+          localBest.distanceFromCenterMeters <=
+          maximumPlausibleLocalDistanceMeters
+        ) {
+          return projectionWithoutRanking(localBest)
+        }
       }
     }
 
+    const globalBest = projectIndexes(
+      Array.from({ length: path.length - 1 }, (_, index) => index),
+    )
     if (!globalBest) {
       throw new Error('Não foi possível projetar a posição na pista.')
     }
-    if (!localBest) return projectionWithoutRanking(globalBest)
-
-    const localSegment = this.getTrackLimitSegment(localBest.distanceMeters)
-    const maximumEnvironmentWidthMeters = Math.max(
-      trackSideEnvironmentWidth(localSegment.left),
-      trackSideEnvironmentWidth(localSegment.right),
-    )
-    const maximumPlausibleLocalDistanceMeters =
-      localBest.halfWidthMeters +
-      maximumEnvironmentWidthMeters +
-      LOCAL_PROJECTION_RECOVERY_MARGIN_METERS
-
-    return projectionWithoutRanking(
-      localBest.distanceFromCenterMeters <= maximumPlausibleLocalDistanceMeters
-        ? localBest
-        : globalBest,
-    )
+    return projectionWithoutRanking(globalBest)
   }
 
   getElevationLayerAt(
@@ -304,11 +520,19 @@ export class TrackGeometry {
     ) {
       return this.definition.surfaceModel.pitLane
     }
-    const material = this.getEnvironmentAt(
-      point,
-      preferredDistanceMeters,
-    ).material
-    return material === 'asphalt' ? 'asphalt' : 'grass'
+    const projection = this.project(point, preferredDistanceMeters)
+    const environment = this.environmentForProjection(point, projection)
+    const curb = this.definition.curbs.find(
+      (candidate) =>
+        candidate.side === environment.side &&
+        projection.distanceMeters >= candidate.fromDistanceMeters &&
+        projection.distanceMeters <= candidate.toDistanceMeters &&
+        projection.distanceFromCenterMeters >=
+          projection.halfWidthMeters - candidate.widthMeters &&
+        projection.distanceFromCenterMeters <= projection.halfWidthMeters,
+    )
+    if (curb) return 'curb'
+    return environment.material
   }
 
   getEnvironmentAt(
@@ -316,6 +540,13 @@ export class TrackGeometry {
     preferredDistanceMeters?: number,
   ): TrackEnvironmentSample {
     const projection = this.project(point, preferredDistanceMeters)
+    return this.environmentForProjection(point, projection)
+  }
+
+  private environmentForProjection(
+    point: Vector2,
+    projection: TrackProjection,
+  ): TrackEnvironmentSample {
     const tangent = this.getCenterlineTangent(projection.distanceMeters)
     const relative = subtract(point, projection.point)
     const side: TrackSide =
@@ -361,35 +592,92 @@ export class TrackGeometry {
     return segment[side]
   }
 
-  getBarrierContacts(
-    point: Vector2,
-    vehicleRadius: number,
-    preferredDistanceMeters?: number,
-  ): BarrierContact[] {
-    const projection = this.project(point, preferredDistanceMeters)
-    const tangent = this.getCenterlineTangent(projection.distanceMeters)
-    const relative = subtract(point, projection.point)
-    const side =
-      tangent.x * relative.y - tangent.y * relative.x >= 0
-        ? 'left'
-        : 'right'
-    const environment = this.getTrackSideEnvironmentAt(
-      projection.distanceMeters,
-      side,
-    )
-    const penetrationMeters =
-      projection.distanceFromCenterMeters +
-      vehicleRadius -
-      projection.halfWidthMeters -
-      trackSideEnvironmentWidth(environment)
-    if (penetrationMeters <= 0) return []
+  getBarrierFaces(): readonly TrackBarrierGeometrySegment[] {
+    return this.barrierFaces
+  }
 
-    let pushNormal = normalize(subtract(projection.point, point))
-    if (pushNormal.x === 0 && pushNormal.y === 0) {
-      const tangent = this.getCenterlineTangent(projection.distanceMeters)
-      pushNormal = { x: -tangent.y, y: tangent.x }
+  getBarrierFaceSegments(bounds?: TrackBounds): BarrierFaceSegment[] {
+    return this.getBarrierRecords(bounds).map((record) => record.face)
+  }
+
+  getBarrierChunkIndexes(bounds: TrackBounds) {
+    return [...this.expandedChunkBounds.entries()]
+      .filter(([, chunkBounds]) => boundsIntersect(chunkBounds, bounds))
+      .map(([chunkIndex]) => chunkIndex)
+      .sort((first, second) => first - second)
+  }
+
+  private getBarrierRecords(bounds?: TrackBounds) {
+    if (!bounds) return this.barrierColliderRecords
+    const allowedChunks = new Set(this.getBarrierChunkIndexes(bounds))
+    const minimumCellX = Math.floor(
+      bounds.minX / BARRIER_BROADPHASE_CELL_METERS,
+    )
+    const maximumCellX = Math.floor(
+      bounds.maxX / BARRIER_BROADPHASE_CELL_METERS,
+    )
+    const minimumCellY = Math.floor(
+      bounds.minY / BARRIER_BROADPHASE_CELL_METERS,
+    )
+    const maximumCellY = Math.floor(
+      bounds.maxY / BARRIER_BROADPHASE_CELL_METERS,
+    )
+    const records = new Map<string, BarrierColliderRecord>()
+    for (let cellX = minimumCellX; cellX <= maximumCellX; cellX += 1) {
+      for (let cellY = minimumCellY; cellY <= maximumCellY; cellY += 1) {
+        for (const record of this.barrierRecordsByCell.get(`${cellX}:${cellY}`) ?? []) {
+          if (
+            record.face.chunkIndexes.some((index) => allowedChunks.has(index)) &&
+            colliderBoundsIntersect(record.bounds, bounds)
+          ) {
+            records.set(record.face.id, record)
+          }
+        }
+      }
     }
-    return [{ penetrationMeters, pushNormal }]
+    return [...records.values()].sort((first, second) =>
+      first.face.id.localeCompare(second.face.id),
+    )
+  }
+
+  getBarrierCollisionManifolds(
+    vehicleParts: readonly WorldConvexCollider[],
+    elevationLayer: number,
+    bounds?: TrackBounds,
+  ): CollisionManifold[] {
+    const resolvedBounds = bounds ?? {
+      minX: Math.min(
+        ...vehicleParts.flatMap((part) => part.vertices.map((point) => point.x)),
+      ),
+      minY: Math.min(
+        ...vehicleParts.flatMap((part) => part.vertices.map((point) => point.y)),
+      ),
+      maxX: Math.max(
+        ...vehicleParts.flatMap((part) => part.vertices.map((point) => point.x)),
+      ),
+      maxY: Math.max(
+        ...vehicleParts.flatMap((part) => part.vertices.map((point) => point.y)),
+      ),
+    }
+    return findCompoundCollisionManifolds(
+      vehicleParts,
+      this.getBarrierColliders(elevationLayer, resolvedBounds),
+    )
+  }
+
+  getBarrierColliders(
+    elevationLayer: number,
+    bounds?: TrackBounds,
+  ): WorldConvexCollider[] {
+    return this.getBarrierRecords(bounds)
+      .filter((record) => record.face.elevationLayer === elevationLayer)
+      .map((record) => record.collider)
+  }
+
+  getBarrierMaterial(colliderId: string) {
+    return this.barrierColliderRecords.find(
+      (record) => record.collider.id === colliderId,
+    )?.face.material
   }
 
   getRacingLinePoint(distanceMeters: number) {
@@ -414,15 +702,17 @@ export class TrackGeometry {
 
   getCenterlineTangent(distanceMeters: number) {
     const path = this.definition.centerline
-    let nearestIndex = 1
-    for (let index = 1; index < path.length; index += 1) {
-      if (path[index].distanceMeters >= distanceMeters) {
-        nearestIndex = index
-        break
-      }
+    const length = this.definition.lengthMeters
+    const normalizedDistance = ((distanceMeters % length) + length) % length
+    let low = 1
+    let high = path.length - 1
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2)
+      if (path[middle].distanceMeters < normalizedDistance) low = middle + 1
+      else high = middle
     }
-    const from: TrackPathPoint = path[Math.max(0, nearestIndex - 1)]
-    const to: TrackPathPoint = path[nearestIndex]
+    const from: TrackPathPoint = path[Math.max(0, low - 1)]
+    const to: TrackPathPoint = path[low]
     return normalize(subtract(to, from))
   }
 }

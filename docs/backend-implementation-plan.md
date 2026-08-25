@@ -31,7 +31,7 @@ O backend tem dois planos distintos:
 
 Cada sala ativa tem um **loop de simulação de passo fixo** (tick), independente da taxa de rede ou da taxa de frame de qualquer cliente — recomendo `30 ticks/segundo`, implementado com um `ScheduledExecutorService` (ou `@Scheduled` de instância por sala) dedicado, não atrelado às threads de request HTTP.
 
-**Risco arquitetural a documentar e vigiar:** como o backend é Java e o frontend é TypeScript, a física de predição do cliente (ver plano de frontend) e a física autoritativa do servidor são **duas implementações separadas da mesma fórmula**, em linguagens diferentes. Isso é uma fonte real de bugs sutis — se as constantes de atrito, arrasto, aceleração, esterço ou aderência divergirem entre os dois lados, o cliente vai prever errado e corrigir (reconciliar) o tempo todo, mesmo com rede perfeita. Recomendação: manter uma única "folha de constantes" documentada (pode ser um JSON versionado, lido por ambos os lados via geração de código ou só copiado manualmente com testes de regressão comparando saída do motor Java e do motor TS pros mesmos inputs) e tratar qualquer divergência como bug de prioridade alta, não como "gosto" de tuning.
+**Risco arquitetural a documentar e vigiar:** como o backend é Java e o frontend é TypeScript, a física de predição do cliente e a física autoritativa do servidor são **duas implementações separadas do mesmo modelo**, em linguagens diferentes. O contrato 2.0 precisa fixar equações, ordem de integração, precisão, estado dinâmico, constantes, ordenação de contatos e cenários esperados — uma folha de números sem fórmulas não basta. Divergência em pneus, aero, powertrain, controles, colisores ou solver causa reconciliação constante mesmo com rede perfeita e é bug de prioridade alta.
 
 **Unidades compartilhadas:** 1 unidade de mundo equivale a 1 metro. Posições, dimensões, limites, checkpoints e definições de pista usam um plano cartesiano com `+X` para a direita e `+Y` para cima; `angle` é expresso em radianos, no sentido anti-horário a partir de `+X`; velocidades usam metros por segundo. Pixels nunca entram no domínio do backend.
 
@@ -45,10 +45,10 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 
 | type | payload | quando |
 |---|---|---|
-| `join_room` | `{ roomCode, trackCatalogVersion }` | ao entrar numa sala; permite rejeitar geometria incompatível antes da corrida |
+| `join_room` | `{ roomCode, trackCatalogVersion, physicsContractVersion }` | ao entrar numa sala; rejeita geometria ou física incompatível antes da corrida |
 | `select_loadout` | `{ color }` | antes de ficar ready; o modelo é sempre F1 e a condução é fixa |
 | `ready` | `{}` | jogador confirma pronto |
-| `input` | `{ throttle, brake, steer, nitro, clientSeq, clientTimestamp }` | a cada mudança de input (não a cada frame) |
+| `input` | `{ throttle, brake, steer, clientSeq, clientTimestamp }` | a cada mudança de input (não a cada frame); boost/nitro não existe |
 
 **Importante:** o cliente nunca envia posição — só intenção (`input`). Isso é o que torna o servidor a única fonte de verdade.
 
@@ -56,16 +56,16 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 
 | type | payload | quando |
 |---|---|---|
-| `room_state` | `{ players[], hostId, settings, readyStates }`, com `settings.trackId` e `settings.trackCatalogVersion` | mudança no lobby |
+| `room_state` | `{ players[], hostId, settings, readyStates }`, com `settings.trackId`, `settings.trackCatalogVersion` e `settings.physicsContractVersion` | mudança no lobby |
 | `countdown` | `{ startAtServerTime }` | semáforo iniciando (feature 14) |
-| `state_snapshot` | `{ tick, serverTime, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, nitroRemaining, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
+| `state_snapshot` | `{ tick, serverTime, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining }, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
 | `race_event` | `{ type: collision \| checkpoint \| lap_complete \| finished \| false_start \| pit_enter \| pit_exit \| breakdown, ...dados específicos }` | evento discreto decidido pelo servidor |
 | `race_result` | `{ standings[] }` | fim de corrida |
 | `error` | `{ code, message }` | falha de validação |
 
 `state_snapshot` é usado pelo frontend pra reconciliação (carro do próprio jogador) e interpolação (carros dos outros) — ver plano de frontend, seção do Módulo 3.
 
-`x`/`y` estão em metros, `velocityX`/`velocityY` em metros por segundo e `speed` é a magnitude da velocidade. O vetor de velocidade é necessário para a câmera dinâmica, inclusive no modo espectador, sem confundir direção de movimento com o ângulo instantâneo da carroceria durante perda de aderência.
+`x`/`y` estão em metros, `velocityX`/`velocityY` em metros por segundo e `speed` é a magnitude da velocidade. Em `physicsState`, `yawRate` e velocidades angulares usam radianos por segundo; controles aplicados, esterço, rodas, marcha, RPM e transição de troca são estado autoritativo para reconciliação. O vetor de velocidade continua necessário para a câmera dinâmica sem confundir movimento com carroceria durante perda de aderência.
 
 ---
 
@@ -73,7 +73,7 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 
 - **User**: `id (UUID)`, `gamertag (unique, sem espaço)`, `displayName`, `passwordHash`, `avatarId`, `preferredLanguage`, `createdAt`
 - **Track**: dado semente (seed), não editável via API — `id`, `name`, `countryCode`, `lengthMeters`, `catalogVersion`, `pathDefinition`, `sceneryLayout`. Os dois últimos usam coordenadas métricas; 24 registros são carregados via migration.
-- **RaceResult**: `id`, `userId (nullable p/ bot)`, `trackId`, `mode (solo|local|online|championship)`, `position`, `totalTimeMs`, `bestLapTimeMs`, `finished`, `createdAt`
+- **RaceResult**: `id`, `userId (nullable p/ bot)`, `trackId`, `trackCatalogVersion`, `physicsContractVersion`, `mode (solo|local|online|championship)`, `position`, `totalTimeMs`, `bestLapTimeMs`, `finished`, `createdAt`
 - **Championship**: `id`, `name`, `trackOrder[]`, `pointsTable`, `status`, `createdAt`
 - **ChampionshipEntry**: `championshipId`, `userId`, `totalPoints`, `position`
 - **Friendship**: `requesterId`, `addresseeId`, `status (pending|accepted)`, `createdAt`
@@ -87,7 +87,7 @@ Recordes/estatísticas (feature 3 e 10) são **calculados via query** sobre `Rac
 
 Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem abaixo respeita dependências.
 
-**Regra válida pra todo módulo, sem exceção:** nenhum módulo é considerado pronto sem testes automatizados rigorosos — unitários pras regras de negócio (cálculo de pontos, resolução de colisão, decremento de nitro, etc.) e de integração pros endpoints/eventos WebSocket. Vale até pros módulos que parecem simples, tipo CRUD de amigos. O "Critério de pronto" de cada módulo abaixo é o mínimo funcional a validar manualmente; a suíte de testes automatizados é obrigatória em cima disso, não um substituto.
+**Regra válida pra todo módulo, sem exceção:** nenhum módulo é considerado pronto sem testes automatizados rigorosos — unitários pras regras de negócio (cálculo de pontos, cenários físicos, resolução de colisão, etc.) e de integração pros endpoints/eventos WebSocket. Vale até pros módulos que parecem simples, tipo CRUD de amigos. O "Critério de pronto" de cada módulo abaixo é o mínimo funcional a validar manualmente; a suíte de testes automatizados é obrigatória em cima disso, não um substituto.
 
 **Regra de design e fase:** decisões visuais pós-MVP não autorizam endpoints, entidades ou campos antes do módulo indicado. Exceções são somente contratos compartilhados indispensáveis ao motor, como unidades métricas, catálogo de pistas e vetor de velocidade.
 
@@ -112,50 +112,49 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
-**Contrato de entrada:** `contracts/module-2/v1/` contém o schema de pista `1.3.0`, catálogo `2026.5`, constantes físicas `1.3.0` e, no backend, as 24 definições métricas geradas de forma reproduzível. O schema inclui centerline suavizada com amostragem aproximada de 5 m, zebras segmentadas por distância/lado e cenários semânticos específicos por circuito. O Módulo 2 transforma esses dados canônicos em seed/migration e API; não redesenha circuitos durante a implementação.
+**Contrato de entrada atual:** `contracts/module-2/v1/` contém o schema de pista `1.3.0`, catálogo `2026.5`, constantes físicas `1.3.0` e as 24 definições métricas geradas de forma reproduzível. A Parte 2d aprovada criará `contracts/module-2/v2/`, schema de pista `2.0.0`, catálogo `2026.6` com faces canônicas de barreira e contrato físico `2.0.0`, conforme `docs/contracts/module-2-physics-v2-proposal.md`; o `v1` permanece imutável.
 **Simplificação implementada em 24/08/2026 (backend #72 / frontend #90):** o produto tem somente o F1 e uma configuração fixa de condução baseada nos valores do antigo perfil Normal. `carModel`, `handlingMode`/`driftMode`, os perfis Supercarro/Drift e as dimensões de recorde associadas foram removidos do contrato físico `1.3.0`, publicado de forma sincronizada nos dois repositórios.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
-**Nota:** o motor de física em si (solo/local) roda **inteiramente no frontend** neste módulo — ver plano de frontend, Módulo 2. O backend fornece o catálogo versionado de pistas e persiste o resultado no fim; não participa da simulação local.
+**Nota:** o motor de física solo/local roda **inteiramente no frontend**. Nesta revisão, o backend publica o catálogo v2, empacota o contrato físico idêntico e persiste a versão física; não simula a corrida local. O Java autoritativo só entra no Módulo 3 depois que os cenários TypeScript da Parte 2d estiverem congelados.
 **Endpoints:**
 - `GET /api/tracks` → catálogo público com `catalogVersion` e metadados dos 24 circuitos (`id`, `name`, `countryCode`, `lengthMeters`)
 - `GET /api/tracks/{id}` → definição métrica versionada (`pathDefinition`, `sceneryLayout`) usada pelo motor local e pelo minimapa
-- `POST /api/races/local-result` `{ trackId, trackCatalogVersion, mode: solo|local, results: [{ userIdOrNull, position, totalTimeMs, bestLapTimeMs, finished }] }`
-**Regras do catálogo:** `pathDefinition` precisa conter traçado fechado, limites dirigíveis, checkpoints, largada e pits em metros; `trackLimits` cobre continuamente a volta e, em cada lado, ordena zonas de asfalto, grama ou brita antes da barreira de impacto tipada e de uma grade externa opcional independente, sempre referenciadas por circuito; `sceneryLayout` usa o mesmo sistema de coordenadas. Comprimentos variados e ajustes aproximados de 10–20% são permitidos conforme o guia, mas frontend e backend precisam consumir a mesma `catalogVersion`.
+- `POST /api/races/local-result` `{ trackId, trackCatalogVersion, physicsContractVersion, mode: solo|local, results: [{ userIdOrNull, position, totalTimeMs, bestLapTimeMs, finished }] }`
+**Regras do catálogo:** `pathDefinition` precisa conter traçado fechado, limites dirigíveis, checkpoints, largada e pits em metros; `trackLimits` cobre continuamente a volta e, em cada lado, ordena zonas de asfalto, grama ou brita antes da barreira de impacto tipada e de uma grade externa opcional independente. No schema v2, cada barreira publica sua face tocável, espessura, material, camada e chunks; renderer e ambos os motores consomem essa mesma polilinha. Comprimentos variados e ajustes aproximados de 10–20% permanecem permitidos, mas clientes precisam coincidir em `catalogVersion` e `physicsContractVersion`.
 **Regra de identidade:** o backend deriva o usuário do JWT. O payload nunca pode atribuir um resultado a um `userId` arbitrário; guest e bot permanecem sem associação de conta.
-**Testes obrigatórios específicos:** validar os 24 registros, identidade/versão do catálogo, geometria fechada, ordem de checkpoints, comprimento coerente e rejeição de resultado com `trackId` inexistente ou versão incompatível.
+**Testes obrigatórios específicos:** validar os 24 registros, identidade/versões, geometria fechada, ordem de checkpoints, comprimento coerente, continuidade e face interna das barreiras; rejeitar resultado com pista, catálogo ou contrato físico incompatível.
 **Critério de pronto:** o catálogo permite carregar um circuito curto e um longo no frontend, e o resultado de uma corrida solo/local é persistido e consultável pela camada de repositório que será exposta pelo `race history` no Módulo 8. O endpoint público de histórico não é antecipado no Módulo 2.
 
 ### Módulo 3 — Motor autoritativo online (núcleo)
-**Depende de:** Módulo 1.
+**Depende de:** Módulos 1 e 2, com a Parte 2d do frontend validada e os cenários físicos v2 congelados.
 **Cobre features:** 4 (modos online — lobby, configuração de sala), 8, parte de 6 (física básica compartilhada), parte de 5 (colisão).
 **Este é o módulo de maior risco do projeto — é onde a lição sobre servidor autoritativo se aplica.**
 **Escopo:**
 - Sessão WebSocket por conexão (`/ws`), autenticada via JWT na query string ou header de handshake.
 - `RoomManager`: cria/lista salas, no máximo 4 jogadores+bots por sala, atribui `hostId`.
-- `RaceEngine` por sala: física nova, escrita do zero em Java — o protótipo entra só como referência de sensação/comportamento esperado, não como código a converter (isso é um jogo novo, não uma versão do antigo). Cobre aceleração, atrito — incluindo atrito maior fora da pista (grama: carro fica mais liso e mais lento, feature 5) — e colisão com uma única configuração de condução, igual para todos. Todo participante usa o mesmo perfil mecânico e o mesmo modelo F1. Roda a `30 ticks/segundo` num `ScheduledExecutorService` próprio, lendo o último `input` recebido de cada jogador (não esperando por ele a cada tick).
-- O motor usa exclusivamente metros, segundos e radianos conforme a convenção compartilhada; cada carro mantém vetor de velocidade para snapshots, perda de aderência e reconciliação.
-- A sala fixa `trackId` e `trackCatalogVersion` antes da largada e rejeita cliente com catálogo incompatível em vez de simular geometrias diferentes.
-- Resolução de colisão **uma vez, no servidor**, usando o estado real de todos os carros da sala — não a aproximação que existia no protótipo. A colisão também classifica e aplica o dano mecânico cumulativo do contrato v1.3 para manter a predição do frontend convergente.
+- `RaceEngine` por sala escrito do zero em Java, reproduzindo o contrato físico 2.0 e os vetores congelados do TypeScript: corpo rígido 2D, modelo de bicicleta dinâmico, pneus não lineares/combined slip, transferência de carga, drag/downforce, tração traseira, câmbio automático, patinagem e travamento. Todo participante usa o mesmo F1 e nenhuma dificuldade recebe física privilegiada.
+- O loop externo roda a `30 ticks/segundo` e executa a quantidade de subpassos fixada pelo contrato v2 (`1/60s` ou `1/120s` após benchmark), lendo o último input normalizado de cada jogador. Estado inclui vetor de velocidade, yaw, esterço e câmbio para snapshots e reconciliação.
+- A sala fixa `trackId`, `trackCatalogVersion` e `physicsContractVersion` antes da largada e rejeita incompatibilidade em vez de simular motores ou geometrias diferentes.
+- Colisão é resolvida somente no servidor com colliders convexos compostos, faces canônicas de barreira, broadphase, CCD, manifold, impulso no ponto de contato, torque e solver iterativo determinístico. Dano cumulativo usa impulso/energia ou `delta-v` do contato.
 - Broadcast de `state_snapshot` a cada ~50ms (20/s) pra todos da sala.
-**Critério de pronto:** dois clientes de teste (podem ser scripts, não precisa ser a UI final) conectados na mesma sala veem exatamente a mesma colisão acontecer no mesmo lugar — esse é o teste que valida que o bug original foi resolvido.
+**Critério de pronto:** o Java reproduz todos os cenários físicos TypeScript dentro das tolerâncias; dois clientes compatíveis convergem em trajetória, perda de aderência e colisões; um cliente com versão incompatível é recusado; contatos no bico, roda ou muro não atravessam, enroscam nem acontecem antes da geometria visível.
 
 ### Módulo 4 — Ambiente e modo caos
 **Depende de:** Módulo 3.
 **Cobre features:** 4 (dia/noite, chuva/sol, modo caos), 16, 21 (estado, não o desenho do cone de luz — isso é frontend).
-**Escopo:** `RoomSettings` estendido com `timeOfDay`, `weather` e `chaosMode`; não existe `driftMode` nem outro campo de condução. Quando `chaosMode` ativo, servidor sorteia direção do vento, até 3 poças de óleo e 3 caixas por corrida (autoritativo — se o cliente sorteasse, cada tela veria obstáculos em posições diferentes, mesmo bug de novo); chuva aplica multiplicador de derrapagem na física do Módulo 3; vento aplica força lateral constante por corrida.
+**Escopo:** `RoomSettings` estendido com `timeOfDay`, `weather` e `chaosMode`; não existe `driftMode` nem outro campo de condução. Quando `chaosMode` ativo, servidor sorteia direção do vento, até 3 poças de óleo e 3 caixas por corrida; chuva e piso molhado modulam os parâmetros de pneu/superfície do contrato v2, sem um segundo integrador, e vento aplica força lateral autoritativa por corrida.
 **Critério de pronto:** ativar modo caos bloqueia os outros campos de configuração na resposta de `room_state` (`settingsLocked: true`) e todo cliente recebe os mesmos obstáculos.
 
-### Módulo 5 — Corrida completa (dano, nitro, vácuo, fantasma, pits)
+### Módulo 5 — Corrida completa (dano, vácuo, fantasma, pits)
 **Depende de:** Módulo 3.
-**Cobre features:** 5, 6, 7, 15, 19, 24 (estado, alerta visual é frontend).
+**Cobre features:** 5, 6, 7, 15, 24 (estado, alerta visual é frontend).
 **Escopo:**
-- `damageState` por carro: `{ health, engineDamaged, steeringDamaged, steeringPull, totalLoss }`, cumulativo e calculado pela intensidade do impacto no `RaceEngine`: fraco afeta direção, médio afeta motor, alto combina ambos e crítico causa perda total; colisões menores repetidas também zeram a vida. Dano de motor aplica penalidade moderada e dano de direção gera leve desvio persistente sem reduzir a autoridade de esterço. Este módulo acrescenta a integração completa com pits, eventos, resultado e demais regras de corrida.
-- `nitroRemaining`: orçamento total calculado como `f(número de voltas)` na criação da sala, decrementa com uso, não recarrega.
-- Vácuo: redução leve de arrasto quando um carro está atrás e próximo de outro, calculado no tick da física.
+- `damageState` por carro: `{ health, engineDamaged, steeringDamaged, steeringPull, totalLoss }`, cumulativo e calculado pelo impulso/energia ou `delta-v` do contato no `RaceEngine`: fraco afeta direção, médio afeta motor, alto combina ambos e crítico causa perda total; colisões menores repetidas também zeram a vida. Este módulo acrescenta a integração completa com pits, eventos, resultado e demais regras de corrida.
+- Vácuo: redução moderada de arrasto no modelo aerodinâmico v2 quando um carro está atrás e próximo de outro, calculada no tick da física; não existe boost/nitro ou força extra independente.
 - Ao cruzar a linha, carro vira `isGhost: true`; regra de colisão do Módulo 3 passa a ignorar par (ghost, não-ghost) e (não-ghost, não-ghost-diferente-de-ghost) — só `(ghost, ghost)` e `(normal, normal)` colidem.
 - `pit_enter`/`pit_exit`: ao sobrepor a zona de pit com vida abaixo do máximo ou alguma falha mecânica, servidor assume o carro por 2s (ignora `input` do jogador), restaura vida e dano, e emite os dois eventos.
 - Loadout: somente `color` é selecionada antes do `ready` e validada no `select_loadout` do Módulo 3. O modelo é sempre F1 e nunca é enviado pelo cliente.
-**Critério de pronto:** simular uma batida forte reduz velocidade máxima do carro pro resto da corrida; usar todo o nitro numa volta o deixa indisponível nas seguintes; carro com perda total fica parado até o fim.
+**Critério de pronto:** uma batida forte aplica dano persistente coerente com o impulso, vácuo reduz somente o arrasto nas condições válidas, reparo em pits restaura os estados previstos e carro com perda total fica parado até o fim.
 
 ### Módulo 6 — Campeonatos
 **Depende de:** Módulo 3, Módulo 5.
@@ -184,11 +183,13 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Depende de:** Módulo 6.
 **Cobre features:** 3 (estatísticas), 10, 26.
 **Endpoints:**
-- `GET /api/account/me/stats` (vitórias, derrotas, campeonatos vencidos, recorde por circuito)
-- `GET /api/account/me/history` (paginado)
-- `GET /api/records/global` (top vitórias, melhores tempos por circuito — só dado de campeonato, conforme regra do Módulo 6)
+- `GET /api/account/me/stats?physicsContractVersion={version}` (vitórias, derrotas, campeonatos vencidos e recorde por circuito na versão física selecionada; a resposta devolve `physicsContractVersion`)
+- `GET /api/account/me/history` (paginado; cada resultado devolve sua `physicsContractVersion`)
+- `GET /api/records/global?physicsContractVersion={version}` (top vitórias e melhores tempos por circuito — só dado de campeonato, conforme regra do Módulo 6; a resposta devolve `physicsContractVersion`)
 
-**Critério de pronto:** ganhar um campeonato de teste muda o "campeonatos vencidos" da conta e aparece no ranking global na consulta seguinte.
+**Regra de versionamento:** tempos produzidos por contratos físicos incompatíveis nunca são comparados nem misturados no mesmo recorde/ranking. O backend exige uma versão suportada nos filtros de tempo, segmenta consultas e índices por `physicsContractVersion` e conserva resultados antigos apenas como histórico identificado.
+
+**Critério de pronto:** ganhar um campeonato de teste muda o "campeonatos vencidos" da conta e aparece no ranking global na consulta seguinte, enquanto tempos idênticos registrados sob duas versões físicas permanecem em classificações separadas.
 
 ### Módulo 9 — Polimento
 **Depende de:** todos os anteriores.

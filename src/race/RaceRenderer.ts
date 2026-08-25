@@ -21,7 +21,7 @@ import {
 } from '@/race/camera'
 import { PHYSICS_CONSTANTS } from '@/race/constants'
 import type { LocalRaceOverlayState } from '@/race/LocalRaceSession'
-import { dot, magnitude } from '@/race/math'
+import { magnitude } from '@/race/math'
 import type { RaceEngine } from '@/race/RaceEngine'
 import {
   drawSceneryVisual,
@@ -729,18 +729,89 @@ export class RaceRenderer {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) {
-    for (const side of ['left', 'right'] as const) {
-      for (let index = 0; index < points.length - 1; index += 1) {
-        const from = points[index]
-        const to = points[index + 1]
-        const { fromPoint, toPoint, style } = this.getBarrierSegment(
+    const visibleFromDistance = points[0]?.distanceMeters ?? 0
+    const visibleToDistance = points.at(-1)?.distanceMeters ?? 0
+    const visibleElevationLayer = points[0]?.elevationLayer ?? 0
+    for (const barrier of this.track.barrierGeometry.segments) {
+      if (
+        barrier.toDistanceMeters < visibleFromDistance ||
+        barrier.fromDistanceMeters > visibleToDistance
+      ) {
+        continue
+      }
+      const style = BARRIER_STYLES[barrier.material]
+      for (let index = 0; index < barrier.path.length - 1; index += 1) {
+        const from = barrier.path[index]
+        const to = barrier.path[index + 1]
+        if (
+          from.elevationLayer !== visibleElevationLayer ||
+          to.distanceMeters < visibleFromDistance ||
+          from.distanceMeters > visibleToDistance
+        ) {
+          continue
+        }
+        this.drawCanonicalBarrierSegment(
           from,
           to,
-          side,
+          barrier.side,
+          barrier.thicknessMeters,
+          style,
+          transform,
         )
-        this.drawStyledBoundary(fromPoint, toPoint, style, transform)
       }
     }
+  }
+
+  private drawCanonicalBarrierSegment(
+    fromPoint: TrackDefinition['barrierGeometry']['segments'][number]['path'][number],
+    toPoint: TrackDefinition['barrierGeometry']['segments'][number]['path'][number],
+    side: 'left' | 'right',
+    thicknessMeters: number,
+    style: { color: string; widthMeters: number; dashMeters?: number[] },
+    transform: CameraTransform,
+  ) {
+    const deltaX = toPoint.x - fromPoint.x
+    const deltaY = toPoint.y - fromPoint.y
+    const length = Math.hypot(deltaX, deltaY)
+    if (length <= Number.EPSILON) return
+    const sideDirection = side === 'left' ? 1 : -1
+    const outwardNormal = {
+      x: (-deltaY / length) * sideDirection,
+      y: (deltaX / length) * sideDirection,
+    }
+    const outwardPoint = (
+      point: TrackDefinition['barrierGeometry']['segments'][number]['path'][number],
+    ) => ({
+      x: point.x + outwardNormal.x * thicknessMeters,
+      y: point.y + outwardNormal.y * thicknessMeters,
+    })
+    const outerFrom = outwardPoint(fromPoint)
+    const outerTo = outwardPoint(toPoint)
+    const polygon = [fromPoint, toPoint, outerTo, outerFrom].map((point) =>
+      worldToCamera(point, transform),
+    )
+
+    this.context.beginPath()
+    this.context.moveTo(polygon[0].x, polygon[0].y)
+    for (const point of polygon.slice(1)) this.context.lineTo(point.x, point.y)
+    this.context.closePath()
+    this.context.fillStyle = style.color
+    this.context.fill()
+
+    const middleFrom = {
+      x: (fromPoint.x + outerFrom.x) / 2,
+      y: (fromPoint.y + outerFrom.y) / 2,
+    }
+    const middleTo = {
+      x: (toPoint.x + outerTo.x) / 2,
+      y: (toPoint.y + outerTo.y) / 2,
+    }
+    this.drawStyledBoundary(
+      middleFrom,
+      middleTo,
+      { ...style, widthMeters: thicknessMeters },
+      transform,
+    )
   }
 
   private drawTrackFences(
@@ -786,37 +857,6 @@ export class RaceRenderer {
       FENCE_GAP_METERS +
       FENCE_STYLE.widthMeters / 2
     )
-  }
-
-  private getBarrierSegment(
-    from: TrackDefinition['centerline'][number],
-    to: TrackDefinition['centerline'][number],
-    side: 'left' | 'right',
-  ) {
-    const fromEnvironment = this.geometry.getTrackSideEnvironmentAt(
-      from.distanceMeters,
-      side,
-    )
-    const toEnvironment = this.geometry.getTrackSideEnvironmentAt(
-      to.distanceMeters,
-      side,
-    )
-    const styleEnvironment = this.geometry.getTrackSideEnvironmentAt(
-      (from.distanceMeters + to.distanceMeters) / 2,
-      side,
-    )
-    const style = BARRIER_STYLES[styleEnvironment.barrier]
-    const fromPoint = this.offsetTrackPoint(
-      from,
-      side,
-      from.halfWidthMeters + trackSideEnvironmentWidth(fromEnvironment),
-    )
-    const toPoint = this.offsetTrackPoint(
-      to,
-      side,
-      to.halfWidthMeters + trackSideEnvironmentWidth(toEnvironment),
-    )
-    return { fromPoint, toPoint, style }
   }
 
   private drawStyledBoundary(
@@ -1423,13 +1463,10 @@ export class RaceRenderer {
   private collectTireMarks(vehicles: InterpolatedVehicleState[]) {
     if (this.frameCount % 3 !== 0) return
     for (const vehicle of vehicles) {
-      const right = {
-        x: -Math.sin(vehicle.renderAngle),
-        y: Math.cos(vehicle.renderAngle),
-      }
-      const lateralSpeed = Math.abs(dot(vehicle.velocity, right))
       const speed = magnitude(vehicle.velocity)
-      if (speed < 8 || lateralSpeed < 3.5) {
+      const rearSlipAngle = Math.abs(vehicle.physicsState.rearSlipAngle)
+      const saturatedRearTires = vehicle.physicsState.rearGripUtilization >= 0.96
+      if (speed < 8 || (!saturatedRearTires && rearSlipAngle < 0.12)) {
         continue
       }
 

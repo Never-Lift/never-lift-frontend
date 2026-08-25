@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://never-lift.local/contracts/module-2/v2/vehicle-definition.schema.json",
+  "title": "Never Lift F1 Vehicle Definition v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "version", "coordinateSystem", "dimensions", "massProperties", "collisionShapes", "visualToleranceMeters"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": "2.0.0" },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "longitudinalAxis", "lateralAxis", "angleDirection"],
+      "properties": {
+        "origin": { "const": "center-of-mass" },
+        "longitudinalAxis": { "const": "+x-forward" },
+        "lateralAxis": { "const": "+y-left" },
+        "angleDirection": { "const": "counterclockwise" }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lengthMeters", "widthMeters", "wheelbaseMeters", "frontAxleX", "rearAxleX"],
+      "properties": {
+        "lengthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "widthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "wheelbaseMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "frontAxleX": { "type": "number", "exclusiveMinimum": 0 },
+        "rearAxleX": { "type": "number", "exclusiveMaximum": 0 }
+      }
+    },
+    "massProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["massKg", "yawInertiaKgM2"],
+      "properties": {
+        "massKg": { "type": "number", "exclusiveMinimum": 0 },
+        "yawInertiaKgM2": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "collisionShapes": {
+      "type": "array",
+      "minItems": 5,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/convexPolygon" }
+    },
+    "visualToleranceMeters": { "type": "number", "minimum": 0.02, "maximum": 0.05 }
+  },
+  "$defs": {
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "convexPolygon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "material", "vertices"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "material": { "enum": ["carbon-body", "front-wing", "rear-wing", "tyre"] },
+        "vertices": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/vector" }
+        }
+      }
+    }
+  }
+}
+

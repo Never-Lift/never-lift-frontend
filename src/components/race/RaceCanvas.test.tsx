@@ -47,7 +47,7 @@ function telemetry(
 }
 
 describe('DriverTelemetryCard', () => {
-  it('reserves Shift for boost without exposing a handling mode', () => {
+  it('does not expose removed driving modes or boost controls', () => {
     render(
       <DriverTelemetryCard
         driver={telemetry()}
@@ -57,9 +57,7 @@ describe('DriverTelemetryCard', () => {
     )
 
     expect(screen.queryByText(/Modo da corrida/)).not.toBeInTheDocument()
-    expect(
-      screen.getByText('Shift esquerdo: boost indisponível nesta prova'),
-    ).toBeInTheDocument()
+    expect(screen.queryByText(/boost|nitro|shift/i)).not.toBeInTheDocument()
   })
 
   it.each([
@@ -77,9 +75,7 @@ describe('DriverTelemetryCard', () => {
     )
 
     expect(screen.getByText(label)).toBeInTheDocument()
-    expect(
-      screen.getByText('Shift direito: boost indisponível nesta prova'),
-    ).toBeInTheDocument()
+    expect(screen.queryByText(/boost|nitro|shift/i)).not.toBeInTheDocument()
   })
 
   it('shows cumulative vehicle health as an accessible bar', () => {

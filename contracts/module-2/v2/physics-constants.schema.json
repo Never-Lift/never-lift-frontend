@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://never-lift.local/contracts/module-2/v2/physics-constants.schema.json",
+  "title": "Never Lift Physics Constants v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "calibrationStatus",
+    "units",
+    "simulation",
+    "environment",
+    "vehicle",
+    "controls",
+    "powertrain",
+    "tires",
+    "surfaces",
+    "collision",
+    "damage",
+    "race",
+    "bots"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": "2.0.0" },
+    "calibrationStatus": { "enum": ["initial", "validated"] },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["distance", "time", "angle", "mass", "force", "power"],
+      "properties": {
+        "distance": { "const": "meter" },
+        "time": { "const": "second" },
+        "angle": { "const": "radian" },
+        "mass": { "const": "kilogram" },
+        "force": { "const": "newton" },
+        "power": { "const": "watt" }
+      }
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["physicsStepSeconds", "serverTickSeconds", "serverPhysicsSubstepsPerTick", "maxFrameCatchUpSeconds", "maxSubstepsPerFrame", "numericSpeedEpsilonMetersPerSecond"],
+      "properties": {
+        "physicsStepSeconds": { "const": 0.008333333333333333 },
+        "serverTickSeconds": { "const": 0.03333333333333333 },
+        "serverPhysicsSubstepsPerTick": { "const": 4 },
+        "maxFrameCatchUpSeconds": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "maxSubstepsPerFrame": { "type": "integer", "minimum": 1, "maximum": 60 },
+        "numericSpeedEpsilonMetersPerSecond": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.001 }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gravityMetersPerSecondSquared", "airDensityKgPerCubicMeter"],
+      "properties": {
+        "gravityMetersPerSecondSquared": { "type": "number", "exclusiveMinimum": 0 },
+        "airDensityKgPerCubicMeter": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "vehicle": { "$ref": "#/$defs/vehicle" },
+    "controls": { "$ref": "#/$defs/controls" },
+    "powertrain": { "$ref": "#/$defs/powertrain" },
+    "tires": { "$ref": "#/$defs/tires" },
+    "surfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asphalt", "curb", "grass", "gravel", "pit-lane"],
+      "properties": {
+        "asphalt": { "$ref": "#/$defs/surface" },
+        "curb": { "$ref": "#/$defs/surface" },
+        "grass": { "$ref": "#/$defs/surface" },
+        "gravel": { "$ref": "#/$defs/surface" },
+        "pit-lane": { "$ref": "#/$defs/surface" }
+      }
+    },
+    "collision": { "$ref": "#/$defs/collision" },
+    "damage": { "$ref": "#/$defs/damage" },
+    "race": { "$ref": "#/$defs/race" },
+    "bots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["easy", "normal", "hard"],
+      "properties": {
+        "easy": { "$ref": "#/$defs/bot" },
+        "normal": { "$ref": "#/$defs/bot" },
+        "hard": { "$ref": "#/$defs/bot" }
+      }
+    }
+  },
+  "$defs": {
+    "vehicle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["massKg", "lengthMeters", "widthMeters", "wheelbaseMeters", "frontAxleDistanceFromComMeters", "rearAxleDistanceFromComMeters", "centerOfMassHeightMeters", "yawInertiaKgM2", "wheelRadiusMeters", "dragAreaM2", "liftAreaM2", "aeroBalanceFront", "rollingResistanceCoefficient", "maxSteeringAngleRadians"],
+      "properties": {
+        "massKg": { "type": "number", "minimum": 700, "maximum": 900 },
+        "lengthMeters": { "type": "number", "minimum": 4.5, "maximum": 6 },
+        "widthMeters": { "type": "number", "minimum": 1.5, "maximum": 2.1 },
+        "wheelbaseMeters": { "type": "number", "minimum": 2.5, "maximum": 3.4 },
+        "frontAxleDistanceFromComMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "rearAxleDistanceFromComMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "centerOfMassHeightMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "yawInertiaKgM2": { "type": "number", "exclusiveMinimum": 0 },
+        "wheelRadiusMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "dragAreaM2": { "type": "number", "exclusiveMinimum": 0 },
+        "liftAreaM2": { "type": "number", "exclusiveMinimum": 0 },
+        "aeroBalanceFront": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+        "rollingResistanceCoefficient": { "type": "number", "minimum": 0, "maximum": 0.1 },
+        "maxSteeringAngleRadians": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["throttleRisePerSecond", "throttleFallPerSecond", "brakeRisePerSecond", "brakeFallPerSecond", "steeringActuationRadiansPerSecond", "steeringReturnRadiansPerSecond"],
+      "properties": {
+        "throttleRisePerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "throttleFallPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "brakeRisePerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "brakeFallPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "steeringActuationRadiansPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "steeringReturnRadiansPerSecond": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "powertrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idleRpm", "downshiftRpm", "upshiftRpm", "automaticUpshiftWheelSlipAllowance", "redlineRpm", "maxTorqueNm", "maxPowerWatts", "finalDriveRatio", "gearRatios", "reverseGearRatio", "reverseEngageSpeedMetersPerSecond", "reverseInputThreshold", "drivetrainEfficiency", "shiftDurationSeconds", "maximumBrakeForceNewtons", "frontBrakeBias", "frontWheelAssemblyMassKg", "rearWheelAssemblyMassKg", "wheelAssemblyInertiaFactor", "rearDrivelineRotationalInertiaKgM2", "frontAxleRotationalInertiaKgM2", "rearAxleRotationalInertiaKgM2"],
+      "properties": {
+        "idleRpm": { "type": "number", "exclusiveMinimum": 0 },
+        "downshiftRpm": { "type": "number", "exclusiveMinimum": 0 },
+        "upshiftRpm": { "type": "number", "exclusiveMinimum": 0 },
+        "automaticUpshiftWheelSlipAllowance": { "type": "number", "minimum": 0, "maximum": 0.25 },
+        "redlineRpm": { "type": "number", "exclusiveMinimum": 0 },
+        "maxTorqueNm": { "type": "number", "exclusiveMinimum": 0 },
+        "maxPowerWatts": { "type": "number", "exclusiveMinimum": 0 },
+        "finalDriveRatio": { "type": "number", "exclusiveMinimum": 0 },
+        "gearRatios": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        "reverseGearRatio": { "type": "number", "exclusiveMinimum": 0 },
+        "reverseEngageSpeedMetersPerSecond": { "type": "number", "minimum": 0 },
+        "reverseInputThreshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "drivetrainEfficiency": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "shiftDurationSeconds": { "type": "number", "minimum": 0 },
+        "maximumBrakeForceNewtons": { "type": "number", "exclusiveMinimum": 0 },
+        "frontBrakeBias": { "type": "number", "exclusiveMinimum": 0.5, "exclusiveMaximum": 1 },
+        "frontWheelAssemblyMassKg": { "type": "number", "exclusiveMinimum": 0 },
+        "rearWheelAssemblyMassKg": { "type": "number", "exclusiveMinimum": 0 },
+        "wheelAssemblyInertiaFactor": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "rearDrivelineRotationalInertiaKgM2": { "type": "number", "minimum": 0 },
+        "frontAxleRotationalInertiaKgM2": { "type": "number", "exclusiveMinimum": 0 },
+        "rearAxleRotationalInertiaKgM2": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "tires": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["referenceFrictionCoefficient", "loadSensitivityExponent", "frontCorneringStiffnessNPerRadian", "rearCorneringStiffnessNPerRadian", "longitudinalStiffnessNPerSlip", "minimumSlipSpeedMetersPerSecond"],
+      "properties": {
+        "referenceFrictionCoefficient": { "type": "number", "exclusiveMinimum": 0 },
+        "loadSensitivityExponent": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "frontCorneringStiffnessNPerRadian": { "type": "number", "exclusiveMinimum": 0 },
+        "rearCorneringStiffnessNPerRadian": { "type": "number", "exclusiveMinimum": 0 },
+        "longitudinalStiffnessNPerSlip": { "type": "number", "exclusiveMinimum": 0 },
+        "minimumSlipSpeedMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gripMultiplier", "corneringMultiplier", "rollingResistanceMultiplier", "roughnessDragNewtonSecondsPerMeter"],
+      "properties": {
+        "gripMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 2 },
+        "corneringMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 2 },
+        "rollingResistanceMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 30 },
+        "roughnessDragNewtonSecondsPerMeter": { "type": "number", "minimum": 0, "maximum": 500 }
+      }
+    },
+    "collision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["solverIterations", "ccdMinimumSpeedMetersPerSecond", "maximumCcdEventsPerStep", "geometryEpsilon", "contactMergeDistanceMeters", "manifoldNormalMergeCosine", "carRestitution", "carTangentialFriction", "barrierMaterials", "positionCorrectionPercent", "penetrationSlopMeters", "maximumContactPoints"],
+      "properties": {
+        "solverIterations": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "ccdMinimumSpeedMetersPerSecond": { "type": "number", "minimum": 0 },
+        "maximumCcdEventsPerStep": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "geometryEpsilon": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.000001 },
+        "contactMergeDistanceMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.01 },
+        "manifoldNormalMergeCosine": { "type": "number", "minimum": -1, "maximum": 1 },
+        "carRestitution": { "type": "number", "minimum": 0, "maximum": 1 },
+        "carTangentialFriction": { "type": "number", "minimum": 0, "maximum": 2 },
+        "barrierMaterials": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["concrete-wall", "guardrail", "tecpro", "tyre-barrier"],
+          "properties": {
+            "concrete-wall": { "$ref": "#/$defs/barrierMaterial" },
+            "guardrail": { "$ref": "#/$defs/barrierMaterial" },
+            "tecpro": { "$ref": "#/$defs/barrierMaterial" },
+            "tyre-barrier": { "$ref": "#/$defs/barrierMaterial" }
+          }
+        },
+        "positionCorrectionPercent": { "type": "number", "minimum": 0, "maximum": 1 },
+        "penetrationSlopMeters": { "type": "number", "minimum": 0, "maximum": 0.1 },
+        "maximumContactPoints": { "type": "integer", "minimum": 1, "maximum": 8 }
+      }
+    },
+    "damage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimumDeltaVMetersPerSecond", "mediumDeltaVMetersPerSecond", "combinedDeltaVMetersPerSecond", "totalLossDeltaVMetersPerSecond", "maximumHealth", "healthDamagePerDeltaV", "engineTorqueMultiplier", "enginePowerMultiplier", "steeringPullStrength", "totalLossDragMultiplier", "totalLossLinearDragNewtonSecondsPerMeter"],
+      "properties": {
+        "minimumDeltaVMetersPerSecond": { "type": "number", "minimum": 0 },
+        "mediumDeltaVMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "combinedDeltaVMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "totalLossDeltaVMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "maximumHealth": { "type": "number", "exclusiveMinimum": 0 },
+        "healthDamagePerDeltaV": { "type": "number", "exclusiveMinimum": 0 },
+        "engineTorqueMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "enginePowerMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "steeringPullStrength": { "type": "number", "minimum": 0, "maximum": 1 },
+        "totalLossDragMultiplier": { "type": "number", "minimum": 1 },
+        "totalLossLinearDragNewtonSecondsPerMeter": { "type": "number", "minimum": 0 }
+      }
+    },
+    "barrierMaterial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["restitution", "tangentialFriction"],
+      "properties": {
+        "restitution": { "type": "number", "minimum": 0, "maximum": 1 },
+        "tangentialFriction": { "type": "number", "minimum": 0, "maximum": 2 }
+      }
+    },
+    "race": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jumpStartThrottleThreshold", "jumpStartLockSeconds", "gridGapMeters", "checkpointGateMarginMeters", "pitSpeedLimitMetersPerSecond"],
+      "properties": {
+        "jumpStartThrottleThreshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "jumpStartLockSeconds": { "type": "number", "minimum": 0 },
+        "gridGapMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "checkpointGateMarginMeters": { "type": "number", "minimum": 0 },
+        "pitSpeedLimitMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "bot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paceMultiplier", "brakingSafetyMultiplier", "steeringNoise", "reactionDelaySeconds", "recoveryMultiplier", "consistency"],
+      "properties": {
+        "paceMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "brakingSafetyMultiplier": { "type": "number", "minimum": 1 },
+        "steeringNoise": { "type": "number", "minimum": 0 },
+        "reactionDelaySeconds": { "type": "number", "minimum": 0 },
+        "recoveryMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "consistency": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

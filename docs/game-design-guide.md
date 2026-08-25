@@ -18,7 +18,8 @@ Este arquivo deve permanecer sincronizado entre os repositórios frontend e back
 ## 2. Princípios de direção
 
 - Visual vivo, agressivo e contemporâneo, sem parecer infantil.
-- Base semirrealista com efeitos arcade controlados.
+- Condução `simcade` de F1: dinâmica fisicamente coerente e exigente, simplificada somente onde necessário para permanecer legível e jogável em 2D e no teclado.
+- Efeitos visuais arcade permanecem controlados e nunca substituem as causas físicas de derrapagem, frenagem ou colisão.
 - Legibilidade da corrida tem prioridade sobre detalhe, brilho ou fidelidade fotográfica.
 - A referência visual não autoriza reaproveitar código ou assets de outros jogos.
 - **Rush Rally Origins** é a principal referência de câmera e leitura geral.
@@ -72,7 +73,7 @@ Regras:
 - Renderização da corrida em Canvas 2D.
 - Carros e objetos principais usam sprites rasterizados de alta qualidade, preferencialmente pré-renderizados.
 - Pistas combinam texturas rasterizadas, formas do Canvas e elementos reutilizáveis.
-- Fumaça, chuva, faíscas, spray, nitro e vento usam partículas limitadas e reutilizadas.
+- Fumaça, chuva, faíscas, spray e vento usam partículas limitadas e reutilizadas.
 - Ícones, marcações e interface usam vetores sempre que fizer sentido.
 - Ilustrações estáticas podem usar pintura digital; pixel art não faz parte da direção.
 - Não usar uma imagem única gigantesca para cada circuito. A pista deve ser segmentada e desenhada por visibilidade.
@@ -157,7 +158,7 @@ Regras:
 
 - O jogo usa um único modelo de corrida: um monoposto inspirado em carros de F1, sem copiar exatamente um modelo, equipe ou pintura real.
 - Proporções semirrealistas próximas de um monoposto moderno: carroceria aerodinâmica contínua, bico estreito, sidepods integrados, cintura traseira afunilada, pneus expostos e aerofólios ligeiramente enfatizados.
-- A silhueta inclui bico estreito e alongado, asa dianteira larga, quatro pneus expostos com traseiros maiores, suspensão simplificada, monocoque, cockpit com halo, sidepods, cobertura do motor afunilada e asa traseira. Frente, traseira e laterais são completas para que rodadas, drift e outros participantes permaneçam legíveis.
+- A silhueta inclui bico estreito e alongado, asa dianteira larga, quatro pneus expostos com traseiros maiores, suspensão simplificada, monocoque, cockpit com halo, sidepods, cobertura do motor afunilada e asa traseira. Frente, traseira e laterais são completas para que rodadas, perdas de aderência e outros participantes permaneçam legíveis.
 - Durante a corrida, a geometria é projetada continuamente pelo ângulo relativo a cada câmera, sem troca perceptível entre poses; em split-screen, o mesmo carro pode apresentar uma vista diferente em cada viewport. A prévia reutiliza a mesma geometria com detalhe adicional.
 - A silhueta deve permanecer orgânica e conectada em todas as vistas; evitar caixas altas, placas retangulares desproporcionais e peças que pareçam flutuar separadas da carroceria.
 - Não existe seleção entre categorias ou carrocerias; Supercarro e Drift foram retirados da direção aprovada.
@@ -181,11 +182,26 @@ Regras:
   - danificado: marcas discretas e fumaça leve;
   - crítico: fumaça mais visível e pequenas faíscas ocasionais;
   - perda total: carro parado, visual escurecido e alerta no HUD.
-- Efeitos de movimento arcade controlados: fumaça proporcional à perda de aderência, marcas de pneu limitadas, faíscas em contatos relevantes e nitro com chama/rastro curtos.
+- Efeitos de movimento controlados: fumaça proporcional ao slip físico, marcas de pneu limitadas e faíscas em contatos relevantes; não existe chama ou rastro de boost.
 - Iluminação simples: faróis, lanternas, luz de freio e cone noturno, com brilho suave.
 - Todos os participantes usam o mesmo modelo de F1 e a mesma física, colisão e desempenho.
 - Jogadores são diferenciados somente pela pintura e pelos detalhes cosméticos permitidos.
 - A mesma pintura principal não pode se repetir na mesma sala.
+
+### 7.4 Dinâmica veicular e colisões
+
+- **MVP — Parte 2d:** a base física é um monoposto inspirado na geração 2026, com tração traseira, câmbio automático de oito marchas, sem controle de tração e sem ABS.
+- O carro usa dinâmica de corpo rígido 2D com velocidade longitudinal/lateral, yaw e esterço real das rodas dianteiras. A carroceria não gira diretamente em resposta ao input.
+- Pneus dianteiros e traseiros têm aderência não linear. Acelerar, frear e virar disputam o mesmo orçamento de aderência; downforce, arrasto e transferência de carga alteram o limite conforme velocidade e comandos.
+- Acelerar excessivamente em curva pode saturar a traseira e causar sobresterço/rodada. Entrar rápido demais pode causar subesterço ou perda traseira conforme o eixo saturado; o resultado nunca é um efeito aleatório ou roteirizado.
+- A velocidade final emerge de potência e arrasto. Frenagem, aceleração e raio de curva são calibrados por cenários mensuráveis e referências primárias da F1 de 2026.
+- As rampas de teclado permitem modular acelerador, freio e esterço, mas não impedem patinagem, travamento ou perda de controle.
+- Todos usam exatamente o mesmo desempenho. A dificuldade dos bots altera decisões e execução, nunca potência, aderência, freio ou tolerância de colisão.
+- O collider do carro é composto por polígonos convexos métricos que acompanham asa, bico, rodas, chassi e traseira, com tolerância visual máxima de `2–5 cm`.
+- A face física de cada barreira é a mesma polilinha desenhada na pista. Não existe margem invisível entre asfalto e muro.
+- Colisões usam detecção contínua e impulso no ponto real de contato. Batidas centrais desaceleram, contatos excêntricos geram rotação e raspões não podem deixar carros enroscados.
+- Boost/nitro não existe. `Shift` fica sem função e não é ação configurável.
+- Temperatura/desgaste de pneus, combustível variável, freios térmicos, suspensão completa, câmbio manual, ERS detalhado e aerodinâmica ativa ficam fora desta parte.
 
 ## 8. Interface e HUD
 
@@ -211,7 +227,6 @@ Regras:
   - volta atual e total;
   - tempo atual e melhor volta;
   - minimapa;
-  - nitro;
   - velocidade.
 - Elementos condicionais:
   - dano somente quando existir;
@@ -250,9 +265,9 @@ Regras:
 - Painel lateral fixo resume pista, voltas, clima, horário, tipo de prova e pintura.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
-- A condução usa uma única configuração fixa para todas as corridas e participantes, baseada no acerto Normal atual; não existe seletor Normal/Drift nem troca de acerto durante a prova.
-- Shift é reservado ao nitro/boost do Módulo 5. O orçamento depende do total de voltas, é finito e não recarrega.
-- Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa intensidade do impacto: fraco afeta direção, médio afeta motor, alto combina os dois e crítico causa perda total. Batidas menores repetidas também podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica um leve desvio persistente para a esquerda ou direita sem reduzir a capacidade de esterçar, e uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente.
+- A condução usa a mesma dinâmica F1 para todas as corridas e participantes; não existe seletor Normal/Drift nem troca de acerto durante a prova.
+- `Shift` não possui função. Boost/nitro não aparece na preparação, corrida, HUD ou configuração de controles.
+- Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa a intensidade física do contato (`impulso`/`delta-v`): fraco afeta direção, médio afeta motor, alto combina os dois e crítico causa perda total. Batidas menores repetidas também podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica um leve desvio persistente para a esquerda ou direita sem reduzir a capacidade de esterçar, e uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente, sem receber física privilegiada.
 
 ### 9.3 Resultado e pódio
 
@@ -333,7 +348,7 @@ Executar em uma rodada e PR próprios, sem misturar com funcionalidade de corrid
 
 | Módulo | Principais decisões aplicadas |
 |---|---|
-| 2 | física em metros, circuitos extensos, câmera, minimapa local, culling, F1/pintura e tela de preparação |
+| 2 | física em metros; Partes 2a–2c de circuitos, câmera, minimapa, culling, F1/pintura e preparação; Parte 2d de dinâmica F1, colisores precisos e remoção de boost |
 | 3 | lobby, minimapa online, carros remotos e preparação com permissões |
 | 4 | presets de horário, clima otimizado e modo caos |
 | 5 | HUD, dano simples, efeitos de movimento, resultado e pódio |
@@ -354,4 +369,9 @@ Os itens abaixo precisam de protótipo, mas não autorizam trocar a direção de
 - tons intermediários das superfícies escuras;
 - quantidade de trechos de pista mantidos em memória — na Parte 2b, somente os `chunks` cuja projeção intercepta a viewport, com margem equivalente à largura visual da pista, são desenhados;
 - compressão e resolução final de sprites e imagens estáticas;
-- pequenos ajustes métricos de cada circuito para jogabilidade.
+- pequenos ajustes métricos de cada circuito para jogabilidade;
+- passo físico v2 entre `1/60 s` e `1/120 s`, congelado somente após benchmark de estabilidade, paridade e CPU; CCD é obrigatório em qualquer escolha;
+- massa, inércia, centro de gravidade, curva de potência, relações de marcha, `CdA`, `ClA` e coeficientes de pneu do contrato 2.0, fundamentados antes de entrar no JSON executável;
+- faixas de aceleração `0–100/200/300`, velocidade terminal emergente, frenagem em tempo/distância e raio mínimo de curva, validadas por cenários reproduzíveis;
+- rampas digitais de acelerador, freio e esterço, calibradas para teclado sem funcionar como controle de tração ou ABS;
+- tolerância final entre silhueta e collider dentro do limite aprovado de `2–5 cm` e ausência de contato invisível nas barreiras.

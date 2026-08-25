@@ -4,7 +4,7 @@ import type { RaceEngine } from '@/race/RaceEngine'
 import type { DriverInput } from '@/race/types'
 
 export const START_LIGHT_COUNT = 5
-export const START_LIGHT_TICKS = 60
+export const START_LIGHT_TICKS = Math.round(1 / PHYSICS_STEP_SECONDS)
 export const START_RELEASE_TICK = (START_LIGHT_COUNT + 1) * START_LIGHT_TICKS
 export const JUMP_START_LOCK_TICKS = Math.round(
   PHYSICS_CONSTANTS.race.jumpStartLockSeconds / PHYSICS_STEP_SECONDS,
@@ -29,7 +29,6 @@ const NEUTRAL_INPUT: DriverInput = {
   throttle: 0,
   brake: 0,
   steer: 0,
-  nitro: false,
 }
 
 /**
@@ -146,7 +145,6 @@ export class LocalRaceSession {
         throttle: clamp(input.throttle, 0, 1),
         brake: clamp(input.brake, 0, 1),
         steer: clamp(input.steer, -1, 1),
-        nitro: input.nitro,
       })
     }
   }

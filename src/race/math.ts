@@ -17,6 +17,44 @@ export function dot(a: Vector2, b: Vector2): number {
   return a.x * b.x + a.y * b.y
 }
 
+/**
+ * Two-dimensional scalar cross product. The sign follows the project's
+ * counter-clockwise-positive angle convention.
+ */
+export function cross(a: Vector2, b: Vector2): number {
+  return a.x * b.y - a.y * b.x
+}
+
+/** Returns the linear velocity at a point caused by an angular velocity. */
+export function crossScalarVector(
+  angularVelocity: number,
+  radius: Vector2,
+): Vector2 {
+  return {
+    x: -angularVelocity * radius.y,
+    y: angularVelocity * radius.x,
+  }
+}
+
+export function perpendicularLeft(vector: Vector2): Vector2 {
+  return { x: -vector.y, y: vector.x }
+}
+
+export function rotate(vector: Vector2, angle: number): Vector2 {
+  const cosine = Math.cos(angle)
+  const sine = Math.sin(angle)
+  return {
+    x: vector.x * cosine - vector.y * sine,
+    y: vector.x * sine + vector.y * cosine,
+  }
+}
+
+export function distanceSquared(a: Vector2, b: Vector2): number {
+  const deltaX = b.x - a.x
+  const deltaY = b.y - a.y
+  return deltaX * deltaX + deltaY * deltaY
+}
+
 export function magnitude(vector: Vector2): number {
   return Math.hypot(vector.x, vector.y)
 }
@@ -39,6 +77,15 @@ export function normalizeAngle(angle: number) {
   let normalized = angle % TAU
   if (normalized < 0) normalized += TAU
   return normalized
+}
+
+export function normalizeSignedAngle(angle: number) {
+  if (!Number.isFinite(angle)) return angle
+  const magnitudeWithinTurn = Math.abs(angle) % TAU
+  const signedWithinTurn = Math.sign(angle) * magnitudeWithinTurn
+  if (signedWithinTurn > Math.PI) return signedWithinTurn - TAU
+  if (signedWithinTurn < -Math.PI) return signedWithinTurn + TAU
+  return signedWithinTurn
 }
 
 export function signedAngleDelta(from: number, to: number) {

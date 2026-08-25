@@ -59,10 +59,95 @@ export function createTrackFixture(
       },
     }
   })
+  const trackLimitSegments: TrackDefinition['trackLimits']['segments'] =
+    id === 'monaco'
+      ? [
+          {
+            index: 0,
+            fromDistanceMeters: 0,
+            toDistanceMeters: lengthMeters,
+            left: { zones: [], barrier: 'concrete-wall' },
+            right: { zones: [], barrier: 'concrete-wall' },
+          },
+        ]
+      : [
+          {
+            index: 0,
+            fromDistanceMeters: 0,
+            toDistanceMeters: lengthMeters / 2,
+            left: {
+              zones: [{ surface: 'grass', widthMeters: 10 }],
+              barrier: 'tyre-barrier',
+            },
+            right: {
+              zones: [{ surface: 'grass', widthMeters: 10 }],
+              barrier: 'tyre-barrier',
+            },
+          },
+          {
+            index: 1,
+            fromDistanceMeters: lengthMeters / 2,
+            toDistanceMeters: lengthMeters,
+            left: { zones: [], barrier: 'concrete-wall' },
+            right: {
+              zones: [{ surface: 'grass', widthMeters: 10 }],
+              barrier: 'tyre-barrier',
+            },
+          },
+        ]
+  const barrierGeometry: TrackDefinition['barrierGeometry'] = {
+    segments: trackLimitSegments.flatMap((limitSegment) =>
+      (['left', 'right'] as const).map((side, sideIndex) => {
+        const environment = limitSegment[side]
+        const environmentWidth = environment.zones.reduce(
+          (sum, zone) => sum + zone.widthMeters,
+          0,
+        )
+        const barrierRadius =
+          radius +
+          (side === 'left' ? -1 : 1) * (8 + environmentWidth)
+        const path = centerline
+          .filter(
+            (point) =>
+              point.distanceMeters >= limitSegment.fromDistanceMeters &&
+              point.distanceMeters <= limitSegment.toDistanceMeters,
+          )
+          .map((point) => {
+            const radialScale = barrierRadius / radius
+            return {
+              x: point.x * radialScale,
+              y: point.y * radialScale,
+              distanceMeters: point.distanceMeters,
+              elevationLayer: point.elevationLayer,
+            }
+          })
+        return {
+          index: limitSegment.index * 2 + sideIndex,
+          trackLimitSegmentIndex: limitSegment.index,
+          side,
+          fromDistanceMeters: limitSegment.fromDistanceMeters,
+          toDistanceMeters: limitSegment.toDistanceMeters,
+          material: environment.barrier,
+          thicknessMeters:
+            environment.barrier === 'concrete-wall' ? 0.4 : 0.8,
+          collisionLayer: 'track-barrier' as const,
+          chunkIndexes: chunks
+            .filter(
+              (chunk) =>
+                chunk.toDistanceMeters >= limitSegment.fromDistanceMeters &&
+                chunk.fromDistanceMeters <= limitSegment.toDistanceMeters,
+            )
+            .map((chunk) => chunk.index),
+          path,
+        }
+      }),
+    ),
+  }
   const start = pointOnCircle(radius, 0)
   return {
-    schemaVersion: '1.3.0',
-    catalogVersion: '2026.5',
+    schemaVersion: '2.0.0',
+    catalogVersion: '2026.6',
+    physicsContractVersion: '2.0.0',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
     countryCode: id === 'monaco' ? 'MC' : 'BE',
@@ -134,43 +219,9 @@ export function createTrackFixture(
       },
     ],
     trackLimits: {
-      segments:
-        id === 'monaco'
-          ? [
-              {
-                index: 0,
-                fromDistanceMeters: 0,
-                toDistanceMeters: lengthMeters,
-                left: { zones: [], barrier: 'concrete-wall' },
-                right: { zones: [], barrier: 'concrete-wall' },
-              },
-            ]
-          : [
-              {
-                index: 0,
-                fromDistanceMeters: 0,
-                toDistanceMeters: lengthMeters / 2,
-                left: {
-                  zones: [{ surface: 'grass', widthMeters: 10 }],
-                  barrier: 'tyre-barrier',
-                },
-                right: {
-                  zones: [{ surface: 'grass', widthMeters: 10 }],
-                  barrier: 'tyre-barrier',
-                },
-              },
-              {
-                index: 1,
-                fromDistanceMeters: lengthMeters / 2,
-                toDistanceMeters: lengthMeters,
-                left: { zones: [], barrier: 'concrete-wall' },
-                right: {
-                  zones: [{ surface: 'grass', widthMeters: 10 }],
-                  barrier: 'tyre-barrier',
-                },
-              },
-            ],
+      segments: trackLimitSegments,
     },
+    barrierGeometry,
     chunks,
     sceneryLayout: {
       preset: id === 'monaco' ? 'coastal' : 'classic',

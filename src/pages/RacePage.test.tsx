@@ -2,7 +2,7 @@ import { cleanup, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import trackCatalog from '../../contracts/module-2/v1/catalog.json'
+import trackCatalog from '../../contracts/module-2/v2/catalog.json'
 import { jsonResponse, renderApp } from '@/test/render-app'
 import { SHORT_TRACK } from '@/test/track-fixtures'
 

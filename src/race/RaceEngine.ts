@@ -1,4 +1,7 @@
-import { resolveVehicleCollision } from '@/race/collision'
+import {
+  resolveVehicleBarrierCollisions,
+  resolveVehicleCollision,
+} from '@/race/collision'
 import {
   PHYSICS_CONSTANTS,
   PHYSICS_STEP_SECONDS,
@@ -22,8 +25,7 @@ import type {
   VehicleState,
 } from '@/race/types'
 import {
-  applyBarrierResponse,
-  getCollisionRadius,
+  createInitialVehiclePhysicsState,
   integrateVehicle,
 } from '@/race/vehicle-physics'
 
@@ -31,7 +33,6 @@ const NEUTRAL_INPUT: DriverInput = {
   throttle: 0,
   brake: 0,
   steer: 0,
-  nitro: false,
 }
 function cloneVehicle(vehicle: VehicleState): VehicleState {
   return {
@@ -40,6 +41,7 @@ function cloneVehicle(vehicle: VehicleState): VehicleState {
     previousPosition: { ...vehicle.previousPosition },
     velocity: { ...vehicle.velocity },
     damage: { ...vehicle.damage },
+    physicsState: { ...vehicle.physicsState },
   }
 }
 
@@ -61,6 +63,7 @@ function createVehicle(
     angle: startAngle,
     previousAngle: startAngle,
     yawRate: 0,
+    physicsState: createInitialVehiclePhysicsState(),
     surface: 'asphalt',
     trackLayer: geometry.getElevationLayerAt(position, 0),
     trackDistanceMeters: 0,
@@ -122,7 +125,6 @@ export class RaceEngine {
       throttle: clamp(input.throttle, 0, 1),
       brake: clamp(input.brake, 0, 1),
       steer: clamp(input.steer, -1, 1),
-      nitro: input.nitro,
     })
   }
 
@@ -171,18 +173,11 @@ export class RaceEngine {
         vehicle.trackDistanceMeters,
       )
       integrateVehicle(vehicle, input, surface, PHYSICS_STEP_SECONDS)
-
-      for (const contact of this.geometry.getBarrierContacts(
-        vehicle.position,
-        getCollisionRadius(),
-        vehicle.trackDistanceMeters,
-      )) {
-        applyBarrierResponse(
-          vehicle,
-          contact.pushNormal,
-          contact.penetrationMeters,
-        )
-      }
+      resolveVehicleBarrierCollisions(
+        vehicle,
+        this.geometry,
+        PHYSICS_STEP_SECONDS,
+      )
       const trackProjection = this.geometry.project(
         vehicle.position,
         vehicle.trackDistanceMeters,
@@ -206,8 +201,16 @@ export class RaceEngine {
         resolveVehicleCollision(
           this.vehicles[firstIndex],
           this.vehicles[secondIndex],
+          PHYSICS_STEP_SECONDS,
         )
       }
+    }
+
+    // A car-car impulse can move a vehicle into a nearby canonical wall face.
+    // Resolve only the resulting overlap here; replaying the whole swept step
+    // would apply the vehicle's already-consumed motion a second time.
+    for (const vehicle of this.vehicles) {
+      resolveVehicleBarrierCollisions(vehicle, this.geometry, 0)
     }
 
     this.simulationTimeSeconds += PHYSICS_STEP_SECONDS
@@ -286,7 +289,6 @@ export class RaceEngine {
           )
         : 0,
       steer: clamp(headingError / 0.42 + deterministicNoise, -1, 1),
-      nitro: false,
     }
   }
 
