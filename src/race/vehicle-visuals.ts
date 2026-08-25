@@ -73,7 +73,10 @@ export type VehicleProjection = {
 }
 
 const FULL_CIRCLE = Math.PI * 2
-const SURFACE_ORDER_BUCKET_COUNT = 96
+// Surface ordering is cached at one-degree intervals. Geometry itself always
+// uses the exact yaw; the denser cache keeps overlap changes below a pixel at
+// race size without sorting every face on every frame.
+const SURFACE_ORDER_BUCKET_COUNT = 360
 
 const TIRE_COLOR = '#05070b'
 const TIRE_TOP_COLOR = '#111722'
@@ -81,8 +84,8 @@ const CARBON_COLOR = '#111923'
 const CARBON_LIGHT_COLOR = '#263341'
 const CARBON_HIGHLIGHT_COLOR = '#3a4857'
 const COCKPIT_COLOR = '#07101b'
-const HELMET_VISOR_COLOR = '#a9e7ff'
-const TIRE_STRIPE_COLOR = '#d8bd32'
+const HELMET_VISOR_COLOR = '#718796'
+const TIRE_STRIPE_COLOR = '#68727d'
 const REAR_LIGHT_COLOR = '#ff4055'
 
 const FORMULA_WHEEL_SPECS: FormulaWheelSpec[] = [
@@ -114,67 +117,109 @@ export function getFormulaWheelSpecs() {
 
 const FORMULA_SECTIONS: FormulaSection[] = [
   {
-    longitudinal: 0.485,
-    halfWidth: 0.026,
-    topHalfWidth: 0.018,
-    baseHeight: 0.075,
-    topHeight: 0.13,
-  },
-  {
-    longitudinal: 0.39,
-    halfWidth: 0.052,
-    topHalfWidth: 0.038,
-    baseHeight: 0.075,
-    topHeight: 0.18,
-  },
-  {
-    longitudinal: 0.25,
-    halfWidth: 0.078,
-    topHalfWidth: 0.058,
-    baseHeight: 0.075,
-    topHeight: 0.25,
-  },
-  {
-    longitudinal: 0.09,
-    halfWidth: 0.145,
-    topHalfWidth: 0.09,
+    longitudinal: 0.49,
+    halfWidth: 0.018,
+    topHalfWidth: 0.012,
     baseHeight: 0.07,
-    topHeight: 0.34,
+    topHeight: 0.115,
   },
   {
-    longitudinal: -0.02,
-    halfWidth: 0.255,
-    topHalfWidth: 0.135,
+    longitudinal: 0.445,
+    halfWidth: 0.026,
+    topHalfWidth: 0.019,
+    baseHeight: 0.07,
+    topHeight: 0.135,
+  },
+  {
+    longitudinal: 0.37,
+    halfWidth: 0.038,
+    topHalfWidth: 0.03,
+    baseHeight: 0.07,
+    topHeight: 0.17,
+  },
+  {
+    longitudinal: 0.29,
+    halfWidth: 0.055,
+    topHalfWidth: 0.044,
     baseHeight: 0.065,
+    topHeight: 0.21,
+  },
+  {
+    longitudinal: 0.2,
+    halfWidth: 0.075,
+    topHalfWidth: 0.055,
+    baseHeight: 0.065,
+    topHeight: 0.26,
+  },
+  {
+    longitudinal: 0.12,
+    halfWidth: 0.105,
+    topHalfWidth: 0.072,
+    baseHeight: 0.065,
+    topHeight: 0.31,
+  },
+  {
+    longitudinal: 0.05,
+    halfWidth: 0.145,
+    topHalfWidth: 0.1,
+    baseHeight: 0.06,
+    topHeight: 0.36,
+  },
+  {
+    longitudinal: -0.015,
+    halfWidth: 0.205,
+    topHalfWidth: 0.13,
+    baseHeight: 0.055,
+    topHeight: 0.4,
+  },
+  {
+    longitudinal: -0.085,
+    halfWidth: 0.265,
+    topHalfWidth: 0.158,
+    baseHeight: 0.052,
     topHeight: 0.43,
   },
   {
-    longitudinal: -0.14,
-    halfWidth: 0.335,
-    topHalfWidth: 0.18,
+    longitudinal: -0.155,
+    halfWidth: 0.28,
+    topHalfWidth: 0.172,
+    baseHeight: 0.052,
+    topHeight: 0.44,
+  },
+  {
+    longitudinal: -0.23,
+    halfWidth: 0.275,
+    topHalfWidth: 0.165,
+    baseHeight: 0.055,
+    topHeight: 0.405,
+  },
+  {
+    longitudinal: -0.305,
+    halfWidth: 0.245,
+    topHalfWidth: 0.145,
     baseHeight: 0.06,
-    topHeight: 0.42,
+    topHeight: 0.37,
   },
   {
-    longitudinal: -0.26,
-    halfWidth: 0.3,
-    topHalfWidth: 0.16,
-    baseHeight: 0.065,
-    topHeight: 0.39,
+    longitudinal: -0.38,
+    halfWidth: 0.18,
+    topHalfWidth: 0.108,
+    baseHeight: 0.07,
+    topHeight: 0.325,
   },
   {
-    longitudinal: -0.37,
-    halfWidth: 0.195,
-    topHalfWidth: 0.115,
-    baseHeight: 0.075,
-    topHeight: 0.32,
+    longitudinal: -0.445,
+    halfWidth: 0.1,
+    topHalfWidth: 0.065,
+    baseHeight: 0.08,
+    topHeight: 0.255,
   },
   {
-    longitudinal: -0.465,
-    halfWidth: 0.08,
-    topHalfWidth: 0.052,
+    longitudinal: -0.49,
+    halfWidth: 0.05,
+    topHalfWidth: 0.035,
     baseHeight: 0.09,
-    topHeight: 0.22,
+    topHeight: 0.18,
   },
 ]
 
@@ -415,12 +460,57 @@ function createPlateSurfaces(
   return surfaces
 }
 
+function createVerticalPlateSurfaces(
+  lateralCenter: number,
+  lateralThickness: number,
+  profile: Array<{ longitudinal: number; height: number }>,
+  colors: { face: string; edge: string; stroke?: string },
+  visibility: FormulaSurface['visibility'] = 'all',
+): FormulaSurface[] {
+  const innerLateral = lateralCenter - lateralThickness / 2
+  const outerLateral = lateralCenter + lateralThickness / 2
+  const face = (lateral: number) =>
+    profile.map<VehiclePoint3>((point) => ({ ...point, lateral }))
+  const innerFace = face(innerLateral)
+  const outerFace = face(outerLateral)
+  const surfaces: FormulaSurface[] = [
+    {
+      points: innerFace,
+      fill: colors.face,
+      stroke: colors.stroke,
+      visibility,
+    },
+    {
+      points: outerFace,
+      fill: colors.face,
+      stroke: colors.stroke,
+      visibility,
+    },
+  ]
+
+  for (let index = 0; index < profile.length; index += 1) {
+    const nextIndex = (index + 1) % profile.length
+    surfaces.push({
+      points: [
+        innerFace[index],
+        innerFace[nextIndex],
+        outerFace[nextIndex],
+        outerFace[index],
+      ],
+      fill: colors.edge,
+      visibility,
+    })
+  }
+
+  return surfaces
+}
+
 function createWheelSurfaces(
   wheel: FormulaWheelSpec,
   side: -1 | 1,
   accentColor: string,
 ): FormulaSurface[] {
-  const segmentCount = 10
+  const segmentCount = 14
   const lateralCenter = side * (0.5 - wheel.lateralSize / 2)
   const innerLateral = lateralCenter - side * wheel.lateralSize / 2
   const outerLateral = lateralCenter + side * wheel.lateralSize / 2
@@ -550,35 +640,35 @@ function createBodySurfaces(
 
 function createFormulaSurfaces(color: string, totalLoss: boolean) {
   const baseColor = totalLoss ? mixHexColor(color, '#05070c', 0.58) : color
-  const primaryLight = mixHexColor(baseColor, '#f0f0fa', 0.34)
-  const primaryDark = mixHexColor(baseColor, '#05070c', 0.5)
-  const secondaryColor = mixHexColor(baseColor, '#f0f0fa', 0.82)
-  const healthyAccentColor =
-    color.toLowerCase() === '#ff2e88' ? '#31c7ff' : '#ff2e88'
-  const accentColor = totalLoss
-    ? mixHexColor(healthyAccentColor, '#05070c', 0.58)
-    : healthyAccentColor
-  const highlightColor = mixHexColor(baseColor, '#ffffff', 0.58)
+  const primaryLight = mixHexColor(baseColor, '#d9dee3', 0.18)
+  const primaryDark = mixHexColor(baseColor, '#05070c', 0.46)
+  const secondaryColor = mixHexColor(baseColor, '#d9dee3', 0.28)
+  const accentColor = mixHexColor(baseColor, '#05070c', 0.24)
+  const highlightColor = mixHexColor(baseColor, '#e3e6e9', 0.36)
   const surfaces: FormulaSurface[] = []
 
   surfaces.push(
     ...createPlateSurfaces(
       [
-        { longitudinal: 0.31, lateral: -0.2 },
-        { longitudinal: 0.31, lateral: 0.2 },
-        { longitudinal: 0.08, lateral: 0.39 },
-        { longitudinal: -0.34, lateral: 0.43 },
-        { longitudinal: -0.47, lateral: 0.31 },
-        { longitudinal: -0.47, lateral: -0.31 },
-        { longitudinal: -0.34, lateral: -0.43 },
-        { longitudinal: 0.08, lateral: -0.39 },
+        { longitudinal: 0.19, lateral: -0.13 },
+        { longitudinal: 0.19, lateral: 0.13 },
+        { longitudinal: 0.09, lateral: 0.31 },
+        { longitudinal: -0.03, lateral: 0.4 },
+        { longitudinal: -0.3, lateral: 0.42 },
+        { longitudinal: -0.43, lateral: 0.32 },
+        { longitudinal: -0.47, lateral: 0.17 },
+        { longitudinal: -0.47, lateral: -0.17 },
+        { longitudinal: -0.43, lateral: -0.32 },
+        { longitudinal: -0.3, lateral: -0.42 },
+        { longitudinal: -0.03, lateral: -0.4 },
+        { longitudinal: 0.09, lateral: -0.31 },
       ],
-      0.035,
-      0.05,
+      0.03,
+      0.038,
       {
-        top: CARBON_LIGHT_COLOR,
+        top: CARBON_COLOR,
         side: CARBON_COLOR,
-        stroke: 'rgba(240, 240, 250, 0.13)',
+        stroke: 'rgba(240, 240, 250, 0.08)',
       },
     ),
   )
@@ -589,72 +679,119 @@ function createFormulaSurfaces(color: string, totalLoss: boolean) {
     }
   }
 
-  const frontWingSides = [-1, 1] as const
-  for (const side of frontWingSides) {
-    const inner = side * 0.035
-    const outer = side * 0.5
+  surfaces.push(
+    ...createPlateSurfaces(
+      [
+        { longitudinal: 0.495, lateral: -0.48 },
+        { longitudinal: 0.485, lateral: -0.5 },
+        { longitudinal: 0.435, lateral: -0.47 },
+        { longitudinal: 0.395, lateral: -0.19 },
+        { longitudinal: 0.42, lateral: -0.055 },
+        { longitudinal: 0.462, lateral: -0.035 },
+        { longitudinal: 0.462, lateral: 0.035 },
+        { longitudinal: 0.42, lateral: 0.055 },
+        { longitudinal: 0.395, lateral: 0.19 },
+        { longitudinal: 0.435, lateral: 0.47 },
+        { longitudinal: 0.485, lateral: 0.5 },
+        { longitudinal: 0.495, lateral: 0.48 },
+      ],
+      0.075,
+      0.038,
+      { top: CARBON_LIGHT_COLOR, side: CARBON_COLOR },
+    ),
+    ...createPlateSurfaces(
+      [
+        { longitudinal: 0.472, lateral: -0.455 },
+        { longitudinal: 0.462, lateral: -0.47 },
+        { longitudinal: 0.418, lateral: -0.41 },
+        { longitudinal: 0.407, lateral: -0.075 },
+        { longitudinal: 0.447, lateral: -0.045 },
+        { longitudinal: 0.447, lateral: 0.045 },
+        { longitudinal: 0.407, lateral: 0.075 },
+        { longitudinal: 0.418, lateral: 0.41 },
+        { longitudinal: 0.462, lateral: 0.47 },
+        { longitudinal: 0.472, lateral: 0.455 },
+      ],
+      0.12,
+      0.025,
+      { top: baseColor, side: primaryDark, stroke: accentColor },
+    ),
+    ...createPlateSurfaces(
+      [
+        { longitudinal: 0.458, lateral: -0.39 },
+        { longitudinal: 0.445, lateral: -0.405 },
+        { longitudinal: 0.412, lateral: -0.34 },
+        { longitudinal: 0.415, lateral: 0.34 },
+        { longitudinal: 0.445, lateral: 0.405 },
+        { longitudinal: 0.458, lateral: 0.39 },
+      ],
+      0.15,
+      0.018,
+      { top: secondaryColor, side: primaryDark },
+    ),
+    ...createPlateSurfaces(
+      [
+        { longitudinal: 0.49, lateral: -0.035 },
+        { longitudinal: 0.49, lateral: 0.035 },
+        { longitudinal: 0.405, lateral: 0.05 },
+        { longitudinal: 0.395, lateral: -0.05 },
+      ],
+      0.135,
+      0.05,
+      { top: secondaryColor, side: primaryDark },
+    ),
+    ...createPlateSurfaces(
+      [
+        { longitudinal: -0.5, lateral: -0.43 },
+        { longitudinal: -0.405, lateral: -0.38 },
+        { longitudinal: -0.388, lateral: -0.1 },
+        { longitudinal: -0.388, lateral: 0.1 },
+        { longitudinal: -0.405, lateral: 0.38 },
+        { longitudinal: -0.5, lateral: 0.43 },
+      ],
+      0.585,
+      0.055,
+      { top: baseColor, side: primaryDark, stroke: accentColor },
+    ),
+    ...createPlateSurfaces(
+      [
+        { longitudinal: -0.47, lateral: -0.36 },
+        { longitudinal: -0.405, lateral: -0.32 },
+        { longitudinal: -0.395, lateral: 0.32 },
+        { longitudinal: -0.47, lateral: 0.36 },
+      ],
+      0.51,
+      0.032,
+      { top: secondaryColor, side: primaryDark },
+    ),
+  )
+
+  for (const side of [-1, 1] as const) {
     surfaces.push(
-      ...createPlateSurfaces(
+      ...createVerticalPlateSurfaces(
+        side * 0.482,
+        0.024,
         [
-          { longitudinal: 0.495, lateral: inner },
-          { longitudinal: 0.49, lateral: outer },
-          { longitudinal: 0.442, lateral: outer },
-          { longitudinal: 0.405, lateral: inner },
+          { longitudinal: 0.497, height: 0.065 },
+          { longitudinal: 0.488, height: 0.185 },
+          { longitudinal: 0.443, height: 0.22 },
+          { longitudinal: 0.405, height: 0.09 },
         ],
-        0.075,
-        0.055,
-        { top: CARBON_LIGHT_COLOR, side: CARBON_COLOR },
+        { face: primaryDark, edge: CARBON_COLOR, stroke: accentColor },
       ),
-      ...createPlateSurfaces(
+      ...createVerticalPlateSurfaces(
+        side * 0.408,
+        0.028,
         [
-          { longitudinal: 0.472, lateral: side * 0.06 },
-          { longitudinal: 0.468, lateral: side * 0.465 },
-          { longitudinal: 0.425, lateral: side * 0.43 },
-          { longitudinal: 0.425, lateral: side * 0.07 },
+          { longitudinal: -0.5, height: 0.27 },
+          { longitudinal: -0.49, height: 0.63 },
+          { longitudinal: -0.405, height: 0.59 },
+          { longitudinal: -0.382, height: 0.3 },
         ],
-        0.125,
-        0.035,
-        {
-          top: side < 0 ? secondaryColor : baseColor,
-          side: primaryDark,
-          stroke: accentColor,
-        },
-      ),
-      ...createBoxSurfaces(
-        { longitudinal: 0.46, lateral: side * 0.487, height: 0.16 },
-        { longitudinal: 0.12, lateral: 0.026, height: 0.22 },
-        { top: accentColor, side: primaryDark, end: accentColor },
+        { face: primaryDark, edge: CARBON_COLOR, stroke: accentColor },
       ),
     )
   }
-
-  surfaces.push(
-    ...createBoxSurfaces(
-      { longitudinal: 0.448, lateral: 0, height: 0.115 },
-      { longitudinal: 0.11, lateral: 0.13, height: 0.07 },
-      { top: secondaryColor, side: primaryDark, end: accentColor },
-    ),
-    ...createBoxSurfaces(
-      { longitudinal: -0.465, lateral: 0, height: 0.59 },
-      { longitudinal: 0.095, lateral: 0.86, height: 0.11 },
-      { top: baseColor, side: primaryDark, end: secondaryColor },
-    ),
-    ...createBoxSurfaces(
-      { longitudinal: -0.418, lateral: 0, height: 0.515 },
-      { longitudinal: 0.075, lateral: 0.68, height: 0.055 },
-      { top: highlightColor, side: primaryDark, end: accentColor },
-    ),
-    ...createBoxSurfaces(
-      { longitudinal: -0.46, lateral: -0.415, height: 0.36 },
-      { longitudinal: 0.14, lateral: 0.042, height: 0.46 },
-      { top: accentColor, side: primaryDark },
-    ),
-    ...createBoxSurfaces(
-      { longitudinal: -0.46, lateral: 0.415, height: 0.36 },
-      { longitudinal: 0.14, lateral: 0.042, height: 0.46 },
-      { top: accentColor, side: primaryDark },
-    ),
-  )
 
   surfaces.push(...createBodySurfaces(baseColor, primaryLight, primaryDark))
 
@@ -662,65 +799,82 @@ function createFormulaSurfaces(color: string, totalLoss: boolean) {
     surfaces.push(
       ...createPlateSurfaces(
         [
-          { longitudinal: 0.045, lateral: side * 0.17 },
-          { longitudinal: -0.03, lateral: side * 0.3 },
-          { longitudinal: -0.26, lateral: side * 0.29 },
-          { longitudinal: -0.31, lateral: side * 0.17 },
+          { longitudinal: 0.055, lateral: side * 0.13 },
+          { longitudinal: 0.005, lateral: side * 0.245 },
+          { longitudinal: -0.08, lateral: side * 0.275 },
+          { longitudinal: -0.2, lateral: side * 0.27 },
+          { longitudinal: -0.31, lateral: side * 0.215 },
+          { longitudinal: -0.27, lateral: side * 0.14 },
+          { longitudinal: -0.05, lateral: side * 0.125 },
         ],
-        0.425,
-        0.012,
+        0.405,
+        0.014,
         {
-          top: secondaryColor,
+          top: primaryLight,
           side: primaryDark,
-          stroke: 'rgba(240, 240, 250, 0.24)',
+          stroke: 'rgba(240, 240, 250, 0.1)',
         },
       ),
       ...createPlateSurfaces(
         [
-          { longitudinal: 0.02, lateral: side * 0.305 },
-          { longitudinal: -0.07, lateral: side * 0.345 },
-          { longitudinal: -0.3, lateral: side * 0.34 },
-          { longitudinal: -0.26, lateral: side * 0.31 },
+          { longitudinal: 0.015, lateral: side * 0.19 },
+          { longitudinal: -0.04, lateral: side * 0.265 },
+          { longitudinal: -0.21, lateral: side * 0.26 },
+          { longitudinal: -0.29, lateral: side * 0.205 },
+          { longitudinal: -0.18, lateral: side * 0.175 },
         ],
-        0.3,
-        0.018,
+        0.335,
+        0.014,
         { top: accentColor, side: primaryDark },
       ),
-      ...createBoxSurfaces(
-        { longitudinal: 0.008, lateral: side * 0.255, height: 0.27 },
-        { longitudinal: 0.055, lateral: 0.135, height: 0.16 },
-        { top: CARBON_HIGHLIGHT_COLOR, side: COCKPIT_COLOR, end: COCKPIT_COLOR },
+      ...createVerticalPlateSurfaces(
+        side * 0.235,
+        0.09,
+        [
+          { longitudinal: 0.035, height: 0.18 },
+          { longitudinal: 0.025, height: 0.345 },
+          { longitudinal: -0.035, height: 0.325 },
+          { longitudinal: -0.065, height: 0.2 },
+        ],
+        { face: COCKPIT_COLOR, edge: CARBON_HIGHLIGHT_COLOR },
       ),
       ...createPlateSurfaces(
         [
-          { longitudinal: 0.12, lateral: side * 0.385 },
-          { longitudinal: -0.34, lateral: side * 0.425 },
-          { longitudinal: -0.4, lateral: side * 0.385 },
-          { longitudinal: 0.08, lateral: side * 0.35 },
+          { longitudinal: 0.1, lateral: side * 0.35 },
+          { longitudinal: -0.29, lateral: side * 0.405 },
+          { longitudinal: -0.41, lateral: side * 0.325 },
+          { longitudinal: 0.075, lateral: side * 0.325 },
         ],
-        0.065,
-        0.018,
+        0.055,
+        0.014,
         { top: accentColor, side: CARBON_COLOR },
       ),
     )
   }
 
   surfaces.push(
-    ...createBoxSurfaces(
-      { longitudinal: -0.245, lateral: 0, height: 0.58 },
-      { longitudinal: 0.075, lateral: 0.19, height: 0.17 },
-      { top: secondaryColor, side: primaryDark, end: COCKPIT_COLOR },
-    ),
-    ...createPlateSurfaces(
+    ...createVerticalPlateSurfaces(
+      0,
+      0.13,
       [
-        { longitudinal: -0.215, lateral: -0.018 },
-        { longitudinal: -0.215, lateral: 0.018 },
-        { longitudinal: -0.445, lateral: 0.012 },
-        { longitudinal: -0.445, lateral: -0.012 },
+        { longitudinal: -0.16, height: 0.42 },
+        { longitudinal: -0.19, height: 0.57 },
+        { longitudinal: -0.24, height: 0.64 },
+        { longitudinal: -0.3, height: 0.57 },
+        { longitudinal: -0.37, height: 0.37 },
       ],
-      0.55,
-      0.26,
-      { top: baseColor, side: primaryDark, stroke: highlightColor },
+      { face: secondaryColor, edge: primaryDark, stroke: accentColor },
+    ),
+    ...createVerticalPlateSurfaces(
+      0,
+      0.025,
+      [
+        { longitudinal: -0.23, height: 0.45 },
+        { longitudinal: -0.25, height: 0.585 },
+        { longitudinal: -0.43, height: 0.34 },
+        { longitudinal: -0.45, height: 0.2 },
+      ],
+      { face: baseColor, edge: primaryDark, stroke: highlightColor },
     ),
     ...createBoxSurfaces(
       { longitudinal: -0.493, lateral: 0, height: 0.205 },
@@ -916,25 +1070,31 @@ function paintCockpitAndLivery(
   damage: DamageKind,
 ) {
   const cockpitSurround = [
-    { longitudinal: 0.075, lateral: -0.09, height: 0.445 },
-    { longitudinal: 0.075, lateral: 0.09, height: 0.445 },
-    { longitudinal: -0.19, lateral: 0.135, height: 0.47 },
-    { longitudinal: -0.255, lateral: 0, height: 0.485 },
-    { longitudinal: -0.19, lateral: -0.135, height: 0.47 },
+    { longitudinal: 0.085, lateral: 0, height: 0.43 },
+    { longitudinal: 0.045, lateral: 0.085, height: 0.45 },
+    { longitudinal: -0.08, lateral: 0.132, height: 0.47 },
+    { longitudinal: -0.18, lateral: 0.12, height: 0.48 },
+    { longitudinal: -0.255, lateral: 0, height: 0.49 },
+    { longitudinal: -0.18, lateral: -0.12, height: 0.48 },
+    { longitudinal: -0.08, lateral: -0.132, height: 0.47 },
+    { longitudinal: 0.045, lateral: -0.085, height: 0.45 },
   ]
   tracePolygon(
     context,
     cockpitSurround.map((point) => projectVehiclePoint(point, projection)),
   )
-  context.fillStyle = colors.secondaryColor
+  context.fillStyle = colors.accentColor
   context.fill()
 
   const cockpit = [
-    { longitudinal: 0.045, lateral: -0.066, height: 0.47 },
-    { longitudinal: 0.045, lateral: 0.066, height: 0.47 },
-    { longitudinal: -0.185, lateral: 0.1, height: 0.495 },
-    { longitudinal: -0.225, lateral: 0, height: 0.51 },
-    { longitudinal: -0.185, lateral: -0.1, height: 0.495 },
+    { longitudinal: 0.045, lateral: 0, height: 0.475 },
+    { longitudinal: 0.005, lateral: 0.06, height: 0.49 },
+    { longitudinal: -0.105, lateral: 0.092, height: 0.505 },
+    { longitudinal: -0.19, lateral: 0.075, height: 0.515 },
+    { longitudinal: -0.225, lateral: 0, height: 0.52 },
+    { longitudinal: -0.19, lateral: -0.075, height: 0.515 },
+    { longitudinal: -0.105, lateral: -0.092, height: 0.505 },
+    { longitudinal: 0.005, lateral: -0.06, height: 0.49 },
   ]
   tracePolygon(
     context,
@@ -944,14 +1104,14 @@ function paintCockpitAndLivery(
   context.fill()
 
   const stripe = [
-    { longitudinal: 0.478, lateral: -0.012, height: 0.142 },
-    { longitudinal: 0.478, lateral: 0.012, height: 0.142 },
-    { longitudinal: 0.12, lateral: 0.054, height: 0.355 },
-    { longitudinal: -0.09, lateral: 0.075, height: 0.455 },
-    { longitudinal: -0.36, lateral: 0.047, height: 0.35 },
-    { longitudinal: -0.36, lateral: -0.047, height: 0.35 },
-    { longitudinal: -0.09, lateral: -0.075, height: 0.455 },
-    { longitudinal: 0.12, lateral: -0.054, height: 0.355 },
+    { longitudinal: 0.48, lateral: -0.008, height: 0.145 },
+    { longitudinal: 0.48, lateral: 0.008, height: 0.145 },
+    { longitudinal: 0.14, lateral: 0.034, height: 0.315 },
+    { longitudinal: -0.04, lateral: 0.045, height: 0.435 },
+    { longitudinal: -0.39, lateral: 0.026, height: 0.315 },
+    { longitudinal: -0.39, lateral: -0.026, height: 0.315 },
+    { longitudinal: -0.04, lateral: -0.045, height: 0.435 },
+    { longitudinal: 0.14, lateral: -0.034, height: 0.315 },
   ]
   tracePolygon(
     context,
@@ -961,12 +1121,12 @@ function paintCockpitAndLivery(
   context.fill()
 
   const accentStripe = [
-    { longitudinal: 0.488, lateral: -0.006, height: 0.151 },
-    { longitudinal: 0.488, lateral: 0.006, height: 0.151 },
-    { longitudinal: 0.08, lateral: 0.016, height: 0.385 },
-    { longitudinal: -0.42, lateral: 0.012, height: 0.32 },
-    { longitudinal: -0.42, lateral: -0.012, height: 0.32 },
-    { longitudinal: 0.08, lateral: -0.016, height: 0.385 },
+    { longitudinal: 0.488, lateral: -0.004, height: 0.152 },
+    { longitudinal: 0.488, lateral: 0.004, height: 0.152 },
+    { longitudinal: 0.08, lateral: 0.011, height: 0.39 },
+    { longitudinal: -0.42, lateral: 0.008, height: 0.31 },
+    { longitudinal: -0.42, lateral: -0.008, height: 0.31 },
+    { longitudinal: 0.08, lateral: -0.011, height: 0.39 },
   ]
   tracePolygon(
     context,
@@ -1080,7 +1240,7 @@ function paintCockpitAndLivery(
       projection,
       { longitudinal: 0.02, lateral: side * 0.18, height: 0.42 },
       { longitudinal: -0.28, lateral: side * 0.27, height: 0.36 },
-      'rgba(240, 240, 250, 0.62)',
+      colors.highlightColor,
       Math.max(0.5, projection.width * 0.011),
     )
   }

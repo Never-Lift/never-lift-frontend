@@ -199,12 +199,15 @@ describe('single F1 visual painter', () => {
     ).operations
 
     expect(operations).toContain('fill:#2d7dff')
-    expect(operations).toContain('fill:#ff2e88')
+    expect(operations).toContain('fill:#2361c5')
+    expect(operations).toContain('fill:#4c8efa')
+    expect(operations).not.toContain('fill:#ff2e88')
+    expect(operations).not.toContain('fill:#31c7ff')
     expect(
       operations.filter((operation) => operation === 'fill:#05070b').length,
     ).toBeGreaterThanOrEqual(4)
     expect(
-      operations.filter((operation) => operation === 'stroke:#d8bd32').length,
+      operations.filter((operation) => operation === 'stroke:#68727d').length,
     ).toBeGreaterThanOrEqual(4)
     expect(
       operations.filter((operation) => operation === 'stroke:#3a4857').length,
@@ -213,9 +216,35 @@ describe('single F1 visual painter', () => {
       operations.some((operation) => operation.startsWith('ellipse:')),
     ).toBe(true)
     expect(operations).toContain('fill:#07101b')
-    expect(operations).toContain('fill:#a9e7ff')
+    expect(operations).toContain('fill:#718796')
     expect(operations).toContain('fill:#ff4055')
     expect(operations).toContain('stroke:#2d7dff')
+  })
+
+  it('derives restrained details from each approved base paint', () => {
+    const approvedPaints = [
+      { base: '#a84448', darkTone: '#81353a' },
+      { base: '#365f82', darkTone: '#2a4a66' },
+      { base: '#3f704f', darkTone: '#31573f' },
+    ]
+
+    for (const { base, darkTone } of approvedPaints) {
+      const recording = createRecordingContext()
+      drawVehicleVisual(recording.context, {
+        color: base,
+        x: 0,
+        y: 0,
+        relativeYawRadians: -Math.PI / 4,
+        length: 60,
+        width: 60 / 2.8,
+      })
+
+      expect(recording.operations).toContain(`fill:${base}`)
+      expect(recording.operations).toContain(`fill:${darkTone}`)
+      expect(recording.operations).not.toContain('fill:#ff2e88')
+      expect(recording.operations).not.toContain('fill:#31c7ff')
+      expect(recording.operations).not.toContain('stroke:#d8bd32')
+    }
   })
 
   it('renders distinct rear, front and side silhouettes', () => {

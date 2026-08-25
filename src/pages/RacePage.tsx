@@ -32,6 +32,13 @@ import type {
   RaceResultEntry,
   VehicleSetup,
 } from '@/race/types'
+import {
+  DEFAULT_VEHICLE_PAINT_COLOR,
+  getAlternativeVehiclePaintColors,
+  normalizeVehiclePaintColor,
+  SECONDARY_VEHICLE_PAINT_COLOR,
+  VEHICLE_PAINT_OPTIONS,
+} from '@/race/vehicle-paints'
 import type { TimeOfDayPreset } from '@/race/visual-settings'
 
 type PlayerSelection = {
@@ -44,8 +51,6 @@ type SubmissionState =
   | { status: 'sending' }
   | { status: 'success'; response: LocalRaceResultResponse }
   | { status: 'error'; message: string }
-
-const colorOptions = ['#2d7dff', '#ff2e88', '#2bd67b', '#ffb82e', '#f0f0fa', '#9c6cff']
 
 const timeOfDayOptions: Array<{
   id: TimeOfDayPreset
@@ -71,12 +76,12 @@ function timeOfDayLabel(timeOfDay: TimeOfDayPreset) {
 
 const defaultPlayerOne: PlayerSelection = {
   name: 'Piloto 1',
-  color: colorOptions[0],
+  color: DEFAULT_VEHICLE_PAINT_COLOR,
 }
 
 const defaultPlayerTwo: PlayerSelection = {
   name: 'Piloto 2',
-  color: colorOptions[1],
+  color: SECONDARY_VEHICLE_PAINT_COLOR,
 }
 
 const environmentLabels: Record<
@@ -175,7 +180,11 @@ function PlayerConfigurator({
   onChange: (selection: PlayerSelection) => void
 }) {
   const [isChanging, setIsChanging] = useState(false)
-  const duplicatesOther = (color: string) => otherSelection?.color === color
+  const selectedColor = normalizeVehiclePaintColor(selection.color)
+  const otherColor = otherSelection
+    ? normalizeVehiclePaintColor(otherSelection.color)
+    : null
+  const duplicatesOther = (color: string) => otherColor === color
 
   return (
     <fieldset className="surface-panel p-5 sm:p-6">
@@ -185,7 +194,7 @@ function PlayerConfigurator({
       <div className="grid items-center gap-5 sm:grid-cols-[12rem_minmax(0,1fr)]">
         <VehiclePreview
           className="h-32 w-full"
-          color={selection.color}
+          color={selectedColor}
         />
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
@@ -217,19 +226,20 @@ function PlayerConfigurator({
               Cor do carro e capacete
             </p>
             <div className="flex flex-wrap gap-2">
-              {colorOptions.map((color) => (
+              {VEHICLE_PAINT_OPTIONS.map((paint) => (
                 <button
-                  aria-label={`Selecionar cor ${color}`}
-                  aria-pressed={selection.color === color}
+                  aria-label={`Selecionar pintura ${paint.label}`}
+                  aria-pressed={selectedColor === paint.color}
                   className={`size-8 rounded-full border-2 transition ${
-                    selection.color === color
+                    selectedColor === paint.color
                       ? 'scale-110 border-foreground'
                       : 'border-transparent opacity-75 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25'
                   }`}
-                  disabled={duplicatesOther(color)}
-                  key={color}
-                  onClick={() => onChange({ ...selection, color })}
-                  style={{ backgroundColor: color }}
+                  disabled={duplicatesOther(paint.color)}
+                  key={paint.id}
+                  onClick={() => onChange({ ...selection, color: paint.color })}
+                  style={{ backgroundColor: paint.color }}
+                  title={paint.label}
                   type="button"
                 />
               ))}
@@ -336,12 +346,17 @@ export function RacePage() {
   const startRace = useCallback(() => {
     if (!session || !selectedTrack) return
     const primaryName = account?.displayName ?? playerOne.name
+    const playerOneColor = normalizeVehiclePaintColor(playerOne.color)
+    const playerTwoColor = normalizeVehiclePaintColor(
+      playerTwo.color,
+      SECONDARY_VEHICLE_PAINT_COLOR,
+    )
     const racers: VehicleSetup[] = [
       {
         id: 'player-1',
         name: primaryName,
         kind: 'human',
-        color: playerOne.color,
+        color: playerOneColor,
       },
     ]
 
@@ -350,10 +365,10 @@ export function RacePage() {
         id: 'player-2',
         name: playerTwo.name,
         kind: 'human',
-        color: playerTwo.color,
+        color: playerTwoColor,
       })
     } else {
-      const botColors = colorOptions.filter((color) => color !== playerOne.color)
+      const botColors = getAlternativeVehiclePaintColors(playerOneColor)
       racers.push(
         {
           id: 'bot-apex',
@@ -648,12 +663,15 @@ export function RacePage() {
                 className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'local' ? 'border-primary/70 bg-primary/8' : ''}`}
                 onClick={() => {
                   setMode('local')
-                  if (playerTwo.color === playerOne.color) {
+                  if (
+                    normalizeVehiclePaintColor(playerTwo.color) ===
+                    normalizeVehiclePaintColor(playerOne.color)
+                  ) {
                     setPlayerTwo({
                       ...playerTwo,
                       color:
-                        colorOptions.find((color) => color !== playerOne.color) ??
-                        playerTwo.color,
+                        getAlternativeVehiclePaintColors(playerOne.color)[0] ??
+                        SECONDARY_VEHICLE_PAINT_COLOR,
                     })
                   }
                 }}
@@ -832,7 +850,9 @@ export function RacePage() {
                     <span
                       aria-hidden="true"
                       className="size-3 rounded-full border border-foreground/25"
-                      style={{ backgroundColor: player.color }}
+                      style={{
+                        backgroundColor: normalizeVehiclePaintColor(player.color),
+                      }}
                     />
                     {player.name} · F1
                   </dd>

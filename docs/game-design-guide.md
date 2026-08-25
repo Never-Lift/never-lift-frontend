@@ -156,9 +156,10 @@ Regras:
 ### 7.1 Direção dos modelos
 
 - O jogo usa um único modelo de corrida: um monoposto inspirado em carros de F1, sem copiar exatamente um modelo, equipe ou pintura real.
-- Proporções semirrealistas: carroceria natural, pneus expostos, aerofólios e elementos de desempenho ligeiramente enfatizados.
+- Proporções semirrealistas próximas de um monoposto moderno: carroceria aerodinâmica contínua, bico estreito, sidepods integrados, cintura traseira afunilada, pneus expostos e aerofólios ligeiramente enfatizados.
 - A silhueta inclui bico estreito e alongado, asa dianteira larga, quatro pneus expostos com traseiros maiores, suspensão simplificada, monocoque, cockpit com halo, sidepods, cobertura do motor afunilada e asa traseira. Frente, traseira e laterais são completas para que rodadas, drift e outros participantes permaneçam legíveis.
 - Durante a corrida, a geometria é projetada continuamente pelo ângulo relativo a cada câmera, sem troca perceptível entre poses; em split-screen, o mesmo carro pode apresentar uma vista diferente em cada viewport. A prévia reutiliza a mesma geometria com detalhe adicional.
+- A silhueta deve permanecer orgânica e conectada em todas as vistas; evitar caixas altas, placas retangulares desproporcionais e peças que pareçam flutuar separadas da carroceria.
 - Não existe seleção entre categorias ou carrocerias; Supercarro e Drift foram retirados da direção aprovada.
 - A variedade visual vem de pintura, capacete, acabamento e detalhes cosméticos da identidade Never Lift.
 - A preparação de pista permanece plausível, sem peças ou proporções absurdas.
@@ -166,8 +167,8 @@ Regras:
 ### 7.2 Detalhe e personalização
 
 - Alto detalhamento na seleção/garagem; versão otimizada durante a corrida.
-- Pintura-base com cor principal, secundária e detalhes.
-- **MVP — Módulo 2:** paleta simples de cores predefinidas.
+- Pintura-base com uma cor principal e variações tonais mais claras ou escuras da própria cor; carbono, pneus, suspensão e demais peças mecânicas usam neutros controlados, sem acentos neon concorrentes.
+- **MVP — Módulo 2:** somente três pinturas predefinidas e sóbrias — vermelho, azul e verde.
 - **Pós-MVP — Módulo 10:** cores predefinidas mais seletor avançado.
 - Prévia de personalização é imediata, mas exige Salvar ou Descartar.
 - Acabamentos brilhante, metálico e fosco usam reflexos suaves.
