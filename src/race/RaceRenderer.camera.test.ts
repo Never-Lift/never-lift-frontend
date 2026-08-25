@@ -32,18 +32,22 @@ function createNoopContext() {
   ) as CanvasRenderingContext2D
 }
 
-function createCanvas(context: CanvasRenderingContext2D) {
+function createCanvas(
+  context: CanvasRenderingContext2D,
+  width = 1_600,
+  height = 900,
+) {
   const canvas = document.createElement('canvas')
   Object.defineProperty(canvas, 'getContext', { value: () => context })
   Object.defineProperty(canvas, 'getBoundingClientRect', {
     value: () => ({
       x: 0,
       y: 0,
-      width: 1_600,
-      height: 900,
+      width,
+      height,
       top: 0,
-      right: 1_600,
-      bottom: 900,
+      right: width,
+      bottom: height,
       left: 0,
       toJSON: () => ({}),
     }),
@@ -113,7 +117,7 @@ describe('RaceRenderer 2.5D camera integration', () => {
     expect(playerOneViews[1].x).toBeGreaterThan(800)
   })
 
-  it('keeps the race car near the documented 5.5% size in a real viewport', () => {
+  it('keeps the race car at the documented nominal 6% size in a real viewport', () => {
     const context = createNoopContext()
     const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK)
     const vehicles = createVehicles()
@@ -131,5 +135,47 @@ describe('RaceRenderer 2.5D camera integration', () => {
     for (const length of lengths) {
       expect(length).toBeCloseTo(54, 8)
     }
+  })
+
+  it('keeps independent F1 views and anchors in a horizontal split below 1.35', () => {
+    const context = createNoopContext()
+    const renderer = new RaceRenderer(
+      createCanvas(context, 900, 800),
+      SHORT_TRACK,
+      { splitScreenAspectRatio: () => 900 / 800 },
+    )
+    const vehicles = createVehicles()
+    const engine = {
+      mode: 'local',
+      getInterpolatedVehicles: () => vehicles,
+    } as RaceEngine
+
+    renderer.render(engine, 1 / 60)
+
+    expect(drawVehicleVisualMock).toHaveBeenCalledTimes(4)
+    const calls = drawVehicleVisualMock.mock.calls.map((call) => call[1])
+    const playerOneCalls = calls.filter(
+      (options) => options.color === '#31c7ff',
+    )
+    const playerTwoCalls = calls.filter(
+      (options) => options.color === '#ff2e88',
+    )
+
+    expect(playerOneCalls).toHaveLength(2)
+    expect(playerTwoCalls).toHaveLength(2)
+    expect(playerOneCalls[0]).toMatchObject({
+      x: 450,
+      y: 272,
+    })
+    expect(playerTwoCalls[1]).toMatchObject({
+      x: 450,
+      y: 672,
+    })
+    expect(playerOneCalls[0].relativeYawRadians).toBeCloseTo(Math.PI / 2, 8)
+    expect(playerTwoCalls[1].relativeYawRadians).toBeCloseTo(0, 8)
+    expect(playerOneCalls[0].length).toBeCloseTo(24, 8)
+    expect(playerTwoCalls[1].length).toBeCloseTo(24, 8)
+    expect(playerOneCalls[0].y).toBeLessThan(400)
+    expect(playerTwoCalls[1].y).toBeGreaterThan(400)
   })
 })
