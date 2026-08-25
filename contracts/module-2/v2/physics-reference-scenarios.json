@@ -1,0 +1,187 @@
+{
+  "$schema": "./physics-reference-scenarios.schema.json",
+  "contractVersion": "2.0.0",
+  "physicsConstantsVersion": "2.0.0",
+  "physicsStepSeconds": 0.008333333333333333,
+  "tolerance": {
+    "positionMeters": 0.03,
+    "velocityMetersPerSecond": 0.03,
+    "angleRadians": 0.003,
+    "wheelRadiansPerSecond": 0.05,
+    "engineRpm": 5
+  },
+  "scenarios": [
+    {
+      "id": "full-throttle-zero-to-three-hundred",
+      "category": "acceleration",
+      "description": "Aceleração reta a partir do repouso, incluindo as oito marchas e sem hard cap.",
+      "surface": "asphalt",
+      "steps": 2400,
+      "initialState": { "x": 0, "y": 0, "velocityX": 0, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0, "appliedBrake": 0, "frontWheelAngularSpeed": 0, "rearWheelAngularSpeed": 0, "gear": 1, "engineRpm": 5000, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 2400, "input": { "throttle": 1, "brake": 0, "steer": 0 } }
+      ],
+      "expectedRanges": [
+        { "metric": "maximumSpeedMetersPerSecond", "minimum": 83.333333 },
+        { "metric": "stateIsFinite", "expectedBoolean": true }
+      ]
+    },
+    {
+      "id": "terminal-speed-no-hard-cap",
+      "category": "acceleration",
+      "description": "A velocidade converge pelo equilíbrio potência-arrasto e permanece abaixo de 350 km/h na calibração inicial.",
+      "surface": "asphalt",
+      "steps": 7200,
+      "initialState": { "x": 0, "y": 0, "velocityX": 75, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 1, "appliedBrake": 0, "frontWheelAngularSpeed": 208.333333, "rearWheelAngularSpeed": 208.333333, "gear": 8, "engineRpm": 12000, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 7200, "input": { "throttle": 1, "brake": 0, "steer": 0 } }
+      ],
+      "expectedRanges": [
+        { "metric": "finalSpeedMetersPerSecond", "minimum": 88, "maximum": 97.222222 },
+        { "metric": "hardSpeedClampObserved", "expectedBoolean": false }
+      ]
+    },
+    {
+      "id": "coast-down-asphalt",
+      "category": "coast-down",
+      "description": "Arrasto quadrático e rolamento reduzem a velocidade sem comando.",
+      "surface": "asphalt",
+      "steps": 1200,
+      "initialState": { "x": 0, "y": 0, "velocityX": 80, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0, "appliedBrake": 0, "frontWheelAngularSpeed": 222.222222, "rearWheelAngularSpeed": 222.222222, "gear": 8, "engineRpm": 12500, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 1200, "input": { "throttle": 0, "brake": 0, "steer": 0 } }
+      ],
+      "expectedRanges": [
+        { "metric": "finalSpeedMetersPerSecond", "maximum": 79.5 },
+        { "metric": "finalSpeedMetersPerSecond", "minimum": 20 }
+      ]
+    },
+    {
+      "id": "miami-reference-braking",
+      "category": "braking",
+      "description": "Frenagem de 320 para aproximadamente 78 km/h, referência inicial de 165 m e 3,66 s.",
+      "surface": "asphalt",
+      "steps": 439,
+      "initialState": { "x": 0, "y": 0, "velocityX": 88.888889, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0, "appliedBrake": 0, "frontWheelAngularSpeed": 246.91358, "rearWheelAngularSpeed": 246.91358, "gear": 8, "engineRpm": 14000, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 439, "input": { "throttle": 0, "brake": 0.7, "steer": 0 } }
+      ],
+      "expectedRanges": [
+        { "metric": "finalSpeedMetersPerSecond", "minimum": 17, "maximum": 27 },
+        { "metric": "distanceMeters", "minimum": 155, "maximum": 200 }
+      ]
+    },
+    {
+      "id": "brake-lock-no-abs",
+      "category": "braking",
+      "description": "Freio máximo pode levar a velocidade periférica da roda abaixo da velocidade do carro.",
+      "surface": "asphalt",
+      "steps": 240,
+      "initialState": { "x": 0, "y": 0, "velocityX": 55, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0, "appliedBrake": 0, "frontWheelAngularSpeed": 152.777778, "rearWheelAngularSpeed": 152.777778, "gear": 6, "engineRpm": 11000, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 240, "input": { "throttle": 0, "brake": 1, "steer": 0 } }
+      ],
+      "expectedRanges": [
+        { "metric": "minimumFrontWheelSlipRatio", "maximum": -0.08 },
+        { "metric": "absInterventionObserved", "expectedBoolean": false }
+      ]
+    },
+    {
+      "id": "constant-radius-within-grip",
+      "category": "cornering",
+      "description": "Curva estável abaixo do limite de aderência.",
+      "surface": "asphalt",
+      "steps": 720,
+      "initialState": { "x": 0, "y": 0, "velocityX": 35, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0.35, "appliedBrake": 0, "frontWheelAngularSpeed": 97.222222, "rearWheelAngularSpeed": 97.222222, "gear": 4, "engineRpm": 10500, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 720, "input": { "throttle": 0.35, "brake": 0, "steer": 0.3 } }
+      ],
+      "expectedRanges": [
+        { "metric": "absoluteYawRateAtEnd", "minimum": 0.05 },
+        { "metric": "stateIsFinite", "expectedBoolean": true }
+      ]
+    },
+    {
+      "id": "high-speed-understeer",
+      "category": "cornering",
+      "description": "Entrada rápida demais satura a dianteira e abre o raio sem esterço artificial.",
+      "surface": "asphalt",
+      "steps": 480,
+      "initialState": { "x": 0, "y": 0, "velocityX": 80, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0.4, "appliedBrake": 0, "frontWheelAngularSpeed": 222.222222, "rearWheelAngularSpeed": 222.222222, "gear": 8, "engineRpm": 12800, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 480, "input": { "throttle": 0.4, "brake": 0, "steer": 1 } }
+      ],
+      "expectedRanges": [
+        { "metric": "maximumFrontCombinedGripUsage", "minimum": 0.98 },
+        { "metric": "stateIsFinite", "expectedBoolean": true }
+      ]
+    },
+    {
+      "id": "power-oversteer-no-tc",
+      "category": "combined-slip",
+      "description": "Acelerador máximo com esterço satura o eixo traseiro e gera patinagem/sobresterço.",
+      "surface": "asphalt",
+      "steps": 600,
+      "initialState": { "x": 0, "y": 0, "velocityX": 24, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0, "appliedBrake": 0, "frontWheelAngularSpeed": 66.666667, "rearWheelAngularSpeed": 66.666667, "gear": 3, "engineRpm": 9000, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 600, "input": { "throttle": 1, "brake": 0, "steer": 0.72 } }
+      ],
+      "expectedRanges": [
+        { "metric": "maximumRearWheelSlipRatio", "minimum": 0.1 },
+        { "metric": "tractionControlInterventionObserved", "expectedBoolean": false }
+      ]
+    },
+    {
+      "id": "grass-transition",
+      "category": "surface",
+      "description": "Grama reduz aderência e adiciona resistência sem impor limite rígido de velocidade.",
+      "surface": "grass",
+      "steps": 600,
+      "initialState": { "x": 0, "y": 0, "velocityX": 45, "velocityY": 3, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0.5, "appliedBrake": 0, "frontWheelAngularSpeed": 125, "rearWheelAngularSpeed": 125, "gear": 5, "engineRpm": 10500, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 600, "input": { "throttle": 0.5, "brake": 0, "steer": -0.2 } }
+      ],
+      "expectedRanges": [
+        { "metric": "finalSpeedMetersPerSecond", "maximum": 44 },
+        { "metric": "surfaceSpeedClampObserved", "expectedBoolean": false }
+      ]
+    },
+    {
+      "id": "oblique-wall-ccd",
+      "category": "collision",
+      "description": "Impacto oblíquo de alta velocidade usa CCD, impulso no contato e produz yaw sem atravessar a parede.",
+      "surface": "asphalt",
+      "steps": 180,
+      "initialState": { "x": 0, "y": 0, "velocityX": 70, "velocityY": 8, "angle": 0.04, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0, "appliedBrake": 0, "frontWheelAngularSpeed": 194.444444, "rearWheelAngularSpeed": 194.444444, "gear": 7, "engineRpm": 12500, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 180, "input": { "throttle": 0, "brake": 0, "steer": 0 } }
+      ],
+      "environment": {
+        "barrier": {
+          "from": { "x": 45, "y": -20 },
+          "to": { "x": 45, "y": 20 },
+          "material": "concrete-wall"
+        }
+      },
+      "expectedRanges": [
+        { "metric": "tunnelingObserved", "expectedBoolean": false },
+        { "metric": "maximumAbsoluteYawRate", "minimum": 0.01 }
+      ]
+    },
+    {
+      "id": "left-right-symmetry",
+      "category": "determinism",
+      "description": "Entradas espelhadas devem produzir posições e yaw espelhados dentro da tolerância.",
+      "surface": "asphalt",
+      "steps": 720,
+      "initialState": { "x": 0, "y": 0, "velocityX": 40, "velocityY": 0, "angle": 0, "yawRate": 0, "steeringAngle": 0, "appliedThrottle": 0.5, "appliedBrake": 0, "frontWheelAngularSpeed": 111.111111, "rearWheelAngularSpeed": 111.111111, "gear": 5, "engineRpm": 11000, "gearShiftTimeRemaining": 0 },
+      "inputSegments": [
+        { "fromStep": 0, "toStep": 720, "input": { "throttle": 0.5, "brake": 0, "steer": 0.45 } }
+      ],
+      "expectedRanges": [
+        { "metric": "mirrorSymmetryWithinTolerance", "expectedBoolean": true },
+        { "metric": "renderFpsIndependent", "expectedBoolean": true }
+      ]
+    }
+  ]
+}

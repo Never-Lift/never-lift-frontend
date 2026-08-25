@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { PHYSICS_STEP_SECONDS } from '@/race/constants'
+import {
+  PHYSICS_CONSTANTS,
+  PHYSICS_STEP_SECONDS,
+} from '@/race/constants'
 import {
   JUMP_START_LOCK_TICKS,
   LocalRaceSession,
@@ -15,7 +18,6 @@ const NEUTRAL_INPUT: DriverInput = {
   throttle: 0,
   brake: 0,
   steer: 0,
-  nitro: false,
 }
 
 const THROTTLE_INPUT: DriverInput = {
@@ -113,14 +115,13 @@ describe('LocalRaceSession start procedure', () => {
     },
   )
 
-  it('detects early throttle and preserves brake, steer and reserved nitro input', () => {
+  it('detects early throttle and preserves brake and steer input', () => {
     const { engine, session } = createSession()
     const setInput = vi.spyOn(engine, 'setInput')
     const earlyInput: DriverInput = {
       throttle: 1,
       brake: 0.6,
       steer: -0.75,
-      nitro: true,
     }
 
     session.advanceFrame(PHYSICS_STEP_SECONDS, inputs(earlyInput))
@@ -136,7 +137,6 @@ describe('LocalRaceSession start procedure', () => {
       throttle: 0,
       brake: 0.6,
       steer: -0.75,
-      nitro: true,
     })
   })
 
@@ -176,7 +176,9 @@ describe('LocalRaceSession start procedure', () => {
     const { engine, session } = createSession()
     session.advanceFrame(PHYSICS_STEP_SECONDS, inputs(THROTTLE_INPUT))
     release(session, 60, THROTTLE_INPUT)
-    for (let tick = 0; tick < JUMP_START_LOCK_TICKS - 1; tick += 1) {
+    const lockTicksAfterRelease =
+      session.getPenalty('player-1').throttleLockTicksRemaining
+    for (let tick = 0; tick < lockTicksAfterRelease - 1; tick += 1) {
       session.advanceFrame(PHYSICS_STEP_SECONDS, inputs(THROTTLE_INPUT))
     }
     expect(session.getPenalty('player-1').throttleLockTicksRemaining).toBe(1)
@@ -184,9 +186,12 @@ describe('LocalRaceSession start procedure', () => {
     const before = engine.getSimulationTimeSeconds()
     const steps = session.advanceFrame(0.25, inputs(THROTTLE_INPUT))
 
-    expect(steps).toBe(8)
+    expect(steps).toBe(
+      PHYSICS_CONSTANTS.simulation.maxSubstepsPerFrame,
+    )
     expect(engine.getSimulationTimeSeconds() - before).toBeCloseTo(
-      PHYSICS_STEP_SECONDS * 8,
+      PHYSICS_STEP_SECONDS *
+        PHYSICS_CONSTANTS.simulation.maxSubstepsPerFrame,
       6,
     )
     expect(session.getPenalty('player-1').throttleLockTicksRemaining).toBe(0)

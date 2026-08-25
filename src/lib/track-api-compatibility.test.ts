@@ -6,6 +6,7 @@ import { SHORT_TRACK } from '@/test/track-fixtures'
 
 type MutableTrackDefinitionPayload = {
   catalogVersion: string
+  physicsContractVersion: string
   curbs: Array<{
     palette: string
     widthMeters: number
@@ -23,6 +24,17 @@ type MutableTrackDefinitionPayload = {
       }
     }>
   }
+  barrierGeometry: {
+    segments: Array<{
+      trackLimitSegmentIndex: number
+      side: string
+      material: string
+      collisionLayer: string
+      thicknessMeters: number
+      chunkIndexes: number[]
+      path: Array<{ x: number; y: number; elevationLayer: number }>
+    }>
+  }
   source: {
     environmentReferences: Array<unknown>
   }
@@ -38,19 +50,68 @@ describe('track API compatibility guard', () => {
     vi.unstubAllGlobals()
   })
 
-  it('accepts a valid 1.3 definition with curbs, asymmetric zones, and an optional fence', async () => {
+  it('accepts a valid 2.0 definition with explicit barrier faces', async () => {
     const definition = structuredClone(SHORT_TRACK)
     definition.trackLimits.segments[0].left = {
-      zones: [
-        { surface: 'asphalt', widthMeters: 4 },
-        { surface: 'gravel', widthMeters: 11 },
-      ],
+      zones: [],
       barrier: 'tecpro',
       fence: 'debris-fence',
     }
+    definition.barrierGeometry.segments[0].material = 'tecpro'
+    definition.barrierGeometry.segments[0].thicknessMeters = 0.62
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
 
     await expect(raceApi.getTrack('monaco')).resolves.toEqual(definition)
+  })
+
+  it('accepts contiguous barrier pieces split at an elevation boundary', async () => {
+    const definition = structuredClone(SHORT_TRACK)
+    const original = definition.barrierGeometry.segments[0]
+    const splitIndex = Math.floor(original.path.length / 2)
+    const splitPoint = original.path[splitIndex]
+    const first = {
+      ...original,
+      toDistanceMeters: splitPoint.distanceMeters,
+      path: original.path.slice(0, splitIndex + 1),
+    }
+    const second = {
+      ...original,
+      fromDistanceMeters: splitPoint.distanceMeters,
+      path: original.path.slice(splitIndex),
+    }
+    definition.barrierGeometry.segments = [
+      first,
+      second,
+      ...definition.barrierGeometry.segments.slice(1),
+    ].map((segment, index) => ({ ...segment, index }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
+
+    await expect(raceApi.getTrack('suzuka')).resolves.toEqual(definition)
+  })
+
+  it('rejects a gap between split barrier pieces', async () => {
+    const definition = structuredClone(SHORT_TRACK)
+    const original = definition.barrierGeometry.segments[0]
+    const splitIndex = Math.floor(original.path.length / 2)
+    const splitPoint = original.path[splitIndex]
+    definition.barrierGeometry.segments = [
+      {
+        ...original,
+        toDistanceMeters: splitPoint.distanceMeters,
+        path: original.path.slice(0, splitIndex + 1),
+      },
+      {
+        ...original,
+        fromDistanceMeters: splitPoint.distanceMeters + 1,
+        path: original.path.slice(splitIndex),
+      },
+      ...definition.barrierGeometry.segments.slice(1),
+    ].map((segment, index) => ({ ...segment, index }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
+
+    await expect(raceApi.getTrack('suzuka')).rejects.toThrow(
+      'dados desta pista não são compatíveis',
+    )
   })
 
   it.each([
@@ -70,6 +131,12 @@ describe('track API compatibility guard', () => {
       label: 'obsolete catalog version',
       mutate: (definition: MutableTrackDefinitionPayload) => {
         definition.catalogVersion = '2026.2'
+      },
+    },
+    {
+      label: 'obsolete physics contract',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.physicsContractVersion = '1.3.0'
       },
     },
     {
@@ -130,7 +197,31 @@ describe('track API compatibility guard', () => {
         definition.source.environmentReferences = []
       },
     },
-  ])('rejects a nominal 1.3 definition with $label', async ({ mutate }) => {
+    {
+      label: 'barrier material diverging from track limits',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.barrierGeometry.segments[0].material = 'guardrail'
+      },
+    },
+    {
+      label: 'barrier face on an unknown collision layer',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.barrierGeometry.segments[0].collisionLayer = 'invisible-wall'
+      },
+    },
+    {
+      label: 'barrier face with no geometric path',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.barrierGeometry.segments[0].path = []
+      },
+    },
+    {
+      label: 'barrier face referencing an unknown chunk',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.barrierGeometry.segments[0].chunkIndexes = [999]
+      },
+    },
+  ])('rejects a nominal 2.0 definition with $label', async ({ mutate }) => {
     const definition = structuredClone(
       SHORT_TRACK,
     ) as unknown as MutableTrackDefinitionPayload
@@ -159,6 +250,7 @@ describe('track API compatibility guard', () => {
         jsonResponse({
           schemaVersion: '1.1.0',
           catalogVersion: '2026.2',
+          physicsContractVersion: '1.3.0',
           seasonReference: 2026,
           tracks: [],
         }),
@@ -170,13 +262,14 @@ describe('track API compatibility guard', () => {
     )
   })
 
-  it('rejects a nominal 1.3 catalog from another catalog generation', async () => {
+  it('rejects a nominal 2.0 catalog from another catalog generation', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         jsonResponse({
-          schemaVersion: '1.3.0',
-          catalogVersion: '2026.3',
+          schemaVersion: '2.0.0',
+          catalogVersion: '2026.7',
+          physicsContractVersion: '2.0.0',
           seasonReference: 2026,
           tracks: Array.from({ length: 24 }, () => ({})),
         }),

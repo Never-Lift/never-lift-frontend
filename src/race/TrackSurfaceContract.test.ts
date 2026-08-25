@@ -13,7 +13,19 @@ function pointAtStart(offsetFromCenterlineMeters: number) {
   }
 }
 
-describe('TrackDefinition 1.2 surface contract', () => {
+function squareProbe(centerX: number, halfSize: number) {
+  return {
+    id: 'surface-contract-probe',
+    vertices: [
+      { x: centerX - halfSize, y: -halfSize },
+      { x: centerX + halfSize, y: -halfSize },
+      { x: centerX + halfSize, y: halfSize },
+      { x: centerX - halfSize, y: halfSize },
+    ],
+  }
+}
+
+describe('TrackDefinition 2.0 surface contract', () => {
   it('resolves asymmetric left and right environments independently', () => {
     const definition = structuredClone(LONG_TRACK)
     definition.trackLimits.segments[0] = {
@@ -62,7 +74,7 @@ describe('TrackDefinition 1.2 surface contract', () => {
     expect(rightSecondZone).toMatchObject({ side: 'right', material: 'gravel' })
   })
 
-  it('maps visual gravel to the existing grass physics surface', () => {
+  it('keeps gravel as its own v2 physics surface', () => {
     const definition = structuredClone(LONG_TRACK)
     definition.trackLimits.segments[0].right = {
       zones: [{ surface: 'gravel', widthMeters: 12 }],
@@ -72,52 +84,25 @@ describe('TrackDefinition 1.2 surface contract', () => {
     const gravelPoint = pointAtStart(TRACK_HALF_WIDTH + 6)
 
     expect(geometry.getEnvironmentAt(gravelPoint).material).toBe('gravel')
-    expect(geometry.getSurfaceAt(gravelPoint)).toBe('grass')
+    expect(geometry.getSurfaceAt(gravelPoint)).toBe('gravel')
   })
 
   it('places the impact barrier after the zones without moving it for a visual fence', () => {
     const definition = structuredClone(LONG_TRACK)
-    definition.trackLimits.segments[0] = {
-      ...definition.trackLimits.segments[0],
-      left: {
-        zones: [{ surface: 'grass', widthMeters: 2 }],
-        barrier: 'guardrail',
-      },
-      right: {
-        zones: [
-          { surface: 'asphalt', widthMeters: 3 },
-          { surface: 'gravel', widthMeters: 9 },
-        ],
-        barrier: 'tecpro',
-        fence: 'debris-fence',
-      },
-    }
+    definition.trackLimits.segments[0].right.fence = 'debris-fence'
     const geometry = new TrackGeometry(definition)
-    const vehicleRadius = 1
+    const rightBarrierOffset = TRACK_HALF_WIDTH + 10
 
     expect(
-      geometry.getBarrierContacts(
-        pointAtStart(-(TRACK_HALF_WIDTH + 0.9)),
-        vehicleRadius,
+      geometry.getBarrierCollisionManifolds(
+        [squareProbe(TRACK_RADIUS + rightBarrierOffset - 1.1, 1)],
+        0,
       ),
     ).toHaveLength(0)
     expect(
-      geometry.getBarrierContacts(
-        pointAtStart(-(TRACK_HALF_WIDTH + 1.1)),
-        vehicleRadius,
-      ),
-    ).toHaveLength(1)
-
-    expect(
-      geometry.getBarrierContacts(
-        pointAtStart(TRACK_HALF_WIDTH + 10.9),
-        vehicleRadius,
-      ),
-    ).toHaveLength(0)
-    expect(
-      geometry.getBarrierContacts(
-        pointAtStart(TRACK_HALF_WIDTH + 11.1),
-        vehicleRadius,
+      geometry.getBarrierCollisionManifolds(
+        [squareProbe(TRACK_RADIUS + rightBarrierOffset - 0.9, 1)],
+        0,
       ),
     ).toHaveLength(1)
   })

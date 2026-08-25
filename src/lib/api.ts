@@ -120,6 +120,7 @@ export const accountApi = {
 export type LocalRaceResultRequest = {
   trackId: string
   trackCatalogVersion: string
+  physicsContractVersion: string
   mode: 'solo' | 'local'
   results: Array<{
     userIdOrNull: string | null
@@ -159,8 +160,9 @@ export type TrackCatalogEntry = {
 }
 
 export type TrackCatalog = {
-  schemaVersion: '1.3.0'
-  catalogVersion: string
+  schemaVersion: '2.0.0'
+  catalogVersion: '2026.6'
+  physicsContractVersion: '2.0.0'
   seasonReference: 2026
   calendarPolicy?: 'original-24-round-freeze'
   tracks: TrackCatalogEntry[]
@@ -252,9 +254,28 @@ export type TrackLimitSegment = {
   right: TrackSideEnvironment
 }
 
+export type TrackBarrierPathPoint = TrackVector & {
+  distanceMeters: number
+  elevationLayer: number
+}
+
+export type TrackBarrierGeometrySegment = {
+  index: number
+  trackLimitSegmentIndex: number
+  side: 'left' | 'right'
+  fromDistanceMeters: number
+  toDistanceMeters: number
+  material: TrackBarrierType
+  thicknessMeters: number
+  collisionLayer: 'track-barrier'
+  chunkIndexes: number[]
+  path: TrackBarrierPathPoint[]
+}
+
 export type TrackDefinition = {
-  schemaVersion: '1.3.0'
-  catalogVersion: string
+  schemaVersion: '2.0.0'
+  catalogVersion: '2026.6'
+  physicsContractVersion: '2.0.0'
   id: string
   name: string
   countryCode: string
@@ -288,6 +309,9 @@ export type TrackDefinition = {
   trackLimits: {
     segments: TrackLimitSegment[]
   }
+  barrierGeometry: {
+    segments: TrackBarrierGeometrySegment[]
+  }
   chunks: TrackChunk[]
   sceneryLayout: {
     preset: 'park' | 'street' | 'desert' | 'coastal' | 'classic' | 'night-city'
@@ -312,9 +336,11 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     typeof payload !== 'object' ||
     payload === null ||
     !('schemaVersion' in payload) ||
-    payload.schemaVersion !== '1.3.0' ||
+    payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.5' ||
+    payload.catalogVersion !== '2026.6' ||
+    !('physicsContractVersion' in payload) ||
+    payload.physicsContractVersion !== '2.0.0' ||
     !('seasonReference' in payload) ||
     payload.seasonReference !== 2026 ||
     !('tracks' in payload) ||
@@ -419,14 +445,137 @@ function isCompatibleTrackSide(value: unknown): value is TrackSideEnvironment {
   )
 }
 
+function isCompatibleBarrierGeometrySegment(
+  value: unknown,
+  index: number,
+  lengthMeters: number,
+  trackLimitCount: number,
+  chunkCount: number,
+): value is TrackBarrierGeometrySegment {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('index' in value) ||
+    value.index !== index ||
+    !('trackLimitSegmentIndex' in value) ||
+    typeof value.trackLimitSegmentIndex !== 'number' ||
+    !Number.isInteger(value.trackLimitSegmentIndex) ||
+    value.trackLimitSegmentIndex < 0 ||
+    value.trackLimitSegmentIndex >= trackLimitCount ||
+    !('side' in value) ||
+    (value.side !== 'left' && value.side !== 'right') ||
+    !('fromDistanceMeters' in value) ||
+    typeof value.fromDistanceMeters !== 'number' ||
+    !Number.isFinite(value.fromDistanceMeters) ||
+    value.fromDistanceMeters < 0 ||
+    !('toDistanceMeters' in value) ||
+    typeof value.toDistanceMeters !== 'number' ||
+    !Number.isFinite(value.toDistanceMeters) ||
+    value.toDistanceMeters <= value.fromDistanceMeters ||
+    value.toDistanceMeters > lengthMeters ||
+    !('material' in value) ||
+    typeof value.material !== 'string' ||
+    !TRACK_BARRIER_TYPES.has(value.material as TrackBarrierType) ||
+    !('thicknessMeters' in value) ||
+    typeof value.thicknessMeters !== 'number' ||
+    !Number.isFinite(value.thicknessMeters) ||
+    value.thicknessMeters <= 0 ||
+    value.thicknessMeters > 2 ||
+    !('collisionLayer' in value) ||
+    value.collisionLayer !== 'track-barrier' ||
+    !('chunkIndexes' in value) ||
+    !Array.isArray(value.chunkIndexes) ||
+    value.chunkIndexes.length === 0 ||
+    value.chunkIndexes.some(
+      (chunkIndex) =>
+        typeof chunkIndex !== 'number' ||
+        !Number.isInteger(chunkIndex) ||
+        chunkIndex < 0 ||
+        chunkIndex >= chunkCount,
+    ) ||
+    !('path' in value) ||
+    !Array.isArray(value.path) ||
+    value.path.length < 2
+  ) {
+    return false
+  }
+
+  const fromDistanceMeters = value.fromDistanceMeters as number
+  const toDistanceMeters = value.toDistanceMeters as number
+  return value.path.every(
+    (point) =>
+      typeof point === 'object' &&
+      point !== null &&
+      'x' in point &&
+      typeof point.x === 'number' &&
+      Number.isFinite(point.x) &&
+      'y' in point &&
+      typeof point.y === 'number' &&
+      Number.isFinite(point.y) &&
+      'distanceMeters' in point &&
+      typeof point.distanceMeters === 'number' &&
+      Number.isFinite(point.distanceMeters) &&
+      point.distanceMeters >= fromDistanceMeters - 0.5 &&
+      point.distanceMeters <= toDistanceMeters + 0.5 &&
+      'elevationLayer' in point &&
+      typeof point.elevationLayer === 'number' &&
+      Number.isInteger(point.elevationLayer) &&
+      point.elevationLayer >= 0 &&
+      point.elevationLayer <= 3,
+  )
+}
+
+function hasCompleteBarrierCoverage(
+  barriers: readonly TrackBarrierGeometrySegment[],
+  limits: readonly TrackLimitSegment[],
+) {
+  const toleranceMeters = 1e-6
+  return limits.every((limit) =>
+    (['left', 'right'] as const).every((side) => {
+      const coverage = barriers
+        .filter(
+          (barrier) =>
+            barrier.trackLimitSegmentIndex === limit.index &&
+            barrier.side === side,
+        )
+        .sort(
+          (first, second) =>
+            first.fromDistanceMeters - second.fromDistanceMeters,
+        )
+      if (coverage.length === 0) return false
+      let expectedFrom = limit.fromDistanceMeters
+      for (const barrier of coverage) {
+        if (
+          Math.abs(barrier.fromDistanceMeters - expectedFrom) >
+            toleranceMeters ||
+          barrier.toDistanceMeters > limit.toDistanceMeters + toleranceMeters ||
+          barrier.material !== limit[side].barrier ||
+          Math.abs(
+            barrier.path[0].distanceMeters - barrier.fromDistanceMeters,
+          ) > toleranceMeters ||
+          Math.abs(
+            barrier.path.at(-1)!.distanceMeters - barrier.toDistanceMeters,
+          ) > toleranceMeters
+        ) {
+          return false
+        }
+        expectedFrom = barrier.toDistanceMeters
+      }
+      return Math.abs(expectedFrom - limit.toDistanceMeters) <= toleranceMeters
+    }),
+  )
+}
+
 function compatibleTrackDefinition(payload: unknown): TrackDefinition {
   if (
     typeof payload !== 'object' ||
     payload === null ||
     !('schemaVersion' in payload) ||
-    payload.schemaVersion !== '1.3.0' ||
+    payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.5' ||
+    payload.catalogVersion !== '2026.6' ||
+    !('physicsContractVersion' in payload) ||
+    payload.physicsContractVersion !== '2.0.0' ||
     !('centerline' in payload) ||
     !Array.isArray(payload.centerline) ||
     payload.centerline.length < 2 ||
@@ -473,6 +622,30 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
         !('right' in segment) ||
         !isCompatibleTrackSide(segment.left) ||
         !isCompatibleTrackSide(segment.right),
+    ) ||
+    !('chunks' in payload) ||
+    !Array.isArray(payload.chunks) ||
+    payload.chunks.length === 0 ||
+    !('barrierGeometry' in payload) ||
+    typeof payload.barrierGeometry !== 'object' ||
+    payload.barrierGeometry === null ||
+    !('segments' in payload.barrierGeometry) ||
+    !Array.isArray(payload.barrierGeometry.segments) ||
+    payload.barrierGeometry.segments.length <
+      payload.trackLimits.segments.length * 2 ||
+    payload.barrierGeometry.segments.some(
+      (segment, index) =>
+        !isCompatibleBarrierGeometrySegment(
+          segment,
+          index,
+          payload.lengthMeters as number,
+          (payload.trackLimits as { segments: unknown[] }).segments.length,
+          (payload.chunks as unknown[]).length,
+        ),
+    ) ||
+    !hasCompleteBarrierCoverage(
+      payload.barrierGeometry.segments as TrackBarrierGeometrySegment[],
+      payload.trackLimits.segments as TrackLimitSegment[],
     ) ||
     !('source' in payload) ||
     typeof payload.source !== 'object' ||

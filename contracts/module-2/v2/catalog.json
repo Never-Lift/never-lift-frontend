@@ -1,0 +1,249 @@
+{
+  "schemaVersion": "2.0.0",
+  "catalogVersion": "2026.6",
+  "seasonReference": 2026,
+  "calendarPolicy": "original-24-round-freeze",
+  "tracks": [
+    {
+      "round": 1,
+      "id": "albert-park",
+      "name": "Albert Park Circuit",
+      "countryCode": "AU",
+      "countryName": "Australia",
+      "locality": "Melbourne",
+      "lengthMeters": 5278,
+      "definitionPath": "tracks/albert-park.json"
+    },
+    {
+      "round": 2,
+      "id": "shanghai",
+      "name": "Shanghai International Circuit",
+      "countryCode": "CN",
+      "countryName": "China",
+      "locality": "Shanghai",
+      "lengthMeters": 5451,
+      "definitionPath": "tracks/shanghai.json"
+    },
+    {
+      "round": 3,
+      "id": "suzuka",
+      "name": "Suzuka International Racing Course",
+      "countryCode": "JP",
+      "countryName": "Japan",
+      "locality": "Suzuka",
+      "lengthMeters": 5807,
+      "definitionPath": "tracks/suzuka.json"
+    },
+    {
+      "round": 4,
+      "id": "bahrain",
+      "name": "Bahrain International Circuit",
+      "countryCode": "BH",
+      "countryName": "Bahrain",
+      "locality": "Sakhir",
+      "lengthMeters": 5412,
+      "definitionPath": "tracks/bahrain.json"
+    },
+    {
+      "round": 5,
+      "id": "jeddah",
+      "name": "Jeddah Corniche Circuit",
+      "countryCode": "SA",
+      "countryName": "Saudi Arabia",
+      "locality": "Jeddah",
+      "lengthMeters": 6175,
+      "definitionPath": "tracks/jeddah.json"
+    },
+    {
+      "round": 6,
+      "id": "miami",
+      "name": "Miami International Autodrome",
+      "countryCode": "US",
+      "countryName": "United States",
+      "locality": "Miami",
+      "lengthMeters": 5412,
+      "definitionPath": "tracks/miami.json"
+    },
+    {
+      "round": 7,
+      "id": "montreal",
+      "name": "Circuit Gilles-Villeneuve",
+      "countryCode": "CA",
+      "countryName": "Canada",
+      "locality": "Montreal",
+      "lengthMeters": 4361,
+      "definitionPath": "tracks/montreal.json"
+    },
+    {
+      "round": 8,
+      "id": "monaco",
+      "name": "Circuit de Monaco",
+      "countryCode": "MC",
+      "countryName": "Monaco",
+      "locality": "Monaco",
+      "lengthMeters": 3337,
+      "definitionPath": "tracks/monaco.json"
+    },
+    {
+      "round": 9,
+      "id": "barcelona",
+      "name": "Circuit de Barcelona-Catalunya",
+      "countryCode": "ES",
+      "countryName": "Spain",
+      "locality": "Barcelona",
+      "lengthMeters": 4657,
+      "definitionPath": "tracks/barcelona.json"
+    },
+    {
+      "round": 10,
+      "id": "spielberg",
+      "name": "Red Bull Ring",
+      "countryCode": "AT",
+      "countryName": "Austria",
+      "locality": "Spielberg",
+      "lengthMeters": 4326,
+      "definitionPath": "tracks/spielberg.json"
+    },
+    {
+      "round": 11,
+      "id": "silverstone",
+      "name": "Silverstone Circuit",
+      "countryCode": "GB",
+      "countryName": "United Kingdom",
+      "locality": "Silverstone",
+      "lengthMeters": 5891,
+      "definitionPath": "tracks/silverstone.json"
+    },
+    {
+      "round": 12,
+      "id": "spa-francorchamps",
+      "name": "Circuit de Spa-Francorchamps",
+      "countryCode": "BE",
+      "countryName": "Belgium",
+      "locality": "Spa-Francorchamps",
+      "lengthMeters": 7004,
+      "definitionPath": "tracks/spa-francorchamps.json"
+    },
+    {
+      "round": 13,
+      "id": "hungaroring",
+      "name": "Hungaroring",
+      "countryCode": "HU",
+      "countryName": "Hungary",
+      "locality": "Budapest",
+      "lengthMeters": 4381,
+      "definitionPath": "tracks/hungaroring.json"
+    },
+    {
+      "round": 14,
+      "id": "zandvoort",
+      "name": "Circuit Zandvoort",
+      "countryCode": "NL",
+      "countryName": "Netherlands",
+      "locality": "Zandvoort",
+      "lengthMeters": 4259,
+      "definitionPath": "tracks/zandvoort.json"
+    },
+    {
+      "round": 15,
+      "id": "monza",
+      "name": "Autodromo Nazionale Monza",
+      "countryCode": "IT",
+      "countryName": "Italy",
+      "locality": "Monza",
+      "lengthMeters": 5793,
+      "definitionPath": "tracks/monza.json"
+    },
+    {
+      "round": 16,
+      "id": "madrid",
+      "name": "Circuito de Madring",
+      "countryCode": "ES",
+      "countryName": "Spain",
+      "locality": "Madrid",
+      "lengthMeters": 5474,
+      "definitionPath": "tracks/madrid.json"
+    },
+    {
+      "round": 17,
+      "id": "baku",
+      "name": "Baku City Circuit",
+      "countryCode": "AZ",
+      "countryName": "Azerbaijan",
+      "locality": "Baku",
+      "lengthMeters": 6003,
+      "definitionPath": "tracks/baku.json"
+    },
+    {
+      "round": 18,
+      "id": "singapore",
+      "name": "Marina Bay Street Circuit",
+      "countryCode": "SG",
+      "countryName": "Singapore",
+      "locality": "Singapore",
+      "lengthMeters": 4928,
+      "definitionPath": "tracks/singapore.json"
+    },
+    {
+      "round": 19,
+      "id": "austin",
+      "name": "Circuit of the Americas",
+      "countryCode": "US",
+      "countryName": "United States",
+      "locality": "Austin",
+      "lengthMeters": 5514,
+      "definitionPath": "tracks/austin.json"
+    },
+    {
+      "round": 20,
+      "id": "mexico-city",
+      "name": "Autódromo Hermanos Rodríguez",
+      "countryCode": "MX",
+      "countryName": "Mexico",
+      "locality": "Mexico City",
+      "lengthMeters": 4304,
+      "definitionPath": "tracks/mexico-city.json"
+    },
+    {
+      "round": 21,
+      "id": "interlagos",
+      "name": "Autódromo José Carlos Pace - Interlagos",
+      "countryCode": "BR",
+      "countryName": "Brazil",
+      "locality": "São Paulo",
+      "lengthMeters": 4309,
+      "definitionPath": "tracks/interlagos.json"
+    },
+    {
+      "round": 22,
+      "id": "las-vegas",
+      "name": "Las Vegas Street Circuit",
+      "countryCode": "US",
+      "countryName": "United States",
+      "locality": "Las Vegas",
+      "lengthMeters": 6201,
+      "definitionPath": "tracks/las-vegas.json"
+    },
+    {
+      "round": 23,
+      "id": "lusail",
+      "name": "Lusail International Circuit",
+      "countryCode": "QA",
+      "countryName": "Qatar",
+      "locality": "Lusail",
+      "lengthMeters": 5419,
+      "definitionPath": "tracks/lusail.json"
+    },
+    {
+      "round": 24,
+      "id": "yas-marina",
+      "name": "Yas Marina Circuit",
+      "countryCode": "AE",
+      "countryName": "United Arab Emirates",
+      "locality": "Abu Dhabi",
+      "lengthMeters": 5281,
+      "definitionPath": "tracks/yas-marina.json"
+    }
+  ],
+  "physicsContractVersion": "2.0.0"
+}

@@ -1,15 +1,54 @@
 import {
   DAMAGE_EFFECTS,
   DAMAGE_THRESHOLDS,
-  PHYSICS_CONSTANTS,
+  GRAVITY_METERS_PER_SECOND_SQUARED,
+  NUMERIC_SPEED_EPSILON_METERS_PER_SECOND,
+  POWERTRAIN,
+  SURFACE_DYNAMICS,
+  TIRE_MODEL,
+  VEHICLE_DYNAMICS,
 } from '@/race/constants'
-import { clamp, dot, magnitude, normalize, scale } from '@/race/math'
+import { updateAppliedControls } from '@/race/control-ramp'
+import { clamp, dot, magnitude, normalizeSignedAngle } from '@/race/math'
+import { bodyAxes, vectorFromBody } from '@/race/physics-utils'
+import {
+  updateAutomaticPowertrain,
+  updateReversePowertrain,
+} from '@/race/powertrain'
+import {
+  computeAxleTireForce,
+  computeLongitudinalForceFromSlip,
+  computePeakTireForce,
+} from '@/race/tire-model'
 import type {
   DriverInput,
   SteeringPull,
   SurfaceId,
+  VehiclePhysicsState,
   VehicleState,
 } from '@/race/types'
+
+export function createInitialVehiclePhysicsState(): VehiclePhysicsState {
+  return {
+    yawRate: 0,
+    steeringAngle: 0,
+    appliedThrottle: 0,
+    appliedBrake: 0,
+    frontWheelAngularSpeed: 0,
+    rearWheelAngularSpeed: 0,
+    gear: 1,
+    engineRpm: POWERTRAIN.idleRpm,
+    gearShiftTimeRemaining: 0,
+    longitudinalSpeed: 0,
+    lateralSpeed: 0,
+    longitudinalAcceleration: 0,
+    lateralAcceleration: 0,
+    frontSlipAngle: 0,
+    rearSlipAngle: 0,
+    frontGripUtilization: 0,
+    rearGripUtilization: 0,
+  }
+}
 
 export function integrateVehicle(
   vehicle: VehicleState,
@@ -17,129 +56,296 @@ export function integrateVehicle(
   surfaceId: SurfaceId,
   deltaSeconds: number,
 ) {
-  const profile = PHYSICS_CONSTANTS.vehiclePerformance
   const isTotalLoss = vehicle.damage.kind === 'total-loss'
-  const handling = PHYSICS_CONSTANTS.handling
-  const surface = PHYSICS_CONSTANTS.surfaces[surfaceId]
-  const accelerationDamageMultiplier =
-    vehicle.damage.engineDamaged
-      ? DAMAGE_EFFECTS.engineAccelerationMultiplier
-      : 1
-  const speedDamageMultiplier =
-    vehicle.damage.engineDamaged
-      ? DAMAGE_EFFECTS.engineMaxSpeedMultiplier
-      : 1
-  const totalLossDragMultiplier = isTotalLoss
-    ? DAMAGE_EFFECTS.totalLossDragMultiplier
-    : 1
-  const throttleInput = isTotalLoss ? 0 : input.throttle
-  const brakeInput = isTotalLoss ? 0 : input.brake
+  const state = vehicle.physicsState ?? createInitialVehiclePhysicsState()
+  vehicle.physicsState = state
   const steeringPull = vehicle.damage.steeringDamaged
     ? vehicle.damage.steeringPull * DAMAGE_EFFECTS.steeringPullStrength
     : 0
-  const steerInput = isTotalLoss ? 0 : clamp(input.steer + steeringPull, -1, 1)
-  const forward = { x: Math.cos(vehicle.angle), y: Math.sin(vehicle.angle) }
-  const right = { x: -forward.y, y: forward.x }
-  let longitudinalSpeed = dot(vehicle.velocity, forward)
-  const lateralSpeed = dot(vehicle.velocity, right)
-
-  const throttleAcceleration =
-    clamp(throttleInput, 0, 1) *
-    profile.engineAcceleration *
-    surface.accelerationMultiplier *
-    handling.longitudinalGripMultiplier *
-    accelerationDamageMultiplier
-  let longitudinalAcceleration = throttleAcceleration
-
-  if (brakeInput > 0) {
-    if (longitudinalSpeed > 0.4) {
-      longitudinalAcceleration -=
-        clamp(brakeInput, 0, 1) * profile.brakeDeceleration
-    } else {
-      longitudinalAcceleration -=
-        clamp(brakeInput, 0, 1) * profile.engineAcceleration * 0.55
-    }
-  }
-
-  vehicle.velocity.x += forward.x * longitudinalAcceleration * deltaSeconds
-  vehicle.velocity.y += forward.y * longitudinalAcceleration * deltaSeconds
-
-  const lateralGrip =
-    profile.baseLateralGrip *
-    handling.lateralGripMultiplier *
-    surface.lateralGripMultiplier
-  const lateralCorrection = clamp(lateralGrip * deltaSeconds, 0, 1)
-  vehicle.velocity.x -= right.x * lateralSpeed * lateralCorrection
-  vehicle.velocity.y -= right.y * lateralSpeed * lateralCorrection
-
-  const speed = magnitude(vehicle.velocity)
-  if (speed > Number.EPSILON) {
-    const dragAcceleration =
-      (profile.linearDrag * speed + profile.quadraticDrag * speed * speed) *
-      surface.dragMultiplier *
-      totalLossDragMultiplier
-    const dragDelta = Math.min(speed, dragAcceleration * deltaSeconds)
-    const velocityDirection = normalize(vehicle.velocity)
-    vehicle.velocity.x -= velocityDirection.x * dragDelta
-    vehicle.velocity.y -= velocityDirection.y * dragDelta
-  }
-
-  longitudinalSpeed = dot(vehicle.velocity, forward)
-  const surfaceForwardLimit =
-    surface.speedLimit === null
-      ? profile.maxForwardSpeed
-      : Math.min(profile.maxForwardSpeed, surface.speedLimit)
-  const forwardLimit = surfaceForwardLimit * speedDamageMultiplier
-  const reverseLimit = profile.maxReverseSpeed * speedDamageMultiplier
-  if (longitudinalSpeed > forwardLimit) {
-    const excess = longitudinalSpeed - forwardLimit
-    vehicle.velocity.x -= forward.x * excess
-    vehicle.velocity.y -= forward.y * excess
-    longitudinalSpeed = forwardLimit
-  } else if (longitudinalSpeed < -reverseLimit) {
-    const excess = longitudinalSpeed + reverseLimit
-    vehicle.velocity.x -= forward.x * excess
-    vehicle.velocity.y -= forward.y * excess
-    longitudinalSpeed = -reverseLimit
-  }
-
-  const speedRatio = clamp(
-    Math.abs(longitudinalSpeed) / profile.maxForwardSpeed,
-    0,
-    1,
+  updateAppliedControls(
+    state,
+    input,
+    steeringPull,
+    isTotalLoss,
+    deltaSeconds,
   )
-  const highSpeedSteering = 1 - profile.highSpeedSteerReduction * speedRatio
-  const direction = longitudinalSpeed < -0.25 ? -1 : 1
-  const steeringAuthority = clamp(Math.abs(longitudinalSpeed) / 3, 0, 1)
-  const targetYawRate =
-    clamp(steerInput, -1, 1) *
-    profile.maxSteerRate *
-    handling.steeringMultiplier *
-    highSpeedSteering *
-    steeringAuthority *
-    direction
-  const yawResponse = clamp((3.5 + lateralGrip * 0.12) * deltaSeconds, 0, 1)
-  vehicle.yawRate += (targetYawRate - vehicle.yawRate) * yawResponse
-  if (Math.abs(steerInput) < 0.01) {
-    vehicle.yawRate *= Math.exp(-handling.yawDampingPerSecond * deltaSeconds)
-  }
 
-  vehicle.angle += vehicle.yawRate * deltaSeconds
+  const { forward, left } = bodyAxes(vehicle.angle)
+  const longitudinalSpeed = dot(vehicle.velocity, forward)
+  const lateralSpeed = dot(vehicle.velocity, left)
+  const previousLongitudinalAcceleration = state.longitudinalAcceleration
+  const absoluteSpeed = magnitude(vehicle.velocity)
+  state.longitudinalSpeed = longitudinalSpeed
+  state.lateralSpeed = lateralSpeed
+
+  const engineOutputMultipliers = vehicle.damage.engineDamaged
+    ? {
+        torque: DAMAGE_EFFECTS.engineTorqueMultiplier,
+        power: DAMAGE_EFFECTS.enginePowerMultiplier,
+      }
+    : { torque: 1, power: 1 }
+  const reverseInputRequested =
+    state.appliedBrake > POWERTRAIN.reverseInputThreshold &&
+    state.appliedThrottle < POWERTRAIN.reverseInputThreshold
+  const reversing =
+    reverseInputRequested &&
+    (state.gear === -1 ||
+      Math.abs(longitudinalSpeed) <
+        POWERTRAIN.reverseEngageSpeedMetersPerSecond)
+  const powertrain = reversing
+    ? updateReversePowertrain(state, engineOutputMultipliers)
+    : updateAutomaticPowertrain(
+        state,
+        engineOutputMultipliers,
+        deltaSeconds,
+      )
+
+  const aerodynamicPressure =
+    0.5 *
+    VEHICLE_DYNAMICS.airDensityKgPerCubicMeter *
+    absoluteSpeed *
+    absoluteSpeed
+  const aerodynamicDrag =
+    aerodynamicPressure *
+    VEHICLE_DYNAMICS.frontalAerodynamicAreaCoefficient *
+    (isTotalLoss ? VEHICLE_DYNAMICS.totalLossDragMultiplier : 1)
+  const totalDownforce =
+    aerodynamicPressure * VEHICLE_DYNAMICS.downforceAreaCoefficient
+  const brakeDemand = reversing
+    ? 0
+    : state.appliedBrake * POWERTRAIN.maximumBrakeForceNewtons
+  const rollingResistance =
+    VEHICLE_DYNAMICS.rollingResistanceCoefficient *
+    VEHICLE_DYNAMICS.massKg *
+    GRAVITY_METERS_PER_SECOND_SQUARED *
+    SURFACE_DYNAMICS[surfaceId].rollingResistanceMultiplier
+  const roughnessResistance =
+    SURFACE_DYNAMICS[surfaceId].roughnessDragNewtonSecondsPerMeter *
+    Math.abs(longitudinalSpeed)
+  const totalLossLongitudinalResistance = isTotalLoss
+    ? DAMAGE_EFFECTS.totalLossLinearDragNewtonSecondsPerMeter *
+      longitudinalSpeed
+    : 0
+  const totalLossLateralResistance = isTotalLoss
+    ? DAMAGE_EFFECTS.totalLossLinearDragNewtonSecondsPerMeter * lateralSpeed
+    : 0
+  const longitudinalResistance =
+    Math.abs(longitudinalSpeed) >
+    NUMERIC_SPEED_EPSILON_METERS_PER_SECOND
+      ? Math.sign(longitudinalSpeed) *
+        (rollingResistance + roughnessResistance)
+      : 0
+  const aerodynamicLongitudinalResistance =
+    absoluteSpeed > NUMERIC_SPEED_EPSILON_METERS_PER_SECOND
+      ? aerodynamicDrag * longitudinalSpeed / absoluteSpeed
+      : 0
+  const aerodynamicLateralResistance =
+    absoluteSpeed > NUMERIC_SPEED_EPSILON_METERS_PER_SECOND
+      ? aerodynamicDrag * lateralSpeed / absoluteSpeed
+      : 0
+
+  const weight =
+    VEHICLE_DYNAMICS.massKg * GRAVITY_METERS_PER_SECOND_SQUARED
+  const staticFrontLoad =
+    weight *
+    VEHICLE_DYNAMICS.centerOfMassToRearAxleMeters /
+    VEHICLE_DYNAMICS.wheelbaseMeters
+  const staticRearLoad = weight - staticFrontLoad
+  const longitudinalLoadTransfer =
+    VEHICLE_DYNAMICS.massKg *
+    previousLongitudinalAcceleration *
+    VEHICLE_DYNAMICS.centerOfMassHeightMeters /
+    VEHICLE_DYNAMICS.wheelbaseMeters
+  const frontNormalLoad = Math.max(
+    0,
+    staticFrontLoad -
+      longitudinalLoadTransfer +
+      totalDownforce * VEHICLE_DYNAMICS.aerodynamicBalanceFront,
+  )
+  const rearNormalLoad = Math.max(
+    0,
+    staticRearLoad +
+      longitudinalLoadTransfer +
+      totalDownforce * (1 - VEHICLE_DYNAMICS.aerodynamicBalanceFront),
+  )
+
+  const slipReferenceSpeed = Math.max(
+    Math.abs(longitudinalSpeed),
+    TIRE_MODEL.minimumSlipSpeedMetersPerSecond,
+  )
+  state.frontSlipAngle =
+    Math.atan2(
+      lateralSpeed +
+        VEHICLE_DYNAMICS.centerOfMassToFrontAxleMeters * state.yawRate,
+      slipReferenceSpeed,
+    ) -
+    state.steeringAngle
+  state.rearSlipAngle = Math.atan2(
+    lateralSpeed -
+      VEHICLE_DYNAMICS.centerOfMassToRearAxleMeters * state.yawRate,
+    slipReferenceSpeed,
+  )
+  const frontPeakForce = computePeakTireForce(
+    frontNormalLoad,
+    staticFrontLoad,
+    surfaceId,
+  )
+  const rearPeakForce = computePeakTireForce(
+    rearNormalLoad,
+    staticRearLoad,
+    surfaceId,
+  )
+  const frontLongitudinalSlip =
+    (state.frontWheelAngularSpeed * VEHICLE_DYNAMICS.wheelRadiusMeters -
+      longitudinalSpeed) /
+    slipReferenceSpeed
+  const rearLongitudinalSlip =
+    (state.rearWheelAngularSpeed * VEHICLE_DYNAMICS.wheelRadiusMeters -
+      longitudinalSpeed) /
+    slipReferenceSpeed
+  const frontPureLongitudinalForce = computeLongitudinalForceFromSlip(
+    frontLongitudinalSlip,
+    frontPeakForce,
+  )
+  const rearPureLongitudinalForce = computeLongitudinalForceFromSlip(
+    rearLongitudinalSlip,
+    rearPeakForce,
+  )
+  const frontTire = computeAxleTireForce({
+    normalLoadNewtons: frontNormalLoad,
+    referenceLoadNewtons: staticFrontLoad,
+    slipAngleRadians: state.frontSlipAngle,
+    longitudinalForceDemandNewtons: frontPureLongitudinalForce,
+    corneringStiffnessNewtonsPerRadian:
+      TIRE_MODEL.frontCorneringStiffnessNewtonsPerRadian,
+    surface: surfaceId,
+  })
+  const rearTire = computeAxleTireForce({
+    normalLoadNewtons: rearNormalLoad,
+    referenceLoadNewtons: staticRearLoad,
+    slipAngleRadians: state.rearSlipAngle,
+    longitudinalForceDemandNewtons: rearPureLongitudinalForce,
+    corneringStiffnessNewtonsPerRadian:
+      TIRE_MODEL.rearCorneringStiffnessNewtonsPerRadian,
+    surface: surfaceId,
+  })
+  state.frontGripUtilization = frontTire.utilization
+  state.rearGripUtilization = rearTire.utilization
+
+  const steeringCosine = Math.cos(state.steeringAngle)
+  const steeringSine = Math.sin(state.steeringAngle)
+  const frontLongitudinalBody =
+    frontTire.longitudinalNewtons * steeringCosine -
+    frontTire.lateralNewtons * steeringSine
+  const frontLateralBody =
+    frontTire.longitudinalNewtons * steeringSine +
+    frontTire.lateralNewtons * steeringCosine
+  const rearLongitudinalBody = rearTire.longitudinalNewtons
+  const rearLateralBody = rearTire.lateralNewtons
+  const totalLongitudinalForce =
+    frontLongitudinalBody +
+    rearLongitudinalBody -
+    longitudinalResistance -
+    aerodynamicLongitudinalResistance -
+    totalLossLongitudinalResistance
+  const totalLateralForce =
+    frontLateralBody +
+    rearLateralBody -
+    aerodynamicLateralResistance -
+    totalLossLateralResistance
+
+  state.longitudinalAcceleration =
+    totalLongitudinalForce / VEHICLE_DYNAMICS.massKg
+  state.lateralAcceleration =
+    totalLateralForce / VEHICLE_DYNAMICS.massKg
+  const worldAcceleration = vectorFromBody(
+    state.longitudinalAcceleration,
+    state.lateralAcceleration,
+    vehicle.angle,
+  )
+  vehicle.velocity.x += worldAcceleration.x * deltaSeconds
+  vehicle.velocity.y += worldAcceleration.y * deltaSeconds
+
+  const yawTorque =
+    VEHICLE_DYNAMICS.centerOfMassToFrontAxleMeters * frontLateralBody -
+    VEHICLE_DYNAMICS.centerOfMassToRearAxleMeters * rearLateralBody
+  state.yawRate +=
+    yawTorque / VEHICLE_DYNAMICS.yawInertiaKgMetersSquared * deltaSeconds
+  vehicle.yawRate = state.yawRate
+  vehicle.angle = normalizeSignedAngle(
+    vehicle.angle + state.yawRate * deltaSeconds,
+  )
   vehicle.position.x += vehicle.velocity.x * deltaSeconds
   vehicle.position.y += vehicle.velocity.y * deltaSeconds
   vehicle.surface = surfaceId
+
+  const frontBrakeTorque =
+    brakeDemand *
+    POWERTRAIN.frontBrakeBias *
+    VEHICLE_DYNAMICS.wheelRadiusMeters
+  const rearBrakeTorque =
+    brakeDemand *
+    (1 - POWERTRAIN.frontBrakeBias) *
+    VEHICLE_DYNAMICS.wheelRadiusMeters
+  const brakeSignFor = (wheelAngularSpeed: number) => {
+    const angularEpsilon =
+      NUMERIC_SPEED_EPSILON_METERS_PER_SECOND /
+      VEHICLE_DYNAMICS.wheelRadiusMeters
+    if (Math.abs(wheelAngularSpeed) > angularEpsilon) {
+      return Math.sign(wheelAngularSpeed)
+    }
+    if (
+      Math.abs(longitudinalSpeed) >
+      NUMERIC_SPEED_EPSILON_METERS_PER_SECOND
+    ) {
+      return Math.sign(longitudinalSpeed)
+    }
+    return 0
+  }
+  const previousFrontWheelAngularSpeed = state.frontWheelAngularSpeed
+  const previousRearWheelAngularSpeed = state.rearWheelAngularSpeed
+  const frontWheelTorque =
+    -frontTire.longitudinalNewtons * VEHICLE_DYNAMICS.wheelRadiusMeters -
+    brakeSignFor(previousFrontWheelAngularSpeed) * frontBrakeTorque
+  const rearWheelTorque =
+    powertrain.driveTorqueAtWheelsNewtonMeters -
+    rearTire.longitudinalNewtons * VEHICLE_DYNAMICS.wheelRadiusMeters -
+    brakeSignFor(previousRearWheelAngularSpeed) * rearBrakeTorque
+  state.frontWheelAngularSpeed +=
+    frontWheelTorque /
+    POWERTRAIN.frontAxleRotationalInertiaKgMetersSquared *
+    deltaSeconds
+  state.rearWheelAngularSpeed +=
+    rearWheelTorque /
+    POWERTRAIN.rearAxleRotationalInertiaKgMetersSquared *
+    deltaSeconds
+  if (
+    frontBrakeTorque > 0 &&
+    previousFrontWheelAngularSpeed * state.frontWheelAngularSpeed < 0
+  ) {
+    state.frontWheelAngularSpeed = 0
+  }
+  if (
+    rearBrakeTorque > 0 &&
+    powertrain.driveTorqueAtWheelsNewtonMeters === 0 &&
+    previousRearWheelAngularSpeed * state.rearWheelAngularSpeed < 0
+  ) {
+    state.rearWheelAngularSpeed = 0
+  }
 }
 
 function chooseSteeringPull(
   vehicle: VehicleState,
   impactSpeed: number,
 ): SteeringPull {
-  const idSignature = [...vehicle.id].reduce(
-    (signature, character) => signature * 31 + character.charCodeAt(0),
-    17,
-  )
+  let idSignature = 17
+  for (let index = 0; index < vehicle.id.length; index += 1) {
+    idSignature =
+      (Math.imul(idSignature, 31) + vehicle.id.charCodeAt(index)) | 0
+  }
+  const roundedDeltaV = Math.floor(impactSpeed * 10 + 0.5)
   return (
-    (idSignature + vehicle.damage.impactCount + Math.round(impactSpeed * 10)) %
+    (idSignature + vehicle.damage.impactCount + roundedDeltaV) %
       2 ===
     0
   )
@@ -204,40 +410,4 @@ export function recordImpactDamage(
     vehicle.damage.steeringPull = chooseSteeringPull(vehicle, impactSpeed)
   }
   updateDamageKind(vehicle)
-}
-
-export function getCollisionRadius() {
-  return PHYSICS_CONSTANTS.vehiclePerformance.collisionRadiusMeters
-}
-
-export function applyBarrierResponse(
-  vehicle: VehicleState,
-  pushNormal: { x: number; y: number },
-  penetrationMeters: number,
-) {
-  const collision = PHYSICS_CONSTANTS.collision
-  vehicle.position.x +=
-    pushNormal.x * penetrationMeters * collision.positionCorrectionPercent
-  vehicle.position.y +=
-    pushNormal.y * penetrationMeters * collision.positionCorrectionPercent
-
-  const incomingSpeed = -dot(vehicle.velocity, pushNormal)
-  if (incomingSpeed <= 0) return
-
-  const normalVelocity = scale(pushNormal, dot(vehicle.velocity, pushNormal))
-  const tangentialVelocity = {
-    x: vehicle.velocity.x - normalVelocity.x,
-    y: vehicle.velocity.y - normalVelocity.y,
-  }
-  const bouncedNormal = scale(
-    pushNormal,
-    incomingSpeed * collision.barrierRestitution,
-  )
-  vehicle.velocity = {
-    x:
-      tangentialVelocity.x * collision.tangentialFriction + bouncedNormal.x,
-    y:
-      tangentialVelocity.y * collision.tangentialFriction + bouncedNormal.y,
-  }
-  recordImpactDamage(vehicle, pushNormal, incomingSpeed)
 }

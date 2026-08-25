@@ -327,7 +327,9 @@ export function RacePage() {
         if (requestId !== trackRequestId.current) return
         if (
           definition.id !== selectedTrackId ||
-          definition.catalogVersion !== trackCatalog.catalogVersion
+          definition.catalogVersion !== trackCatalog.catalogVersion ||
+          definition.physicsContractVersion !==
+            trackCatalog.physicsContractVersion
         ) {
           throw new Error('Não foi possível confirmar os dados deste circuito.')
         }
@@ -432,6 +434,7 @@ export function RacePage() {
           {
             trackId: completedTrack.id,
             trackCatalogVersion: completedTrack.catalogVersion,
+            physicsContractVersion: completedTrack.physicsContractVersion,
             mode,
             results: raceResults.map((result) => ({
               userIdOrNull:

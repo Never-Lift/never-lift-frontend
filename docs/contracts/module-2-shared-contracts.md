@@ -2,9 +2,9 @@
 
 ## Objetivo
 
-Fechar antes da implementação os formatos que atravessam frontend e backend: catálogo de pistas, coordenadas métricas, versão de física e decisões do modo local. Esta rodada não implementa endpoints nem o `RaceEngine`.
+Fechar e versionar os formatos que atravessam frontend e backend: catálogo de pistas, coordenadas métricas, versão de física, geometria de colisão e decisões do modo local. Contratos publicados são históricos imutáveis; revisões incompatíveis entram em uma nova linha.
 
-## Estado executável atual — contrato físico 1.3.0
+## Estado executável atual — contrato histórico 1.3.0
 
 - Temporada de referência: calendário original de 24 etapas da Fórmula 1 de 2026, congelado para o catálogo `2026.5`.
 - O catálogo não muda automaticamente quando o calendário real é alterado durante a temporada.
@@ -17,6 +17,27 @@ Fechar antes da implementação os formatos que atravessam frontend e backend: c
 - Física usa subpasso canônico de `1/60 s`. O servidor do Módulo 3 roda a `30 Hz`, executando dois subpassos por tick.
 
 As issues frontend #90 e backend #72 publicaram esta revisão incompatível de forma sincronizada. `module-2-decisions.json`, `physics-constants.json`, seu schema e os cenários determinísticos usam `1.3.0`; `carModel`, `handlingMode`, `driftMode`, Supercarro e Drift não fazem parte do contrato. Recordes e fantasmas não segmentam resultados por modelo ou modo, e a progressão futura libera apenas pinturas, capacetes e acabamentos do F1.
+
+O `v1.3.0` também contém uma reserva histórica de nitro/Shift que nunca ganhou efeito no Módulo 2. Essa decisão foi revogada para o sucessor, mas os arquivos dentro de `contracts/module-2/v1/` não serão reescritos silenciosamente.
+
+## Sucessor aprovado — Parte 2d e contrato 2.0.0
+
+A Parte 2d substitui o integrador arcade por uma simulação acessível de F1 e remove boost/nitro integralmente antes do Módulo 3. A especificação normativa pré-implementação está em [`module-2-physics-v2-proposal.md`](module-2-physics-v2-proposal.md).
+
+Decisões fechadas:
+
+- corpo rígido 2D com modelo de bicicleta dinâmico, pneus não lineares e aderência combinada;
+- velocidade longitudinal/lateral, yaw, esterço físico, transferência de carga, drag e downforce;
+- tração traseira, oito marchas automáticas, sem controle de tração e sem ABS;
+- input somente por `throttle`, `brake` e `steer`, com rampas digitais determinísticas; `Shift` sem função;
+- veículo com colliders convexos compostos alinhados à silhueta, no lugar do raio circular;
+- barreiras com face canônica explícita usada igualmente por renderer, TypeScript e Java;
+- CCD, manifold, impulsos no ponto de contato, torque e solver iterativo determinístico;
+- dano cumulativo classificado por impulso/energia ou `delta-v`, não apenas pela velocidade absoluta;
+- `physicsContractVersion` persistida em salas, resultados, recordes e fantasmas;
+- nova linha `contracts/module-2/v2/`, schema de pista `2.0.0` e catálogo `2026.6`; o catálogo `2026.5` permanece válido somente para o runtime v1.
+
+O diretório v2 só se torna executável quando constantes fundamentadas, schemas, geometrias, motor TypeScript e cenários passarem juntos. Não publicar valores desconhecidos como `null` ou tuning arbitrário.
 
 ## Catálogo e pista
 
@@ -34,7 +55,7 @@ Cada definição contém:
 - preset e âncoras mínimas de cenário;
 - atribuição, descrição da transformação e referências ambientais consultadas por circuito.
 
-O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Cada ponto da centerline publica `halfWidthMeters` e `elevationLayer`: a largura pode variar com transições suaves, e a camada impede que a ponte e a passagem inferior de Suzuka misturem projeção, desenho ou colisões. O schema de pista `1.3.0` suaviza a fonte fechada, arredonda os vértices e reamostra a volta a cada aproximadamente 5 m; asfalto, entornos, barreiras, grades, física, câmera e minimapa derivam dessa mesma geometria. `trackLimits.segments` cobre a volta continuamente; cada lado possui `zones[]`, da borda da pista para fora, uma barreira de impacto entre `concrete-wall`, `guardrail`, `tecpro` e `tyre-barrier` e, quando aplicável, `fence: "debris-fence"` como camada externa adicional. A colisão acontece na barreira, depois da soma das larguras das zonas daquele lado; a grade não desloca o limite físico. Uma lista vazia representa barreira praticamente junto ao asfalto. `curbs[]` descreve cada zebra por intervalo métrico, lado, largura, comprimento de faixa e paleta; a geração usa a curvatura da centerline e a contagem oficial de curvas, com perfil de cores por circuito. Brita é distinta visualmente, mas usa a tração de grama do contrato físico `1.3.0`; isso evita reabrir a física já validada apenas para esta correção visual/geométrica.
+O ponto está dentro da pista quando sua menor distância ao centro é menor ou igual à meia largura interpolada. Cada ponto da centerline publica `halfWidthMeters` e `elevationLayer`: a largura pode variar com transições suaves, e a camada impede que a ponte e a passagem inferior de Suzuka misturem projeção, desenho ou colisões. O schema de pista `1.3.0` suaviza a fonte fechada, arredonda os vértices e reamostra a volta a cada aproximadamente 5 m; asfalto, entornos, barreiras, grades, física, câmera e minimapa derivam dessa mesma geometria. `trackLimits.segments` cobre a volta continuamente; cada lado possui `zones[]`, da borda da pista para fora, uma barreira de impacto entre `concrete-wall`, `guardrail`, `tecpro` e `tyre-barrier` e, quando aplicável, `fence: "debris-fence"` como camada externa adicional. A colisão v1 acontece na barreira implícita, depois da soma das larguras das zonas daquele lado; a grade não desloca o limite físico. Uma lista vazia representa barreira praticamente junto ao asfalto. `curbs[]` descreve cada zebra por intervalo métrico, lado, largura, comprimento de faixa e paleta; a geração usa a curvatura da centerline e a contagem oficial de curvas, com perfil de cores por circuito. No contrato `1.3.0`, brita ainda reutiliza a tração de grama. O v2 passa a tratá-la como superfície própria e publica a face tocável de cada barreira para que desenho e colisão sejam idênticos.
 
 ### Auditoria ambiental, geométrica e de cenário do catálogo 2026.5
 
@@ -79,7 +100,7 @@ Fontes de calendário: anúncio oficial conjunto FIA/Fórmula 1 e calendário of
 
 ## Física
 
-`physics-constants.json` é a folha inicial compartilhada. Os valores estão marcados como `initial`: são uma calibração coerente em unidades SI, não promessa de reprodução de um simulador real.
+`contracts/module-2/v1/physics-constants.json` é a folha inicial atualmente consumida. Os valores estão marcados como `initial`: são uma calibração arcade histórica em unidades SI, não promessa de reprodução de um simulador real.
 
 O frontend M2 deve:
 
@@ -91,9 +112,11 @@ O backend M3 deve reproduzir os mesmos cenários dentro das tolerâncias declara
 
 O contrato físico `1.3.0` define um único F1, uma única condução e fixa limiares de impacto, vida e efeitos moderados de dano. Impacto fraco danifica direção, médio danifica motor, alto combina ambos e crítico causa perda total; a vida cumulativa também permite que colisões menores repetidas terminem a corrida. Motor danificado reduz moderadamente aceleração e velocidade máxima, direção danificada aplica um leve desvio persistente para um lado sem retirar autoridade de esterço, e perda total ignora inputs e aumenta o arrasto até a parada. O frontend aplica essas regras na corrida local; o backend deve consumir os mesmos valores ao implementar a simulação autoritativa.
 
+O contrato `2.0.0` não reaproveita aceleração/frenagem constantes, hard cap de velocidade, correção linear de aderência, `targetYawRate` nem `collisionRadiusMeters`. Ele deve publicar equações, ordem de integração, propriedades de massa/geometria, controles, powertrain, freios, pneus, aerodinâmica, superfícies, solver e tolerâncias. Cenários cobrem aceleração, coast-down, frenagem/travamento, curva constante, subesterço/sobresterço, power-oversteer, transições de superfície, impactos excêntricos, folga em muros e CCD. O TypeScript congela os estados esperados depois da calibração; o Java os reproduz dentro das tolerâncias.
+
 ## Resultado local e segurança
 
-O backend obtém o usuário do JWT e nunca aceita um `userId` arbitrário como identidade. Guest e bot não criam resultado associado a uma conta. O Módulo 2 persiste dados consultáveis; a API pública de histórico continua pertencendo ao Módulo 8.
+O backend obtém o usuário do JWT e nunca aceita um `userId` arbitrário como identidade. Guest e bot não criam resultado associado a uma conta. O Módulo 2 persiste dados consultáveis; a API pública de histórico continua pertencendo ao Módulo 8. Ao ativar a Parte 2d, cada resultado passa a carregar `physicsContractVersion`, impedindo comparação direta entre tempos de motores incompatíveis.
 
 ## Fluxo Git
 

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveVehicleCollision } from '@/race/collision'
-import { PHYSICS_CONSTANTS, PHYSICS_STEP_SECONDS } from '@/race/constants'
+import {
+  resolveVehicleAgainstStaticColliders,
+  resolveVehicleCollision,
+} from '@/race/collision'
+import { PHYSICS_STEP_SECONDS, VEHICLE_DYNAMICS } from '@/race/constants'
 import { clamp, signedAngleDelta } from '@/race/math'
 import { RaceEngine } from '@/race/RaceEngine'
 import { TrackGeometry } from '@/race/TrackGeometry'
@@ -12,7 +15,7 @@ import type {
   VehicleState,
 } from '@/race/types'
 import {
-  applyBarrierResponse,
+  createInitialVehiclePhysicsState,
   integrateVehicle,
   recordImpactDamage,
 } from '@/race/vehicle-physics'
@@ -51,6 +54,7 @@ function vehicle(
     angle: options.angle ?? 0,
     previousAngle: options.angle ?? 0,
     yawRate: 0,
+    physicsState: createInitialVehiclePhysicsState(),
     surface: 'asphalt',
     trackLayer: 0,
     trackDistanceMeters: 0,
@@ -85,7 +89,6 @@ function runAtFrameRate(framesPerSecond: number) {
     throttle: 0.82,
     brake: 0,
     steer: 0.18,
-    nitro: false,
   }
   engine.setInput('player-1', input)
   const seconds = 6
@@ -123,7 +126,6 @@ function automaticInput(state: VehicleState): DriverInput {
     throttle: brake ? 0.15 : 0.9,
     brake: brake ? 0.6 : 0,
     steer: clamp(headingError / 0.58, -1, 1),
-    nitro: false,
   }
 }
 
@@ -144,7 +146,6 @@ function trackInput(state: VehicleState, geometry: TrackGeometry): DriverInput {
     throttle: shouldBrake ? 0.1 : 1,
     brake: shouldBrake ? 0.5 : 0,
     steer: clamp(headingError / 0.55, -1, 1),
-    nitro: false,
   }
 }
 
@@ -263,13 +264,6 @@ describe('RaceEngine fixed-step simulation', () => {
     expect(geometry.getEnvironmentAt({ x: 0, y: 2 }, 0).material).toBe(
       'grass',
     )
-    expect(
-      geometry.getBarrierContacts({ x: 0, y: 2 }, 1.1),
-    ).toHaveLength(0)
-    expect(
-      geometry.getBarrierContacts({ x: 0, y: 2 }, 1.1, 0),
-    ).toHaveLength(1)
-
     const engine = new RaceEngine({
       track: crossingTrack,
       mode: 'local',
@@ -326,7 +320,6 @@ describe('RaceEngine fixed-step simulation', () => {
       throttle: 1,
       brake: 0,
       steer: 0,
-      nitro: false,
     })
     engine.advanceFrame(PHYSICS_STEP_SECONDS * 1.5)
 
@@ -425,7 +418,6 @@ describe('canonical vehicle physics', () => {
     throttle: 1,
     brake: 0,
     steer: 0,
-    nitro: false,
   }
 
   it('accelerates less and loses more speed on grass than on asphalt', () => {
@@ -446,19 +438,11 @@ describe('canonical vehicle physics', () => {
     expect(grass.surface).toBe('grass')
   })
 
-  it('preserves the approved fixed handling values from the former Normal mode', () => {
-    expect(PHYSICS_CONSTANTS.handling).toEqual({
-      lateralGripMultiplier: 1,
-      longitudinalGripMultiplier: 1,
-      steeringMultiplier: 1,
-      yawDampingPerSecond: 5.5,
-    })
-
+  it('uses one deterministic v2 handling model for every car', () => {
     const input: DriverInput = {
       throttle: 0.6,
       brake: 0,
       steer: 0,
-      nitro: false,
     }
     const first = integrateFor(
       vehicle('first', {
@@ -485,36 +469,48 @@ describe('canonical vehicle physics', () => {
   })
 })
 
-describe('collisions and v1.3 cumulative mechanical damage', () => {
+describe('collisions and v2 cumulative mechanical damage', () => {
   it('separates colliding cars, applies impulse and classifies the impact', () => {
-    const first = vehicle('first', { x: -0.5, velocityX: 18 })
-    const second = vehicle('second', { x: 0.5, velocityX: -18 })
+    const first = vehicle('first', { x: -2.75, velocityX: 18 })
+    const second = vehicle('second', {
+      x: 2.75,
+      velocityX: -18,
+      angle: Math.PI,
+    })
 
     expect(resolveVehicleCollision(first, second)).toBe(true)
     expect(first.velocity.x).toBeLessThan(18)
     expect(second.velocity.x).toBeGreaterThan(-18)
     expect(first.damage.kind).toBe('total-loss')
     expect(second.damage.kind).toBe('total-loss')
-    expect(second.position.x - first.position.x).toBeGreaterThan(1)
+    expect(second.position.x - first.position.x).toBeGreaterThan(5.5)
   })
 
-  it('reduces acceleration and maximum speed after engine damage', () => {
+  it('modestly reduces rolling acceleration after engine damage', () => {
     const accelerationInput: DriverInput = {
       throttle: 1,
       brake: 0,
       steer: 0,
-      nitro: false,
     }
-    const healthy = vehicle('healthy-engine')
-    const damaged = vehicle('damaged-engine')
-    recordImpactDamage(damaged, { x: -1, y: 0 }, 10)
+    const healthy = vehicle('healthy-engine', { velocityX: 60 })
+    const damaged = vehicle('damaged-engine', { velocityX: 60 })
+    for (const state of [healthy, damaged]) {
+      state.physicsState.longitudinalSpeed = 60
+      state.physicsState.frontWheelAngularSpeed =
+        60 / VEHICLE_DYNAMICS.wheelRadiusMeters
+      state.physicsState.rearWheelAngularSpeed =
+        60 / VEHICLE_DYNAMICS.wheelRadiusMeters
+      state.physicsState.gear = 5
+      state.physicsState.engineRpm = 12_000
+    }
+    recordImpactDamage(damaged, { x: -1, y: 0 }, 8)
 
     expect(damaged.damage.kind).toBe('engine')
-    integrateFor(healthy, accelerationInput, 'asphalt', 300)
-    integrateFor(damaged, accelerationInput, 'asphalt', 300)
+    integrateFor(healthy, accelerationInput, 'asphalt', 240)
+    integrateFor(damaged, accelerationInput, 'asphalt', 240)
 
     expect(damaged.velocity.x).toBeLessThan(healthy.velocity.x)
-    expect(damaged.velocity.x).toBeGreaterThan(healthy.velocity.x * 0.7)
+    expect(damaged.velocity.x).toBeGreaterThan(healthy.velocity.x * 0.9)
   })
 
   it('applies a persistent slight steering pull without removing steering authority', () => {
@@ -522,11 +518,10 @@ describe('collisions and v1.3 cumulative mechanical damage', () => {
       throttle: 0.4,
       brake: 0,
       steer: 0,
-      nitro: false,
     }
     const healthy = vehicle('healthy-steering', { velocityX: 24 })
     const damaged = vehicle('damaged-steering', { velocityX: 24 })
-    recordImpactDamage(damaged, { x: 0, y: 1 }, 7)
+    recordImpactDamage(damaged, { x: 0, y: 1 }, 4)
 
     expect(damaged.damage.kind).toBe('steering')
     expect(Math.abs(damaged.damage.steeringPull)).toBe(1)
@@ -538,7 +533,7 @@ describe('collisions and v1.3 cumulative mechanical damage', () => {
 
     const healthyWithSteering = vehicle('healthy-full-steering', { velocityX: 24 })
     const damagedWithSteering = vehicle('damaged-full-steering', { velocityX: 24 })
-    recordImpactDamage(damagedWithSteering, { x: 0, y: 1 }, 7)
+    recordImpactDamage(damagedWithSteering, { x: 0, y: 1 }, 4)
     const fullSteeringInput = { ...neutralSteeringInput, steer: 1 }
     integrateFor(healthyWithSteering, fullSteeringInput, 'asphalt', 45)
     integrateFor(damagedWithSteering, fullSteeringInput, 'asphalt', 45)
@@ -550,9 +545,9 @@ describe('collisions and v1.3 cumulative mechanical damage', () => {
 
   it('keeps prior damage and combines engine and steering failures', () => {
     const state = vehicle('combined')
-    recordImpactDamage(state, { x: 0, y: 1 }, 7)
+    recordImpactDamage(state, { x: 0, y: 1 }, 4)
     const healthAfterWeakImpact = state.damage.health
-    recordImpactDamage(state, { x: -1, y: 0 }, 10)
+    recordImpactDamage(state, { x: -1, y: 0 }, 8)
 
     expect(state.damage.kind).toBe('engine-and-steering')
     expect(state.damage.engineDamaged).toBe(true)
@@ -570,15 +565,15 @@ describe('collisions and v1.3 cumulative mechanical damage', () => {
 
   it('turns repeated weak impacts into cumulative total loss', () => {
     const state = vehicle('repeated-weak')
-    for (let impact = 0; impact < 7; impact += 1) {
-      recordImpactDamage(state, { x: 0, y: 1 }, 7)
+    for (let impact = 0; impact < 9; impact += 1) {
+      recordImpactDamage(state, { x: 0, y: 1 }, 4)
     }
 
     expect(state.damage.kind).toBe('total-loss')
     expect(state.damage.health).toBe(0)
   })
 
-  it('disables driver input and rapidly coasts after total loss', () => {
+  it('disables driver input and coasts under the contracted total-loss drag', () => {
     const state = vehicle('totaled', { velocityX: 18 })
     recordImpactDamage(state, { x: -1, y: 0 }, 30)
 
@@ -589,29 +584,78 @@ describe('collisions and v1.3 cumulative mechanical damage', () => {
         throttle: 1,
         brake: 0,
         steer: 1,
-        nitro: false,
       },
       'asphalt',
       120,
     )
 
-    expect(Math.hypot(state.velocity.x, state.velocity.y)).toBeLessThan(2.5)
+    expect(Math.hypot(state.velocity.x, state.velocity.y)).toBeLessThan(6)
     expect(state.angle).toBeCloseTo(0, 6)
   })
 
-  it('pushes a car out of the outer barrier and reflects its velocity', () => {
+  it('stops a swept nose at the canonical wall face and reflects it', () => {
     const state = vehicle('barrier', {
-      x: SHORT_TRACK.bounds.maxX - 6,
+      x: 0.25,
       velocityX: 24,
     })
-    const [contact] = TRACK_GEOMETRY.getBarrierContacts(state.position, 1.24)
-    expect(contact).toBeDefined()
-    if (!contact) return
+    state.previousPosition = { x: 0, y: 0 }
+    const wall = {
+      id: 'canonical-concrete-wall',
+      collisionMaterial: 'concrete-wall' as const,
+      vertices: [
+        { x: 3, y: -10 },
+        { x: 3.4, y: -10 },
+        { x: 3.4, y: 10 },
+        { x: 3, y: 10 },
+      ],
+    }
+    expect(
+      resolveVehicleAgainstStaticColliders(
+        state,
+        PHYSICS_STEP_SECONDS,
+        () => [wall],
+      ),
+    ).toBe(true)
 
-    applyBarrierResponse(state, contact.pushNormal, contact.penetrationMeters)
-
-    expect(state.position.x).toBeLessThan(SHORT_TRACK.bounds.maxX - 6)
+    expect(state.position.x).toBeLessThanOrEqual(0.22)
     expect(state.velocity.x).toBeLessThanOrEqual(0)
     expect(state.damage.kind).not.toBe('none')
+  })
+
+  it('uses the published response for each canonical barrier material', () => {
+    const reboundSpeed = (
+      material: 'concrete-wall' | 'guardrail' | 'tecpro' | 'tyre-barrier',
+    ) => {
+      const state = vehicle(`barrier-${material}`, {
+        x: 0.25,
+        velocityX: 24,
+      })
+      state.previousPosition = { x: 0, y: 0 }
+      resolveVehicleAgainstStaticColliders(
+        state,
+        PHYSICS_STEP_SECONDS,
+        () => [
+          {
+            id: material,
+            collisionMaterial: material,
+            vertices: [
+              { x: 3, y: -10 },
+              { x: 3.4, y: -10 },
+              { x: 3.4, y: 10 },
+              { x: 3, y: 10 },
+            ],
+          },
+        ],
+      )
+      return Math.abs(Math.min(0, state.velocity.x))
+    }
+
+    const tecpro = reboundSpeed('tecpro')
+    const concrete = reboundSpeed('concrete-wall')
+    const guardrail = reboundSpeed('guardrail')
+    const tyreBarrier = reboundSpeed('tyre-barrier')
+    expect(tecpro).toBeLessThan(concrete)
+    expect(concrete).toBeLessThan(guardrail)
+    expect(guardrail).toBeLessThan(tyreBarrier)
   })
 })

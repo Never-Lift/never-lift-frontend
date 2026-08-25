@@ -1,0 +1,190 @@
+{
+  "$schema": "./physics-constants.schema.json",
+  "version": "2.0.0",
+  "calibrationStatus": "initial",
+  "units": {
+    "distance": "meter",
+    "time": "second",
+    "angle": "radian",
+    "mass": "kilogram",
+    "force": "newton",
+    "power": "watt"
+  },
+  "simulation": {
+    "physicsStepSeconds": 0.008333333333333333,
+    "serverTickSeconds": 0.03333333333333333,
+    "serverPhysicsSubstepsPerTick": 4,
+    "maxFrameCatchUpSeconds": 0.25,
+    "maxSubstepsPerFrame": 30,
+    "numericSpeedEpsilonMetersPerSecond": 0.000001
+  },
+  "environment": {
+    "gravityMetersPerSecondSquared": 9.80665,
+    "airDensityKgPerCubicMeter": 1.225
+  },
+  "vehicle": {
+    "massKg": 770,
+    "lengthMeters": 5.6,
+    "widthMeters": 2,
+    "wheelbaseMeters": 3.248,
+    "frontAxleDistanceFromComMeters": 1.512,
+    "rearAxleDistanceFromComMeters": 1.736,
+    "centerOfMassHeightMeters": 0.3,
+    "yawInertiaKgM2": 1450,
+    "wheelRadiusMeters": 0.36,
+    "dragAreaM2": 1.18,
+    "liftAreaM2": 4.8,
+    "aeroBalanceFront": 0.44,
+    "rollingResistanceCoefficient": 0.015,
+    "maxSteeringAngleRadians": 0.55
+  },
+  "controls": {
+    "throttleRisePerSecond": 2.4,
+    "throttleFallPerSecond": 5,
+    "brakeRisePerSecond": 12,
+    "brakeFallPerSecond": 6,
+    "steeringActuationRadiansPerSecond": 3,
+    "steeringReturnRadiansPerSecond": 4.5
+  },
+  "powertrain": {
+    "idleRpm": 5000,
+    "downshiftRpm": 8500,
+    "upshiftRpm": 14500,
+    "automaticUpshiftWheelSlipAllowance": 0.08,
+    "redlineRpm": 15000,
+    "maxTorqueNm": 620,
+    "maxPowerWatts": 735000,
+    "finalDriveRatio": 3.1,
+    "gearRatios": [6.25, 4.69, 3.75, 3.13, 2.68, 2.35, 2.09, 1.88],
+    "reverseGearRatio": 3,
+    "reverseEngageSpeedMetersPerSecond": 0.75,
+    "reverseInputThreshold": 0.05,
+    "drivetrainEfficiency": 0.92,
+    "shiftDurationSeconds": 0.07,
+    "maximumBrakeForceNewtons": 20000,
+    "frontBrakeBias": 0.6,
+    "frontWheelAssemblyMassKg": 20,
+    "rearWheelAssemblyMassKg": 22,
+    "wheelAssemblyInertiaFactor": 1,
+    "rearDrivelineRotationalInertiaKgM2": 0.1,
+    "frontAxleRotationalInertiaKgM2": 5.184,
+    "rearAxleRotationalInertiaKgM2": 5.8024
+  },
+  "tires": {
+    "referenceFrictionCoefficient": 1.72,
+    "loadSensitivityExponent": 0.9,
+    "frontCorneringStiffnessNPerRadian": 115000,
+    "rearCorneringStiffnessNPerRadian": 125000,
+    "longitudinalStiffnessNPerSlip": 135000,
+    "minimumSlipSpeedMetersPerSecond": 2
+  },
+  "surfaces": {
+    "asphalt": {
+      "gripMultiplier": 1,
+      "corneringMultiplier": 1,
+      "rollingResistanceMultiplier": 1,
+      "roughnessDragNewtonSecondsPerMeter": 0
+    },
+    "curb": {
+      "gripMultiplier": 0.92,
+      "corneringMultiplier": 0.88,
+      "rollingResistanceMultiplier": 1.25,
+      "roughnessDragNewtonSecondsPerMeter": 8
+    },
+    "grass": {
+      "gripMultiplier": 0.42,
+      "corneringMultiplier": 0.38,
+      "rollingResistanceMultiplier": 4.5,
+      "roughnessDragNewtonSecondsPerMeter": 65
+    },
+    "gravel": {
+      "gripMultiplier": 0.58,
+      "corneringMultiplier": 0.48,
+      "rollingResistanceMultiplier": 8,
+      "roughnessDragNewtonSecondsPerMeter": 120
+    },
+    "pit-lane": {
+      "gripMultiplier": 0.96,
+      "corneringMultiplier": 0.96,
+      "rollingResistanceMultiplier": 1.05,
+      "roughnessDragNewtonSecondsPerMeter": 0
+    }
+  },
+  "collision": {
+    "solverIterations": 8,
+    "ccdMinimumSpeedMetersPerSecond": 12,
+    "maximumCcdEventsPerStep": 4,
+    "geometryEpsilon": 0.00000001,
+    "contactMergeDistanceMeters": 0.0001,
+    "manifoldNormalMergeCosine": 0.985,
+    "carRestitution": 0.12,
+    "carTangentialFriction": 0.65,
+    "barrierMaterials": {
+      "concrete-wall": {
+        "restitution": 0.08,
+        "tangentialFriction": 0.65
+      },
+      "guardrail": {
+        "restitution": 0.12,
+        "tangentialFriction": 0.55
+      },
+      "tecpro": {
+        "restitution": 0.04,
+        "tangentialFriction": 0.75
+      },
+      "tyre-barrier": {
+        "restitution": 0.18,
+        "tangentialFriction": 0.82
+      }
+    },
+    "positionCorrectionPercent": 0.72,
+    "penetrationSlopMeters": 0.005,
+    "maximumContactPoints": 4
+  },
+  "damage": {
+    "minimumDeltaVMetersPerSecond": 3,
+    "mediumDeltaVMetersPerSecond": 7,
+    "combinedDeltaVMetersPerSecond": 11,
+    "totalLossDeltaVMetersPerSecond": 16,
+    "maximumHealth": 100,
+    "healthDamagePerDeltaV": 3,
+    "engineTorqueMultiplier": 0.86,
+    "enginePowerMultiplier": 0.9,
+    "steeringPullStrength": 0.08,
+    "totalLossDragMultiplier": 3,
+    "totalLossLinearDragNewtonSecondsPerMeter": 900
+  },
+  "race": {
+    "jumpStartThrottleThreshold": 0.05,
+    "jumpStartLockSeconds": 5,
+    "gridGapMeters": 8,
+    "checkpointGateMarginMeters": 2,
+    "pitSpeedLimitMetersPerSecond": 22.2222222222
+  },
+  "bots": {
+    "easy": {
+      "paceMultiplier": 0.76,
+      "brakingSafetyMultiplier": 1.4,
+      "steeringNoise": 0.06,
+      "reactionDelaySeconds": 0.3,
+      "recoveryMultiplier": 0.7,
+      "consistency": 0.72
+    },
+    "normal": {
+      "paceMultiplier": 0.87,
+      "brakingSafetyMultiplier": 1.2,
+      "steeringNoise": 0.035,
+      "reactionDelaySeconds": 0.18,
+      "recoveryMultiplier": 0.85,
+      "consistency": 0.84
+    },
+    "hard": {
+      "paceMultiplier": 0.96,
+      "brakingSafetyMultiplier": 1.05,
+      "steeringNoise": 0.012,
+      "reactionDelaySeconds": 0.08,
+      "recoveryMultiplier": 1,
+      "consistency": 0.95
+    }
+  }
+}

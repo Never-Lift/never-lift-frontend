@@ -166,7 +166,7 @@ function createEngine(track: TrackDefinition) {
 
 function createStraightTransitionTrack() {
   const track = structuredClone(LONG_TRACK)
-  track.lengthMeters = 30
+  track.lengthMeters = 20
   track.centerline = [
     {
       x: 0,
@@ -209,7 +209,7 @@ function createStraightTransitionTrack() {
     {
       index: 1,
       fromDistanceMeters: 10,
-      toDistanceMeters: 30,
+      toDistanceMeters: 20,
       left: {
         zones: [{ surface: 'grass', widthMeters: 8 }],
         barrier: 'guardrail',
@@ -222,6 +222,61 @@ function createStraightTransitionTrack() {
       },
     },
   ]
+  track.barrierGeometry.segments = track.trackLimits.segments.flatMap(
+    (segment) =>
+      (['left', 'right'] as const).map((side, sideIndex) => {
+        const direction = side === 'left' ? 1 : -1
+        const fromPoint = track.centerline.find(
+          (point) => point.distanceMeters === segment.fromDistanceMeters,
+        )!
+        const toPoint = track.centerline.find(
+          (point) => point.distanceMeters === segment.toDistanceMeters,
+        )!
+        const fromEnvironmentWidth =
+          segment[side].zones.reduce(
+            (sum, zone) => sum + zone.widthMeters,
+            0,
+          )
+        const nextSegment = track.trackLimits.segments.find(
+          (candidate) =>
+            candidate.fromDistanceMeters === segment.toDistanceMeters,
+        )
+        const toEnvironmentWidth = (
+          nextSegment?.[side] ?? segment[side]
+        ).zones.reduce((sum, zone) => sum + zone.widthMeters, 0)
+        return {
+          index: segment.index * 2 + sideIndex,
+          trackLimitSegmentIndex: segment.index,
+          side,
+          fromDistanceMeters: segment.fromDistanceMeters,
+          toDistanceMeters: segment.toDistanceMeters,
+          material: segment[side].barrier,
+          thicknessMeters: 0.32,
+          collisionLayer: 'track-barrier' as const,
+          chunkIndexes: [0],
+          path: [
+            {
+              x: fromPoint.x,
+              y:
+                fromPoint.y +
+                direction *
+                  (fromPoint.halfWidthMeters + fromEnvironmentWidth),
+              distanceMeters: fromPoint.distanceMeters,
+              elevationLayer: fromPoint.elevationLayer,
+            },
+            {
+              x: toPoint.x,
+              y:
+                toPoint.y +
+                direction *
+                  (toPoint.halfWidthMeters + toEnvironmentWidth),
+              distanceMeters: toPoint.distanceMeters,
+              elevationLayer: toPoint.elevationLayer,
+            },
+          ],
+        }
+      }),
+  )
   return track
 }
 
@@ -377,6 +432,13 @@ describe('RaceRenderer audited surfaces', () => {
         ],
         barrier: 'tecpro',
       }
+    }
+    for (const barrier of track.barrierGeometry.segments) {
+      const environment =
+        track.trackLimits.segments[barrier.trackLimitSegmentIndex]?.[
+          barrier.side
+        ]
+      if (environment) barrier.material = environment.barrier
     }
 
     const { context, operations } = createRecordingContext()

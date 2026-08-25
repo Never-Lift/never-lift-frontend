@@ -4,7 +4,7 @@ export type Vector2 = {
   x: number
   y: number
 }
-export type SurfaceId = 'asphalt' | 'grass' | 'pit-lane'
+export type SurfaceId = 'asphalt' | 'curb' | 'grass' | 'gravel' | 'pit-lane'
 export type RaceMode = 'solo' | 'local'
 export type BotDifficulty = 'easy' | 'normal' | 'hard'
 export type DamageKind =
@@ -20,7 +20,30 @@ export type DriverInput = {
   throttle: number
   brake: number
   steer: number
-  nitro: boolean
+}
+
+/**
+ * Canonical state that must be reconciled together with position/velocity in
+ * online races. Values are advanced only by the fixed physics tick.
+ */
+export type VehiclePhysicsState = {
+  yawRate: number
+  steeringAngle: number
+  appliedThrottle: number
+  appliedBrake: number
+  frontWheelAngularSpeed: number
+  rearWheelAngularSpeed: number
+  gear: number
+  engineRpm: number
+  gearShiftTimeRemaining: number
+  longitudinalSpeed: number
+  lateralSpeed: number
+  longitudinalAcceleration: number
+  lateralAcceleration: number
+  frontSlipAngle: number
+  rearSlipAngle: number
+  frontGripUtilization: number
+  rearGripUtilization: number
 }
 
 export type VehicleSetup = {
@@ -47,7 +70,9 @@ export type VehicleState = VehicleSetup & {
   velocity: Vector2
   angle: number
   previousAngle: number
+  /** @deprecated Read physicsState.yawRate in new code. */
   yawRate: number
+  physicsState: VehiclePhysicsState
   surface: SurfaceId
   trackLayer: number
   trackDistanceMeters: number

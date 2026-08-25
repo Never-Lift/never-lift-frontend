@@ -10,8 +10,6 @@ const CONTROL_KEYS = new Set([
   'ArrowDown',
   'ArrowLeft',
   'ArrowRight',
-  'ShiftLeft',
-  'ShiftRight',
 ])
 
 export class KeyboardControls {
@@ -66,9 +64,6 @@ export class KeyboardControls {
         -1,
         1,
       ),
-      nitro:
-        this.isPressed('ShiftLeft') ||
-        (includeArrows && this.isPressed('ShiftRight')),
     }
   }
 
@@ -82,7 +77,6 @@ export class KeyboardControls {
         -1,
         1,
       ),
-      nitro: this.isPressed('ShiftRight'),
     }
   }
 
