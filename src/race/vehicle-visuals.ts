@@ -52,6 +52,7 @@ type FormulaSurface = {
   fill: string
   stroke?: string
   lineWidth?: number
+  visibility?: 'all' | 'preview'
 }
 
 export type FormulaWheelSpec = {
@@ -72,16 +73,17 @@ export type VehicleProjection = {
 }
 
 const FULL_CIRCLE = Math.PI * 2
-const VIEW_STEP_RADIANS = FULL_CIRCLE / 32
-export const VEHICLE_DIRECTION_COUNT = 32
+const SURFACE_ORDER_BUCKET_COUNT = 96
 
 const TIRE_COLOR = '#05070b'
 const TIRE_TOP_COLOR = '#111722'
 const CARBON_COLOR = '#111923'
 const CARBON_LIGHT_COLOR = '#263341'
+const CARBON_HIGHLIGHT_COLOR = '#3a4857'
 const COCKPIT_COLOR = '#07101b'
-const HALO_COLOR = '#9aa8b8'
 const HELMET_VISOR_COLOR = '#a9e7ff'
+const TIRE_STRIPE_COLOR = '#d8bd32'
+const REAR_LIGHT_COLOR = '#ff4055'
 
 const FORMULA_WHEEL_SPECS: FormulaWheelSpec[] = [
   {
@@ -112,53 +114,67 @@ export function getFormulaWheelSpecs() {
 
 const FORMULA_SECTIONS: FormulaSection[] = [
   {
-    longitudinal: 0.49,
-    halfWidth: 0.035,
-    topHalfWidth: 0.02,
-    baseHeight: 0.08,
-    topHeight: 0.15,
-  },
-  {
-    longitudinal: 0.33,
-    halfWidth: 0.085,
-    topHalfWidth: 0.055,
-    baseHeight: 0.08,
-    topHeight: 0.24,
-  },
-  {
-    longitudinal: 0.13,
-    halfWidth: 0.16,
-    topHalfWidth: 0.1,
+    longitudinal: 0.485,
+    halfWidth: 0.026,
+    topHalfWidth: 0.018,
     baseHeight: 0.075,
+    topHeight: 0.13,
+  },
+  {
+    longitudinal: 0.39,
+    halfWidth: 0.052,
+    topHalfWidth: 0.038,
+    baseHeight: 0.075,
+    topHeight: 0.18,
+  },
+  {
+    longitudinal: 0.25,
+    halfWidth: 0.078,
+    topHalfWidth: 0.058,
+    baseHeight: 0.075,
+    topHeight: 0.25,
+  },
+  {
+    longitudinal: 0.09,
+    halfWidth: 0.145,
+    topHalfWidth: 0.09,
+    baseHeight: 0.07,
     topHeight: 0.34,
   },
   {
-    longitudinal: -0.03,
-    halfWidth: 0.25,
-    topHalfWidth: 0.14,
-    baseHeight: 0.07,
-    topHeight: 0.44,
-  },
-  {
-    longitudinal: -0.2,
-    halfWidth: 0.34,
-    topHalfWidth: 0.19,
+    longitudinal: -0.02,
+    halfWidth: 0.255,
+    topHalfWidth: 0.135,
     baseHeight: 0.065,
-    topHeight: 0.4,
+    topHeight: 0.43,
   },
   {
-    longitudinal: -0.35,
-    halfWidth: 0.23,
-    topHalfWidth: 0.14,
+    longitudinal: -0.14,
+    halfWidth: 0.335,
+    topHalfWidth: 0.18,
+    baseHeight: 0.06,
+    topHeight: 0.42,
+  },
+  {
+    longitudinal: -0.26,
+    halfWidth: 0.3,
+    topHalfWidth: 0.16,
+    baseHeight: 0.065,
+    topHeight: 0.39,
+  },
+  {
+    longitudinal: -0.37,
+    halfWidth: 0.195,
+    topHalfWidth: 0.115,
     baseHeight: 0.075,
-    topHeight: 0.33,
+    topHeight: 0.32,
   },
   {
-    longitudinal: -0.46,
-    halfWidth: 0.105,
-    topHalfWidth: 0.07,
+    longitudinal: -0.465,
+    halfWidth: 0.08,
+    topHalfWidth: 0.052,
     baseHeight: 0.09,
-    topHeight: 0.25,
+    topHeight: 0.22,
   },
 ]
 
@@ -171,18 +187,6 @@ export function vehicleYawRelativeToCamera(
   vehicleOrientation: number,
 ) {
   return normalizeSignedAngle(vehicleOrientation - cameraOrientation)
-}
-
-export function quantizeVehicleViewAngle(relativeYawRadians: number) {
-  const normalized = normalizeSignedAngle(relativeYawRadians)
-  const directionIndex =
-    ((Math.round(normalized / VIEW_STEP_RADIANS) % VEHICLE_DIRECTION_COUNT) +
-      VEHICLE_DIRECTION_COUNT) %
-    VEHICLE_DIRECTION_COUNT
-  return {
-    directionIndex,
-    angleRadians: normalizeSignedAngle(directionIndex * VIEW_STEP_RADIANS),
-  }
 }
 
 export function classifyVehicleView(relativeYawRadians: number): VehicleView {
@@ -365,6 +369,118 @@ function createBoxSurfaces(
   ]
 }
 
+function createPlateSurfaces(
+  footprint: Array<{ longitudinal: number; lateral: number }>,
+  height: number,
+  thickness: number,
+  colors: { top: string; side: string; stroke?: string },
+  visibility: FormulaSurface['visibility'] = 'all',
+): FormulaSurface[] {
+  const bottomHeight = Math.max(0, height - thickness / 2)
+  const topHeight = height + thickness / 2
+  const top = footprint.map<VehiclePoint3>((point) => ({
+    ...point,
+    height: topHeight,
+  }))
+  const bottom = footprint.map<VehiclePoint3>((point) => ({
+    ...point,
+    height: bottomHeight,
+  }))
+  const surfaces: FormulaSurface[] = [
+    {
+      points: bottom,
+      fill: colors.side,
+      visibility,
+    },
+    {
+      points: top,
+      fill: colors.top,
+      stroke: colors.stroke,
+      visibility,
+    },
+  ]
+  for (let index = 0; index < footprint.length; index += 1) {
+    const nextIndex = (index + 1) % footprint.length
+    surfaces.push({
+      points: [
+        bottom[index],
+        bottom[nextIndex],
+        top[nextIndex],
+        top[index],
+      ],
+      fill: colors.side,
+      visibility,
+    })
+  }
+  return surfaces
+}
+
+function createWheelSurfaces(
+  wheel: FormulaWheelSpec,
+  side: -1 | 1,
+  accentColor: string,
+): FormulaSurface[] {
+  const segmentCount = 10
+  const lateralCenter = side * (0.5 - wheel.lateralSize / 2)
+  const innerLateral = lateralCenter - side * wheel.lateralSize / 2
+  const outerLateral = lateralCenter + side * wheel.lateralSize / 2
+  const ringPoint = (
+    angle: number,
+    lateral: number,
+    radiusScale = 1,
+  ): VehiclePoint3 => ({
+    longitudinal:
+      wheel.longitudinal +
+      Math.cos(angle) * (wheel.longitudinalSize / 2) * radiusScale,
+    lateral,
+    height:
+      wheel.heightSize / 2 +
+      Math.sin(angle) * (wheel.heightSize / 2) * radiusScale,
+  })
+  const surfaces: FormulaSurface[] = []
+  for (let index = 0; index < segmentCount; index += 1) {
+    const fromAngle = (index / segmentCount) * FULL_CIRCLE
+    const toAngle = ((index + 1) / segmentCount) * FULL_CIRCLE
+    surfaces.push({
+      points: [
+        ringPoint(fromAngle, innerLateral),
+        ringPoint(toAngle, innerLateral),
+        ringPoint(toAngle, outerLateral),
+        ringPoint(fromAngle, outerLateral),
+      ],
+      fill: index % 2 === 0 ? TIRE_TOP_COLOR : TIRE_COLOR,
+    })
+  }
+
+  for (const lateral of [innerLateral, outerLateral]) {
+    surfaces.push(
+      {
+        points: Array.from({ length: segmentCount }, (_, index) =>
+          ringPoint((index / segmentCount) * FULL_CIRCLE, lateral),
+        ),
+        fill: TIRE_COLOR,
+      },
+      {
+        points: Array.from({ length: segmentCount }, (_, index) =>
+          ringPoint((index / segmentCount) * FULL_CIRCLE, lateral, 0.63),
+        ),
+        fill: '#1c2631',
+        stroke: TIRE_STRIPE_COLOR,
+        lineWidth: 0.65,
+      },
+      {
+        points: Array.from({ length: 8 }, (_, index) =>
+          ringPoint((index / 8) * FULL_CIRCLE, lateral + side * 0.002, 0.23),
+        ),
+        fill: accentColor,
+        stroke: '#05070b',
+        lineWidth: 0.5,
+      },
+    )
+  }
+  return surfaces
+}
+
 function createBodySurfaces(
   primaryColor: string,
   primaryLight: string,
@@ -434,84 +550,234 @@ function createBodySurfaces(
 
 function createFormulaSurfaces(color: string, totalLoss: boolean) {
   const baseColor = totalLoss ? mixHexColor(color, '#05070c', 0.58) : color
-  const primaryLight = mixHexColor(baseColor, '#f0f0fa', 0.28)
-  const primaryDark = mixHexColor(baseColor, '#05070c', 0.48)
-  const secondaryColor = mixHexColor(baseColor, '#f0f0fa', 0.7)
+  const primaryLight = mixHexColor(baseColor, '#f0f0fa', 0.34)
+  const primaryDark = mixHexColor(baseColor, '#05070c', 0.5)
+  const secondaryColor = mixHexColor(baseColor, '#f0f0fa', 0.82)
+  const healthyAccentColor =
+    color.toLowerCase() === '#ff2e88' ? '#31c7ff' : '#ff2e88'
+  const accentColor = totalLoss
+    ? mixHexColor(healthyAccentColor, '#05070c', 0.58)
+    : healthyAccentColor
+  const highlightColor = mixHexColor(baseColor, '#ffffff', 0.58)
   const surfaces: FormulaSurface[] = []
 
   surfaces.push(
-    ...createBoxSurfaces(
-      { longitudinal: -0.08, lateral: 0, height: 0.045 },
-      { longitudinal: 0.72, lateral: 0.73, height: 0.055 },
-      { top: CARBON_LIGHT_COLOR, side: CARBON_COLOR },
+    ...createPlateSurfaces(
+      [
+        { longitudinal: 0.31, lateral: -0.2 },
+        { longitudinal: 0.31, lateral: 0.2 },
+        { longitudinal: 0.08, lateral: 0.39 },
+        { longitudinal: -0.34, lateral: 0.43 },
+        { longitudinal: -0.47, lateral: 0.31 },
+        { longitudinal: -0.47, lateral: -0.31 },
+        { longitudinal: -0.34, lateral: -0.43 },
+        { longitudinal: 0.08, lateral: -0.39 },
+      ],
+      0.035,
+      0.05,
+      {
+        top: CARBON_LIGHT_COLOR,
+        side: CARBON_COLOR,
+        stroke: 'rgba(240, 240, 250, 0.13)',
+      },
     ),
   )
 
   for (const wheel of FORMULA_WHEEL_SPECS) {
-    for (const side of [-1, 1]) {
-      const lateralCenter = 0.5 - wheel.lateralSize / 2
-      surfaces.push(
-        ...createBoxSurfaces(
-          {
-            longitudinal: wheel.longitudinal,
-            lateral: side * lateralCenter,
-            height: wheel.heightSize / 2,
-          },
-          {
-            longitudinal: wheel.longitudinalSize,
-            lateral: wheel.lateralSize,
-            height: wheel.heightSize,
-          },
-          { top: TIRE_TOP_COLOR, side: TIRE_COLOR, end: '#020305' },
-        ),
-      )
+    for (const side of [-1, 1] as const) {
+      surfaces.push(...createWheelSurfaces(wheel, side, accentColor))
     }
+  }
+
+  const frontWingSides = [-1, 1] as const
+  for (const side of frontWingSides) {
+    const inner = side * 0.035
+    const outer = side * 0.5
+    surfaces.push(
+      ...createPlateSurfaces(
+        [
+          { longitudinal: 0.495, lateral: inner },
+          { longitudinal: 0.49, lateral: outer },
+          { longitudinal: 0.442, lateral: outer },
+          { longitudinal: 0.405, lateral: inner },
+        ],
+        0.075,
+        0.055,
+        { top: CARBON_LIGHT_COLOR, side: CARBON_COLOR },
+      ),
+      ...createPlateSurfaces(
+        [
+          { longitudinal: 0.472, lateral: side * 0.06 },
+          { longitudinal: 0.468, lateral: side * 0.465 },
+          { longitudinal: 0.425, lateral: side * 0.43 },
+          { longitudinal: 0.425, lateral: side * 0.07 },
+        ],
+        0.125,
+        0.035,
+        {
+          top: side < 0 ? secondaryColor : baseColor,
+          side: primaryDark,
+          stroke: accentColor,
+        },
+      ),
+      ...createBoxSurfaces(
+        { longitudinal: 0.46, lateral: side * 0.487, height: 0.16 },
+        { longitudinal: 0.12, lateral: 0.026, height: 0.22 },
+        { top: accentColor, side: primaryDark, end: accentColor },
+      ),
+    )
   }
 
   surfaces.push(
     ...createBoxSurfaces(
-      { longitudinal: 0.455, lateral: 0, height: 0.095 },
-      { longitudinal: 0.07, lateral: 1, height: 0.07 },
-      { top: secondaryColor, side: primaryDark },
+      { longitudinal: 0.448, lateral: 0, height: 0.115 },
+      { longitudinal: 0.11, lateral: 0.13, height: 0.07 },
+      { top: secondaryColor, side: primaryDark, end: accentColor },
     ),
     ...createBoxSurfaces(
-      { longitudinal: 0.4, lateral: 0, height: 0.12 },
-      { longitudinal: 0.12, lateral: 0.72, height: 0.045 },
-      { top: baseColor, side: primaryDark },
-    ),
-    ...createBoxSurfaces(
-      { longitudinal: -0.445, lateral: 0, height: 0.57 },
-      { longitudinal: 0.075, lateral: 0.86, height: 0.105 },
+      { longitudinal: -0.465, lateral: 0, height: 0.59 },
+      { longitudinal: 0.095, lateral: 0.86, height: 0.11 },
       { top: baseColor, side: primaryDark, end: secondaryColor },
     ),
     ...createBoxSurfaces(
-      { longitudinal: -0.45, lateral: -0.405, height: 0.36 },
-      { longitudinal: 0.09, lateral: 0.045, height: 0.44 },
-      { top: primaryLight, side: primaryDark },
+      { longitudinal: -0.418, lateral: 0, height: 0.515 },
+      { longitudinal: 0.075, lateral: 0.68, height: 0.055 },
+      { top: highlightColor, side: primaryDark, end: accentColor },
     ),
     ...createBoxSurfaces(
-      { longitudinal: -0.45, lateral: 0.405, height: 0.36 },
-      { longitudinal: 0.09, lateral: 0.045, height: 0.44 },
-      { top: primaryLight, side: primaryDark },
+      { longitudinal: -0.46, lateral: -0.415, height: 0.36 },
+      { longitudinal: 0.14, lateral: 0.042, height: 0.46 },
+      { top: accentColor, side: primaryDark },
+    ),
+    ...createBoxSurfaces(
+      { longitudinal: -0.46, lateral: 0.415, height: 0.36 },
+      { longitudinal: 0.14, lateral: 0.042, height: 0.46 },
+      { top: accentColor, side: primaryDark },
     ),
   )
 
   surfaces.push(...createBodySurfaces(baseColor, primaryLight, primaryDark))
-  return { surfaces, baseColor, primaryDark, secondaryColor }
+
+  for (const side of [-1, 1] as const) {
+    surfaces.push(
+      ...createPlateSurfaces(
+        [
+          { longitudinal: 0.045, lateral: side * 0.17 },
+          { longitudinal: -0.03, lateral: side * 0.3 },
+          { longitudinal: -0.26, lateral: side * 0.29 },
+          { longitudinal: -0.31, lateral: side * 0.17 },
+        ],
+        0.425,
+        0.012,
+        {
+          top: secondaryColor,
+          side: primaryDark,
+          stroke: 'rgba(240, 240, 250, 0.24)',
+        },
+      ),
+      ...createPlateSurfaces(
+        [
+          { longitudinal: 0.02, lateral: side * 0.305 },
+          { longitudinal: -0.07, lateral: side * 0.345 },
+          { longitudinal: -0.3, lateral: side * 0.34 },
+          { longitudinal: -0.26, lateral: side * 0.31 },
+        ],
+        0.3,
+        0.018,
+        { top: accentColor, side: primaryDark },
+      ),
+      ...createBoxSurfaces(
+        { longitudinal: 0.008, lateral: side * 0.255, height: 0.27 },
+        { longitudinal: 0.055, lateral: 0.135, height: 0.16 },
+        { top: CARBON_HIGHLIGHT_COLOR, side: COCKPIT_COLOR, end: COCKPIT_COLOR },
+      ),
+      ...createPlateSurfaces(
+        [
+          { longitudinal: 0.12, lateral: side * 0.385 },
+          { longitudinal: -0.34, lateral: side * 0.425 },
+          { longitudinal: -0.4, lateral: side * 0.385 },
+          { longitudinal: 0.08, lateral: side * 0.35 },
+        ],
+        0.065,
+        0.018,
+        { top: accentColor, side: CARBON_COLOR },
+      ),
+    )
+  }
+
+  surfaces.push(
+    ...createBoxSurfaces(
+      { longitudinal: -0.245, lateral: 0, height: 0.58 },
+      { longitudinal: 0.075, lateral: 0.19, height: 0.17 },
+      { top: secondaryColor, side: primaryDark, end: COCKPIT_COLOR },
+    ),
+    ...createPlateSurfaces(
+      [
+        { longitudinal: -0.215, lateral: -0.018 },
+        { longitudinal: -0.215, lateral: 0.018 },
+        { longitudinal: -0.445, lateral: 0.012 },
+        { longitudinal: -0.445, lateral: -0.012 },
+      ],
+      0.55,
+      0.26,
+      { top: baseColor, side: primaryDark, stroke: highlightColor },
+    ),
+    ...createBoxSurfaces(
+      { longitudinal: -0.493, lateral: 0, height: 0.205 },
+      { longitudinal: 0.025, lateral: 0.055, height: 0.07 },
+      { top: REAR_LIGHT_COLOR, side: '#5c0a16', end: REAR_LIGHT_COLOR },
+    ),
+  )
+
+  for (const lateral of [-0.24, -0.12, 0, 0.12, 0.24]) {
+    surfaces.push(
+      ...createPlateSurfaces(
+        [
+          { longitudinal: -0.43, lateral: lateral - 0.009 },
+          { longitudinal: -0.43, lateral: lateral + 0.009 },
+          { longitudinal: -0.5, lateral: lateral + 0.014 },
+          { longitudinal: -0.5, lateral: lateral - 0.014 },
+        ],
+        0.14,
+        0.2,
+        { top: CARBON_HIGHLIGHT_COLOR, side: CARBON_COLOR },
+        'preview',
+      ),
+    )
+  }
+
+  return {
+    surfaces,
+    baseColor,
+    primaryDark,
+    secondaryColor,
+    accentColor,
+    highlightColor,
+  }
 }
 
 function paintSurfaces(
   context: CanvasRenderingContext2D,
   surfaces: FormulaSurface[],
   projection: VehicleProjection,
+  detail: VehicleVisualDetail,
 ) {
   let orders = SURFACE_ORDER_CACHE.get(surfaces)
   if (!orders) {
     orders = new Map()
     SURFACE_ORDER_CACHE.set(surfaces, orders)
   }
+  const normalizedYaw = normalizeSignedAngle(projection.relativeYawRadians)
+  const orderBucket =
+    ((Math.round(
+      (normalizedYaw / FULL_CIRCLE) * SURFACE_ORDER_BUCKET_COUNT,
+    ) %
+      SURFACE_ORDER_BUCKET_COUNT) +
+      SURFACE_ORDER_BUCKET_COUNT) %
+    SURFACE_ORDER_BUCKET_COUNT
+  const orderAngle = (orderBucket / SURFACE_ORDER_BUCKET_COUNT) * FULL_CIRCLE
   const orderKey = [
-    projection.relativeYawRadians,
+    orderBucket,
     projection.length / projection.width,
     projection.groundDepthScale,
     projection.heightScale,
@@ -520,10 +786,16 @@ function paintSurfaces(
     .join(':')
   let ordered = orders.get(orderKey)
   if (!ordered) {
+    const orderProjection: VehicleProjection = {
+      ...projection,
+      relativeYawRadians: orderAngle,
+      sinYaw: Math.sin(orderAngle),
+      cosYaw: Math.cos(orderAngle),
+    }
     ordered = [...surfaces].sort((first, second) => {
       const averageDepth = (surface: FormulaSurface) =>
         surface.points.reduce(
-          (sum, point) => sum + cameraDepth(point, projection),
+          (sum, point) => sum + cameraDepth(point, orderProjection),
           0,
         ) / surface.points.length
       return averageDepth(second) - averageDepth(first)
@@ -532,6 +804,7 @@ function paintSurfaces(
   }
 
   for (const surface of ordered) {
+    if (surface.visibility === 'preview' && detail !== 'preview') continue
     tracePolygon(
       context,
       surface.points.map((point) => projectVehiclePoint(point, projection)),
@@ -540,7 +813,8 @@ function paintSurfaces(
     context.fill()
     if (surface.stroke) {
       context.strokeStyle = surface.stroke
-      context.lineWidth = surface.lineWidth ?? 0.8
+      context.lineWidth =
+        surface.lineWidth ?? Math.max(0.45, projection.width * 0.014)
       context.stroke()
     }
   }
@@ -571,45 +845,59 @@ function paintSuspension(
 ) {
   context.lineCap = 'round'
   const arms = [
-    { axle: 0.27, body: 0.17, bodyHalfWidth: 0.13, wheelHalfWidth: 0.36 },
-    { axle: -0.31, body: -0.22, bodyHalfWidth: 0.2, wheelHalfWidth: 0.35 },
+    {
+      axle: 0.27,
+      bodyFront: 0.2,
+      bodyRear: 0.11,
+      bodyHalfWidth: 0.115,
+      wheelHalfWidth: 0.33,
+    },
+    {
+      axle: -0.31,
+      bodyFront: -0.19,
+      bodyRear: -0.35,
+      bodyHalfWidth: 0.19,
+      wheelHalfWidth: 0.3,
+    },
   ]
   for (const arm of arms) {
     for (const side of [-1, 1]) {
-      strokeVehicleLine(
-        context,
-        projection,
-        {
-          longitudinal: arm.body,
-          lateral: side * arm.bodyHalfWidth,
-          height: 0.13,
-        },
-        {
-          longitudinal: arm.axle,
-          lateral: side * arm.wheelHalfWidth,
-          height: 0.16,
-        },
-        CARBON_LIGHT_COLOR,
-        Math.max(0.75, projection.width * 0.018),
-      )
-      if (detail === 'preview') {
+      for (const bodyLongitudinal of [arm.bodyFront, arm.bodyRear]) {
         strokeVehicleLine(
           context,
           projection,
           {
-            longitudinal: arm.body - 0.055,
+            longitudinal: bodyLongitudinal,
             lateral: side * arm.bodyHalfWidth,
-            height: 0.09,
+            height: 0.125,
           },
           {
-            longitudinal: arm.axle + 0.035,
+            longitudinal:
+              arm.axle +
+              (bodyLongitudinal === arm.bodyFront ? 0.022 : -0.022),
             lateral: side * arm.wheelHalfWidth,
-            height: 0.24,
+            height: 0.17,
           },
-          '#536273',
-          Math.max(0.55, projection.width * 0.012),
+          CARBON_HIGHLIGHT_COLOR,
+          Math.max(0.65, projection.width * 0.017),
         )
       }
+      strokeVehicleLine(
+        context,
+        projection,
+        {
+          longitudinal: (arm.bodyFront + arm.bodyRear) / 2,
+          lateral: side * (arm.bodyHalfWidth - 0.025),
+          height: 0.09,
+        },
+        {
+          longitudinal: arm.axle,
+          lateral: side * arm.wheelHalfWidth,
+          height: 0.22,
+        },
+        detail === 'preview' ? '#778696' : CARBON_COLOR,
+        Math.max(0.5, projection.width * 0.012),
+      )
     }
   }
 }
@@ -621,16 +909,32 @@ function paintCockpitAndLivery(
     baseColor: string
     secondaryColor: string
     primaryDark: string
+    accentColor: string
+    highlightColor: string
   },
   detail: VehicleVisualDetail,
   damage: DamageKind,
 ) {
+  const cockpitSurround = [
+    { longitudinal: 0.075, lateral: -0.09, height: 0.445 },
+    { longitudinal: 0.075, lateral: 0.09, height: 0.445 },
+    { longitudinal: -0.19, lateral: 0.135, height: 0.47 },
+    { longitudinal: -0.255, lateral: 0, height: 0.485 },
+    { longitudinal: -0.19, lateral: -0.135, height: 0.47 },
+  ]
+  tracePolygon(
+    context,
+    cockpitSurround.map((point) => projectVehiclePoint(point, projection)),
+  )
+  context.fillStyle = colors.secondaryColor
+  context.fill()
+
   const cockpit = [
-    { longitudinal: 0.055, lateral: -0.075, height: 0.39 },
-    { longitudinal: 0.055, lateral: 0.075, height: 0.39 },
-    { longitudinal: -0.2, lateral: 0.105, height: 0.43 },
-    { longitudinal: -0.25, lateral: 0, height: 0.45 },
-    { longitudinal: -0.2, lateral: -0.105, height: 0.43 },
+    { longitudinal: 0.045, lateral: -0.066, height: 0.47 },
+    { longitudinal: 0.045, lateral: 0.066, height: 0.47 },
+    { longitudinal: -0.185, lateral: 0.1, height: 0.495 },
+    { longitudinal: -0.225, lateral: 0, height: 0.51 },
+    { longitudinal: -0.185, lateral: -0.1, height: 0.495 },
   ]
   tracePolygon(
     context,
@@ -640,12 +944,14 @@ function paintCockpitAndLivery(
   context.fill()
 
   const stripe = [
-    { longitudinal: 0.45, lateral: -0.018, height: 0.17 },
-    { longitudinal: 0.45, lateral: 0.018, height: 0.17 },
-    { longitudinal: 0.1, lateral: 0.045, height: 0.36 },
-    { longitudinal: -0.36, lateral: 0.055, height: 0.35 },
-    { longitudinal: -0.36, lateral: -0.055, height: 0.35 },
-    { longitudinal: 0.1, lateral: -0.045, height: 0.36 },
+    { longitudinal: 0.478, lateral: -0.012, height: 0.142 },
+    { longitudinal: 0.478, lateral: 0.012, height: 0.142 },
+    { longitudinal: 0.12, lateral: 0.054, height: 0.355 },
+    { longitudinal: -0.09, lateral: 0.075, height: 0.455 },
+    { longitudinal: -0.36, lateral: 0.047, height: 0.35 },
+    { longitudinal: -0.36, lateral: -0.047, height: 0.35 },
+    { longitudinal: -0.09, lateral: -0.075, height: 0.455 },
+    { longitudinal: 0.12, lateral: -0.054, height: 0.355 },
   ]
   tracePolygon(
     context,
@@ -654,72 +960,157 @@ function paintCockpitAndLivery(
   context.fillStyle = colors.secondaryColor
   context.fill()
 
+  const accentStripe = [
+    { longitudinal: 0.488, lateral: -0.006, height: 0.151 },
+    { longitudinal: 0.488, lateral: 0.006, height: 0.151 },
+    { longitudinal: 0.08, lateral: 0.016, height: 0.385 },
+    { longitudinal: -0.42, lateral: 0.012, height: 0.32 },
+    { longitudinal: -0.42, lateral: -0.012, height: 0.32 },
+    { longitudinal: 0.08, lateral: -0.016, height: 0.385 },
+  ]
+  tracePolygon(
+    context,
+    accentStripe.map((point) => projectVehiclePoint(point, projection)),
+  )
+  context.fillStyle = colors.accentColor
+  context.fill()
+
   const helmet = projectVehiclePoint(
-    { longitudinal: -0.105, lateral: 0, height: 0.51 },
+    { longitudinal: -0.11, lateral: 0, height: 0.545 },
     projection,
   )
   context.beginPath()
   context.ellipse(
     helmet.x,
     helmet.y,
-    Math.max(1.3, projection.width * 0.06),
-    Math.max(1, projection.width * 0.045),
+    Math.max(1.4, projection.width * 0.065),
+    Math.max(1.1, projection.width * 0.052),
     0,
     0,
     FULL_CIRCLE,
   )
   context.fillStyle = colors.baseColor
   context.fill()
-  context.strokeStyle = HELMET_VISOR_COLOR
-  context.lineWidth = Math.max(0.55, projection.width * 0.012)
+  context.strokeStyle = colors.accentColor
+  context.lineWidth = Math.max(0.65, projection.width * 0.014)
   context.stroke()
 
+  const visor = projectVehiclePoint(
+    { longitudinal: -0.083, lateral: 0, height: 0.56 },
+    projection,
+  )
+  context.beginPath()
+  context.ellipse(
+    visor.x,
+    visor.y,
+    Math.max(1, projection.width * 0.043),
+    Math.max(0.55, projection.width * 0.018),
+    0,
+    0,
+    FULL_CIRCLE,
+  )
+  context.fillStyle = HELMET_VISOR_COLOR
+  context.fill()
+
   const haloFront: VehiclePoint3 = {
-    longitudinal: 0.035,
+    longitudinal: 0.055,
     lateral: 0,
-    height: 0.55,
+    height: 0.595,
   }
   for (const side of [-1, 1]) {
     strokeVehicleLine(
       context,
       projection,
-      { longitudinal: -0.19, lateral: side * 0.105, height: 0.5 },
+      { longitudinal: -0.2, lateral: side * 0.12, height: 0.55 },
       haloFront,
-      HALO_COLOR,
-      Math.max(0.85, projection.width * 0.025),
+      colors.baseColor,
+      Math.max(1, projection.width * 0.03),
     )
   }
   strokeVehicleLine(
     context,
     projection,
-    { longitudinal: -0.19, lateral: -0.105, height: 0.5 },
-    { longitudinal: -0.19, lateral: 0.105, height: 0.5 },
-    HALO_COLOR,
-    Math.max(0.85, projection.width * 0.025),
+    { longitudinal: -0.2, lateral: -0.12, height: 0.55 },
+    { longitudinal: -0.2, lateral: 0.12, height: 0.55 },
+    colors.baseColor,
+    Math.max(1, projection.width * 0.03),
+  )
+  strokeVehicleLine(
+    context,
+    projection,
+    { longitudinal: -0.185, lateral: -0.105, height: 0.566 },
+    { longitudinal: 0.04, lateral: 0, height: 0.608 },
+    colors.highlightColor,
+    Math.max(0.45, projection.width * 0.01),
+  )
+  strokeVehicleLine(
+    context,
+    projection,
+    { longitudinal: -0.185, lateral: 0.105, height: 0.566 },
+    { longitudinal: 0.04, lateral: 0, height: 0.608 },
+    colors.highlightColor,
+    Math.max(0.45, projection.width * 0.01),
   )
 
+  for (const side of [-1, 1]) {
+    const mirror = projectVehiclePoint(
+      { longitudinal: 0.015, lateral: side * 0.205, height: 0.49 },
+      projection,
+    )
+    context.beginPath()
+    context.ellipse(
+      mirror.x,
+      mirror.y,
+      Math.max(0.8, projection.width * 0.032),
+      Math.max(0.5, projection.width * 0.018),
+      0,
+      0,
+      FULL_CIRCLE,
+    )
+    context.fillStyle = colors.accentColor
+    context.fill()
+    context.strokeStyle = colors.primaryDark
+    context.lineWidth = Math.max(0.4, projection.width * 0.009)
+    context.stroke()
+  }
+
+  for (const side of [-1, 1]) {
+    strokeVehicleLine(
+      context,
+      projection,
+      { longitudinal: 0.02, lateral: side * 0.18, height: 0.42 },
+      { longitudinal: -0.28, lateral: side * 0.27, height: 0.36 },
+      'rgba(240, 240, 250, 0.62)',
+      Math.max(0.5, projection.width * 0.011),
+    )
+  }
+
   if (detail === 'preview') {
-    for (const lateral of [-0.44, 0.44]) {
-      const frontHub = projectVehiclePoint(
-        { longitudinal: 0.27, lateral, height: 0.22 },
+    const steeringWheel = [
+      { longitudinal: -0.02, lateral: -0.045, height: 0.515 },
+      { longitudinal: -0.015, lateral: 0.045, height: 0.515 },
+      { longitudinal: 0.012, lateral: 0.035, height: 0.54 },
+      { longitudinal: 0.008, lateral: -0.035, height: 0.54 },
+    ]
+    tracePolygon(
+      context,
+      steeringWheel.map((point) => projectVehiclePoint(point, projection)),
+    )
+    context.fillStyle = CARBON_HIGHLIGHT_COLOR
+    context.fill()
+    context.strokeStyle = colors.accentColor
+    context.lineWidth = Math.max(0.45, projection.width * 0.008)
+    context.stroke()
+
+    for (const side of [-1, 1]) {
+      strokeVehicleLine(
+        context,
         projection,
+        { longitudinal: -0.01, lateral: side * 0.305, height: 0.315 },
+        { longitudinal: -0.27, lateral: side * 0.31, height: 0.29 },
+        colors.highlightColor,
+        Math.max(0.45, projection.width * 0.008),
       )
-      const rearHub = projectVehiclePoint(
-        { longitudinal: -0.31, lateral, height: 0.25 },
-        projection,
-      )
-      for (const hub of [frontHub, rearHub]) {
-        context.beginPath()
-        context.arc(
-          hub.x,
-          hub.y,
-          Math.max(0.8, projection.width * 0.025),
-          0,
-          FULL_CIRCLE,
-        )
-        context.fillStyle = '#667789'
-        context.fill()
-      }
     }
   }
 
@@ -777,7 +1168,7 @@ function paintGroundShadow(
 }
 
 /**
- * Paints one original F1 master from a quantized 32-direction 2.5D view.
+ * Paints one original F1 master from a continuous 2.5D view.
  * Coordinates are screen-space pixels and never affect physics or collision.
  */
 export function drawVehicleVisual(
@@ -801,15 +1192,15 @@ export function drawVehicleVisual(
 ) {
   if (length <= 0 || width <= 0) return
 
-  const quantizedView = quantizeVehicleViewAngle(relativeYawRadians)
+  const continuousYaw = normalizeSignedAngle(relativeYawRadians)
   const projection: VehicleProjection = {
-    relativeYawRadians: quantizedView.angleRadians,
+    relativeYawRadians: continuousYaw,
     length,
     width,
     groundDepthScale,
     heightScale,
-    sinYaw: Math.sin(quantizedView.angleRadians),
-    cosYaw: Math.cos(quantizedView.angleRadians),
+    sinYaw: Math.sin(continuousYaw),
+    cosYaw: Math.cos(continuousYaw),
   }
   const totalLoss = damage === 'total-loss'
   const cacheKey = `${color}:${totalLoss ? 'total-loss' : 'healthy'}`
@@ -830,7 +1221,7 @@ export function drawVehicleVisual(
     shadowOpacity,
   )
   paintSuspension(context, projection, detail)
-  paintSurfaces(context, colors.surfaces, projection)
+  paintSurfaces(context, colors.surfaces, projection, detail)
   paintCockpitAndLivery(context, projection, colors, detail, damage)
   context.restore()
 }

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { TrackDefinition } from '@/lib/api'
-import type { CameraTransform } from '@/race/camera'
+import {
+  CAMERA_GROUND_DEPTH_SCALE,
+  CAMERA_VERTICAL_ANCHOR_RATIO,
+  type CameraTransform,
+} from '@/race/camera'
 import { RaceEngine } from '@/race/RaceEngine'
 import {
   calculateTrackCullMarginMeters,
@@ -242,6 +246,78 @@ describe('RaceRenderer audited surfaces', () => {
 
     expect(margin).toBeGreaterThan(65)
     expect(margin).toBeLessThan(66)
+  })
+
+  it('keeps wide runoff visible at the inclined viewport edge and culls a distant chunk', () => {
+    const track = createStraightTransitionTrack()
+    const viewportHeight = 640
+    const cameraOrientation = Math.PI / 4
+    const pixelsPerMeter =
+      (viewportHeight * 0.06) / 5.6
+    const marginMeters = calculateTrackCullMarginMeters(track)
+    const forwardLimitMeters =
+      (viewportHeight * CAMERA_VERTICAL_ANCHOR_RATIO) /
+      (pixelsPerMeter * CAMERA_GROUND_DEPTH_SCALE)
+    const forward = {
+      x: Math.cos(cameraOrientation),
+      y: Math.sin(cameraOrientation),
+    }
+    const boundsAround = (distanceMeters: number) => {
+      const center = {
+        x: forward.x * distanceMeters,
+        y: forward.y * distanceMeters,
+      }
+      return {
+        minX: center.x - 0.5,
+        minY: center.y - 0.5,
+        maxX: center.x + 0.5,
+        maxY: center.y + 0.5,
+      }
+    }
+    track.chunks = [
+      {
+        index: 0,
+        fromDistanceMeters: 0,
+        toDistanceMeters: 10,
+        bounds: boundsAround(0),
+      },
+      {
+        index: 1,
+        fromDistanceMeters: 10,
+        toDistanceMeters: 20,
+        bounds: boundsAround(forwardLimitMeters + 4),
+      },
+      {
+        index: 2,
+        fromDistanceMeters: 20,
+        toDistanceMeters: 30,
+        bounds: boundsAround(
+          forwardLimitMeters +
+            marginMeters / CAMERA_GROUND_DEPTH_SCALE +
+            20,
+        ),
+      },
+    ]
+
+    const { context } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+    const focus = {
+      ...createEngine(track).getInterpolatedVehicles()[0],
+      renderPosition: { x: 0, y: 0 },
+      renderAngle: cameraOrientation,
+      velocity: {
+        x: forward.x * 20,
+        y: forward.y * 20,
+      },
+    }
+    const engine = {
+      mode: 'solo',
+      getInterpolatedVehicles: () => [focus],
+    } as RaceEngine
+
+    renderer.render(engine, 1 / 60)
+
+    expect(renderer.getRenderStats().visibleChunksByViewport).toEqual([2])
   })
 
   it('orders same-layer cars by projected depth without mutating input', () => {

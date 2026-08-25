@@ -35,14 +35,21 @@ const MAXIMUM_CAMERA_TURN_RADIANS_PER_SECOND = 3
 const REVERSE_ORIENTATION_DELAY_SECONDS = 0.4
 const MAXIMUM_CONTINUOUS_FRAME_SECONDS = 0.25
 const TAB_RESUME_VISUAL_DELTA_SECONDS = 0.1
-export const TARGET_CAR_HEIGHT_RATIO = 0.055
 export const MAXIMUM_CAR_HEIGHT_RATIO = 0.06
-export const CAMERA_GROUND_DEPTH_SCALE =
-  TARGET_CAR_HEIGHT_RATIO / MAXIMUM_CAR_HEIGHT_RATIO
-export const CAMERA_ELEVATION_RADIANS = Math.asin(
-  CAMERA_GROUND_DEPTH_SCALE,
+// A 42-degree tilt away from a true overhead view keeps the roof readable,
+// while making the car sides and the ground foreshortening unmistakable.
+export const CAMERA_TILT_FROM_OVERHEAD_RADIANS = (42 * Math.PI) / 180
+export const CAMERA_GROUND_DEPTH_SCALE = Math.cos(
+  CAMERA_TILT_FROM_OVERHEAD_RADIANS,
 )
-export const CAMERA_HEIGHT_SCALE = Math.cos(CAMERA_ELEVATION_RADIANS)
+export const CAMERA_ELEVATION_RADIANS =
+  Math.PI / 2 - CAMERA_TILT_FROM_OVERHEAD_RADIANS
+export const CAMERA_HEIGHT_SCALE = Math.sin(
+  CAMERA_TILT_FROM_OVERHEAD_RADIANS,
+)
+// The focused car sits low enough to expose a little over twice as much track
+// ahead as behind, without hiding cars approaching from the rear.
+export const CAMERA_VERTICAL_ANCHOR_RATIO = 0.68
 
 export class RaceCamera {
   private state: CameraState
@@ -110,20 +117,16 @@ export function createCameraTransform(
   viewport: Viewport,
   focusedVehicleLengthMeters: number,
 ): CameraTransform {
-  const targetRatio = Math.min(
-    TARGET_CAR_HEIGHT_RATIO,
-    MAXIMUM_CAR_HEIGHT_RATIO,
-  )
   return {
     ...camera,
     viewport,
     groundDepthScale: CAMERA_GROUND_DEPTH_SCALE,
     pixelsPerMeter:
-      (viewport.height * targetRatio) /
-      (focusedVehicleLengthMeters * CAMERA_GROUND_DEPTH_SCALE),
+      (viewport.height * MAXIMUM_CAR_HEIGHT_RATIO) /
+      focusedVehicleLengthMeters,
     anchor: {
       x: viewport.x + viewport.width * 0.5,
-      y: viewport.y + viewport.height * 0.6,
+      y: viewport.y + viewport.height * CAMERA_VERTICAL_ANCHOR_RATIO,
     },
   }
 }
