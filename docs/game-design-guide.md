@@ -94,6 +94,7 @@ Regras:
 ### 5.1 Perspectiva e movimento
 
 - Top-down levemente inclinado, mostrando principalmente o teto e uma pequena parte das laterais dos carros.
+- A projeção 2.5D preserva a escala lateral e comprime a profundidade do solo para `11/12` da escala (`0,9167`), equivalente a uma elevação visual fixa de aproximadamente `66,4°` acima do plano. É uma transformação somente de renderização: metros, colisões e física não mudam.
 - A câmera acompanha a posição do carro.
 - A câmera gira dinamicamente conforme a direção de movimento, não cada oscilação instantânea do ângulo da carroceria.
 - Suavização inicial de referência: `0,2–0,3 s` (**calibração**).
@@ -156,6 +157,8 @@ Regras:
 
 - O jogo usa um único modelo de corrida: um monoposto inspirado em carros de F1, sem copiar exatamente um modelo, equipe ou pintura real.
 - Proporções semirrealistas: carroceria natural, pneus expostos, aerofólios e elementos de desempenho ligeiramente enfatizados.
+- A silhueta inclui bico estreito e alongado, asa dianteira larga, quatro pneus expostos com traseiros maiores, suspensão simplificada, monocoque, cockpit com halo, sidepods, cobertura do motor afunilada e asa traseira. Frente, traseira e laterais são completas para que rodadas, drift e outros participantes permaneçam legíveis.
+- Durante a corrida, o modelo usa 32 direções relativas à câmera (`11,25°` entre vistas); em split-screen, o mesmo carro pode usar uma vista diferente em cada viewport. A prévia reutiliza a mesma geometria com detalhe adicional.
 - Não existe seleção entre categorias ou carrocerias; Supercarro e Drift foram retirados da direção aprovada.
 - A variedade visual vem de pintura, capacete, acabamento e detalhes cosméticos da identidade Never Lift.
 - A preparação de pista permanece plausível, sem peças ou proporções absurdas.
@@ -345,6 +348,7 @@ Os itens abaixo precisam de protótipo, mas não autorizam trocar a direção de
 
 - intensidade e curva exata da suavização da câmera — calibração da Parte 2b: `0,25s`, limite angular para impedir giros instantâneos e retenção inicial de `0,4s` antes de convergir durante ré sustentada;
 - escala final do carro dentro do alvo de 5,5% e limite inicial de 6% — calibração da Parte 2b: `5,5%` da altura da viewport focada;
+- inclinação 2.5D e leitura multidirecional do F1 — calibração do refinamento do Módulo 2: profundidade do solo em `11/12`, elevação visual aproximada de `66,4°` e 32 direções relativas por viewport;
 - densidade máxima de partículas por nível de qualidade;
 - tons intermediários das superfícies escuras;
 - quantidade de trechos de pista mantidos em memória — na Parte 2b, somente os `chunks` cuja projeção intercepta a viewport, com margem equivalente à largura visual da pista, são desenhados;

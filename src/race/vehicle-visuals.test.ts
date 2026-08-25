@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { drawVehicleVisual } from '@/race/vehicle-visuals'
+import {
+  classifyVehicleView,
+  drawVehicleVisual,
+  getFormulaWheelSpecs,
+  projectVehiclePoint,
+  quantizeVehicleViewAngle,
+  VEHICLE_DIRECTION_COUNT,
+  vehicleYawRelativeToCamera,
+} from '@/race/vehicle-visuals'
 
 function createRecordingContext() {
   let properties = new Map<PropertyKey, unknown>([
@@ -10,6 +18,11 @@ function createRecordingContext() {
   ])
   const propertyStack: Array<Map<PropertyKey, unknown>> = []
   const operations: string[] = []
+  const coordinateOperation = (name: string) =>
+    (...values: number[]) =>
+      operations.push(
+        `${name}:${values.map((value) => value.toFixed(2)).join(',')}`,
+      )
   const context = new Proxy(
     {},
     {
@@ -33,12 +46,14 @@ function createRecordingContext() {
           return () =>
             operations.push(`stroke:${String(properties.get('strokeStyle'))}`)
         }
-        if (property === 'fillRect') {
-          return () => operations.push(`fillRect:${String(properties.get('fillStyle'))}`)
-        }
-        if (property === 'translate') {
-          return (x: number, y: number) =>
-            operations.push(`translate:${x.toFixed(2)},${y.toFixed(2)}`)
+        if (
+          property === 'translate' ||
+          property === 'moveTo' ||
+          property === 'lineTo' ||
+          property === 'arc' ||
+          property === 'ellipse'
+        ) {
+          return coordinateOperation(String(property))
         }
         return (..._arguments: unknown[]) => operations.push(String(property))
       },
@@ -56,30 +71,132 @@ function createRecordingContext() {
   }
 }
 
-function paint(detail: 'race' | 'preview' = 'race') {
+function paint(
+  relativeYawRadians = -Math.PI / 4,
+  detail: 'race' | 'preview' = 'race',
+  damage: 'none' | 'total-loss' = 'none',
+) {
   const recording = createRecordingContext()
   drawVehicleVisual(recording.context, {
     color: '#2d7dff',
     x: 160,
     y: 90,
-    angleRadians: -0.2,
+    relativeYawRadians,
     length: 180,
     width: 66,
     detail,
+    damage,
   })
   return recording
 }
 
+describe('multidirectional F1 view', () => {
+  it('classifies rear, front, both sides and diagonal views', () => {
+    expect(classifyVehicleView(0)).toBe('rear')
+    expect(classifyVehicleView(Math.PI / 4)).toBe('rear-left')
+    expect(classifyVehicleView(Math.PI / 2)).toBe('left-side')
+    expect(classifyVehicleView(Math.PI)).toBe('front')
+    expect(classifyVehicleView(-Math.PI / 2)).toBe('right-side')
+    expect(classifyVehicleView(-Math.PI / 4)).toBe('rear-right')
+  })
+
+  it('quantizes a full rotation into 32 stable directions', () => {
+    expect(VEHICLE_DIRECTION_COUNT).toBe(32)
+    expect(quantizeVehicleViewAngle(0).directionIndex).toBe(0)
+    expect(quantizeVehicleViewAngle(Math.PI / 2).directionIndex).toBe(8)
+    expect(quantizeVehicleViewAngle(Math.PI).directionIndex).toBe(16)
+    expect(quantizeVehicleViewAngle(-Math.PI).directionIndex).toBe(16)
+    expect(quantizeVehicleViewAngle(-Math.PI / 2).directionIndex).toBe(24)
+  })
+
+  it('selects a separate relative view for each split-screen camera', () => {
+    const vehicleOrientation = Math.PI / 2
+    const firstCameraYaw = vehicleYawRelativeToCamera(0, vehicleOrientation)
+    const secondCameraYaw = vehicleYawRelativeToCamera(
+      Math.PI / 2,
+      vehicleOrientation,
+    )
+
+    expect(classifyVehicleView(firstCameraYaw)).toBe('left-side')
+    expect(classifyVehicleView(secondCameraYaw)).toBe('rear')
+  })
+
+  it('projects ground depth, lateral offset and height independently', () => {
+    const projection = {
+      relativeYawRadians: 0,
+      length: 100,
+      width: 40,
+      groundDepthScale: 0.9,
+      heightScale: 0.4,
+    }
+    const origin = projectVehiclePoint(
+      { longitudinal: 0, lateral: 0, height: 0 },
+      projection,
+    )
+    const front = projectVehiclePoint(
+      { longitudinal: 0.5, lateral: 0, height: 0 },
+      projection,
+    )
+    const right = projectVehiclePoint(
+      { longitudinal: 0, lateral: 0.5, height: 0 },
+      projection,
+    )
+    const raised = projectVehiclePoint(
+      { longitudinal: 0, lateral: 0, height: 0.5 },
+      projection,
+    )
+
+    expect(origin).toEqual({ x: 0, y: -0 })
+    expect(front.y).toBeLessThan(origin.y)
+    expect(right.x).toBeGreaterThan(origin.x)
+    expect(raised.y).toBeLessThan(origin.y)
+  })
+})
+
 describe('single F1 visual painter', () => {
-  it('draws the F1 silhouette with exposed tires and the selected paint', () => {
+  it('keeps tire envelopes inside the declared car width with plausible diameters', () => {
+    const vehicleLengthMeters = 5.6
+    const vehicleWidthMeters = 2
+
+    for (const wheel of getFormulaWheelSpecs()) {
+      const lateralCenter = 0.5 - wheel.lateralSize / 2
+      expect(lateralCenter + wheel.lateralSize / 2).toBeLessThanOrEqual(0.5)
+
+      const longitudinalDiameter =
+        wheel.longitudinalSize * vehicleLengthMeters
+      const verticalDiameter = wheel.heightSize * vehicleWidthMeters
+      expect(verticalDiameter / longitudinalDiameter).toBeGreaterThan(0.85)
+      expect(verticalDiameter / longitudinalDiameter).toBeLessThan(1.15)
+    }
+  })
+
+  it('draws selected paint, four exposed tires, cockpit, helmet and halo', () => {
     const operations = paint().operations
 
     expect(operations).toContain('fill:#2d7dff')
     expect(
-      operations.filter((operation) => operation.startsWith('fillRect:')),
-    ).toHaveLength(6)
-    expect(operations).toContain('ellipse')
-    expect(operations).toContain('arc')
+      operations.filter((operation) => operation === 'fill:#05070b').length,
+    ).toBeGreaterThanOrEqual(4)
+    expect(operations.some((operation) => operation.startsWith('ellipse:'))).toBe(true)
+    expect(operations).toContain('fill:#07101b')
+    expect(operations).toContain('stroke:#9aa8b8')
+  })
+
+  it('renders distinct rear, front and side silhouettes', () => {
+    const coordinates = (angle: number) =>
+      paint(angle).operations.filter(
+        (operation) =>
+          operation.startsWith('moveTo:') || operation.startsWith('lineTo:'),
+      )
+
+    const rear = coordinates(0)
+    const front = coordinates(Math.PI)
+    const left = coordinates(Math.PI / 2)
+    const right = coordinates(-Math.PI / 2)
+
+    expect(front).not.toEqual(rear)
+    expect(left).not.toEqual(rear)
+    expect(right).not.toEqual(left)
   })
 
   it('balances canvas state and preserves the caller paint state', () => {
@@ -90,23 +207,34 @@ describe('single F1 visual painter', () => {
       color: '#2d7dff',
       x: 100,
       y: 80,
-      angleRadians: 0.4,
+      relativeYawRadians: 0.4,
       length: 150,
       width: 58,
     })
 
+    const saves = operations.filter((operation) => operation === 'save').length
+    const restores = operations.filter((operation) => operation === 'restore').length
     expect(operations).toContain('fill:#2d7dff')
-    expect(operations.filter((operation) => operation === 'save')).toHaveLength(4)
-    expect(operations.filter((operation) => operation === 'restore')).toHaveLength(4)
+    expect(saves).toBeGreaterThan(0)
+    expect(restores).toBe(saves)
     expect(getProperty('fillStyle')).toBe('#abcdef')
   })
 
-  it('adds preview detail without changing the base F1 silhouette', () => {
-    const raceOperations = paint('race').operations
-    const previewOperations = paint('preview').operations
+  it('adds preview detail without changing the selected F1 paint', () => {
+    const raceOperations = paint(0, 'race').operations
+    const previewOperations = paint(0, 'preview').operations
 
     expect(previewOperations.length).toBeGreaterThan(raceOperations.length)
-    expect(previewOperations.slice(0, 16)).toEqual(raceOperations.slice(0, 16))
+    expect(previewOperations).toContain('fill:#2d7dff')
+  })
+
+  it('adds damage marks and darkens the car on total loss', () => {
+    const healthy = paint(0, 'race', 'none').operations
+    const totalLoss = paint(0, 'race', 'total-loss').operations
+
+    expect(totalLoss.length).toBeGreaterThan(healthy.length)
+    expect(totalLoss).toContain('stroke:rgba(7, 11, 20, 0.88)')
+    expect(totalLoss).not.toContain('fill:#2d7dff')
   })
 
   it('does not touch the canvas for invalid dimensions', () => {
@@ -115,7 +243,7 @@ describe('single F1 visual painter', () => {
       color: '#2d7dff',
       x: 0,
       y: 0,
-      angleRadians: 0,
+      relativeYawRadians: 0,
       length: 0,
       width: 40,
     })
@@ -129,7 +257,7 @@ describe('single F1 visual painter', () => {
       color: '#2d7dff',
       x: 100,
       y: 80,
-      angleRadians: 0,
+      relativeYawRadians: 0,
       length: 140,
       width: 50,
       shadowAngleRadians: 0,
@@ -137,7 +265,8 @@ describe('single F1 visual painter', () => {
       shadowOpacity: 0.3,
     })
 
-    expect(operations).toContain('translate:120.00,80.00')
-    expect(operations).toContain('translate:100.00,82.00')
+    expect(operations).toContain('translate:100.00,80.00')
+    expect(operations).toContain('translate:20.00,0.00')
+    expect(operations).toContain('fill:rgba(0, 0, 0, 0.3)')
   })
 })

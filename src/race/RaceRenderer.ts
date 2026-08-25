@@ -11,6 +11,8 @@ import {
   createMinimapTransform,
   createSplitViewports,
   getVisibleTrackChunks,
+  projectedSegmentPixelsPerMeter,
+  projectedTrackWidth,
   RaceCamera,
   type CameraTransform,
   type Viewport,
@@ -31,7 +33,10 @@ import {
   trackSideEnvironmentWidth,
 } from '@/race/TrackGeometry'
 import type { InterpolatedVehicleState, Vector2 } from '@/race/types'
-import { drawVehicleVisual } from '@/race/vehicle-visuals'
+import {
+  drawVehicleVisual,
+  vehicleYawRelativeToCamera,
+} from '@/race/vehicle-visuals'
 import {
   AMBIENT_PARTICLE_BUDGET,
   DEFAULT_GRAPHICS_QUALITY,
@@ -132,6 +137,46 @@ function deterministicHash(seed: string) {
   return hash >>> 0
 }
 
+function trackCullMarginMeters(
+  track: TrackDefinition,
+  geometry: TrackGeometry,
+) {
+  return track.centerline.reduce((widest, point) => {
+    const leftEnvironment = geometry.getTrackSideEnvironmentAt(
+      point.distanceMeters,
+      'left',
+    )
+    const rightEnvironment = geometry.getTrackSideEnvironmentAt(
+      point.distanceMeters,
+      'right',
+    )
+    const sideExtent = (environment: TrackSideEnvironment) =>
+      trackSideEnvironmentWidth(environment) +
+      BARRIER_STYLES[environment.barrier].widthMeters / 2 +
+      (environment.fence ? FENCE_GAP_METERS + FENCE_STYLE.widthMeters : 0)
+    return Math.max(
+      widest,
+      point.halfWidthMeters + sideExtent(leftEnvironment),
+      point.halfWidthMeters + sideExtent(rightEnvironment),
+    )
+  }, 0)
+}
+
+export function calculateTrackCullMarginMeters(track: TrackDefinition) {
+  return trackCullMarginMeters(track, new TrackGeometry(track))
+}
+
+export function sortVehiclesByProjectedDepth(
+  vehicles: InterpolatedVehicleState[],
+  transform: CameraTransform,
+) {
+  return [...vehicles].sort(
+    (first, second) =>
+      worldToCamera(first.renderPosition, transform).y -
+      worldToCamera(second.renderPosition, transform).y,
+  )
+}
+
 export class RaceRenderer {
   private readonly context: CanvasRenderingContext2D
   private readonly canvas: HTMLCanvasElement
@@ -140,6 +185,7 @@ export class RaceRenderer {
   private readonly timeOfDay: TimeOfDayPreset
   private readonly quality: GraphicsQuality
   private readonly splitScreenAspectRatio: () => number
+  private readonly trackCullMarginMeters: number
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
   private frameCount = 0
@@ -156,7 +202,9 @@ export class RaceRenderer {
     this.timeOfDay = options.timeOfDay ?? 'day'
     this.quality = options.quality ?? DEFAULT_GRAPHICS_QUALITY
     this.splitScreenAspectRatio =
-      options.splitScreenAspectRatio ?? (() => this.canvas.width / this.canvas.height)
+      options.splitScreenAspectRatio ??
+      (() => this.canvas.width / this.canvas.height)
+    this.trackCullMarginMeters = trackCullMarginMeters(track, this.geometry)
     this.renderStats = {
       totalChunks: track.chunks.length,
       visibleChunksByViewport: [],
@@ -196,7 +244,6 @@ export class RaceRenderer {
       const cameraState = camera.update(
         focusedVehicle.renderPosition,
         focusedVehicle.velocity,
-        focusedVehicle.renderAngle,
         deltaSeconds,
       )
       const profile = PHYSICS_CONSTANTS.vehicleVisual
@@ -208,7 +255,7 @@ export class RaceRenderer {
       const visibleChunks = getVisibleTrackChunks(
         this.track.chunks,
         transform,
-        12,
+        Math.max(24, this.trackCullMarginMeters * transform.pixelsPerMeter),
       )
       visibleChunksByViewport.push(visibleChunks.length)
       ambientParticlesByViewport.push(this.drawViewport(
@@ -331,10 +378,12 @@ export class RaceRenderer {
       }
       if (elevationLayer === 0) this.drawStartFinish(transform)
       this.drawTireMarks(transform, elevationLayer)
-      for (const vehicle of vehicles) {
-        if (vehicle.trackLayer === elevationLayer) {
-          this.drawVehicle(vehicle, transform)
-        }
+      const vehiclesAtLayer = sortVehiclesByProjectedDepth(
+        vehicles.filter((vehicle) => vehicle.trackLayer === elevationLayer),
+        transform,
+      )
+      for (const vehicle of vehiclesAtLayer) {
+        this.drawVehicle(vehicle, transform)
       }
     }
     this.drawScenery(transform, 'overhead')
@@ -427,7 +476,12 @@ export class RaceRenderer {
       this.strokeSegment(
         worldToCamera(from, transform),
         worldToCamera(to, transform),
-        averageHalfWidthMeters * 2 * transform.pixelsPerMeter,
+        projectedTrackWidth(
+          from,
+          to,
+          averageHalfWidthMeters * 2,
+          transform,
+        ),
         '#29303b',
         index === 0 || index === points.length - 2 ? 'butt' : 'round',
       )
@@ -438,20 +492,28 @@ export class RaceRenderer {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) {
-    const screenPoints = points.map((point) => worldToCamera(point, transform))
     this.drawTrackCurbs(points, transform)
     this.drawTrackEdges(points, transform)
-    this.context.save()
-    this.context.setLineDash([
-      1.6 * transform.pixelsPerMeter,
-      1.4 * transform.pixelsPerMeter,
-    ])
-    this.strokePolyline(
-      screenPoints,
-      Math.max(1, 0.12 * transform.pixelsPerMeter),
-      'rgba(240, 240, 250, 0.17)',
-    )
-    this.context.restore()
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const from = points[index]
+      const to = points[index + 1]
+      const tangentScale = projectedSegmentPixelsPerMeter(
+        from,
+        to,
+        transform,
+      )
+      this.context.save()
+      this.context.setLineDash([1.6 * tangentScale, 1.4 * tangentScale])
+      this.context.lineDashOffset =
+        -(from.distanceMeters % 3) * tangentScale
+      this.strokeSegment(
+        worldToCamera(from, transform),
+        worldToCamera(to, transform),
+        Math.max(1, projectedTrackWidth(from, to, 0.12, transform)),
+        'rgba(240, 240, 250, 0.17)',
+      )
+      this.context.restore()
+    }
   }
 
   private drawTrackCurbs(
@@ -500,16 +562,24 @@ export class RaceRenderer {
             0,
             toPoint.halfWidthMeters - curb.widthMeters / 2,
           )
+          const curbFrom = this.offsetTrackPoint(
+            fromPoint,
+            curb.side,
+            insetFrom,
+          )
+          const curbTo = this.offsetTrackPoint(toPoint, curb.side, insetTo)
           this.strokeSegment(
-            worldToCamera(
-              this.offsetTrackPoint(fromPoint, curb.side, insetFrom),
-              transform,
+            worldToCamera(curbFrom, transform),
+            worldToCamera(curbTo, transform),
+            Math.max(
+              1.5,
+              projectedTrackWidth(
+                curbFrom,
+                curbTo,
+                curb.widthMeters,
+                transform,
+              ),
             ),
-            worldToCamera(
-              this.offsetTrackPoint(toPoint, curb.side, insetTo),
-              transform,
-            ),
-            Math.max(1.5, curb.widthMeters * transform.pixelsPerMeter),
             colors[stripeIndex % colors.length],
             'butt',
           )
@@ -633,17 +703,25 @@ export class RaceRenderer {
     transform: CameraTransform,
   ) {
     for (const side of ['left', 'right'] as const) {
-      const edge = points.map((point) =>
-        worldToCamera(
-          this.offsetTrackPoint(point, side, point.halfWidthMeters),
-          transform,
-        ),
-      )
-      this.strokePolyline(
-        edge,
-        Math.max(1, 0.14 * transform.pixelsPerMeter),
-        'rgba(240, 240, 250, 0.78)',
-      )
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const from = this.offsetTrackPoint(
+          points[index],
+          side,
+          points[index].halfWidthMeters,
+        )
+        const to = this.offsetTrackPoint(
+          points[index + 1],
+          side,
+          points[index + 1].halfWidthMeters,
+        )
+        this.strokeSegment(
+          worldToCamera(from, transform),
+          worldToCamera(to, transform),
+          Math.max(1, projectedTrackWidth(from, to, 0.14, transform)),
+          'rgba(240, 240, 250, 0.78)',
+          'round',
+        )
+      }
     }
   }
 
@@ -659,7 +737,6 @@ export class RaceRenderer {
           from,
           to,
           side,
-          transform,
         )
         this.drawStyledBoundary(fromPoint, toPoint, style, transform)
       }
@@ -687,21 +764,15 @@ export class RaceRenderer {
           side,
         )
         if (!segmentEnvironment.fence) continue
-        const fromPoint = worldToCamera(
-          this.offsetTrackPoint(
-            from,
-            side,
-            from.halfWidthMeters + this.fenceOffset(fromEnvironment),
-          ),
-          transform,
+        const fromPoint = this.offsetTrackPoint(
+          from,
+          side,
+          from.halfWidthMeters + this.fenceOffset(fromEnvironment),
         )
-        const toPoint = worldToCamera(
-          this.offsetTrackPoint(
-            to,
-            side,
-            to.halfWidthMeters + this.fenceOffset(toEnvironment),
-          ),
-          transform,
+        const toPoint = this.offsetTrackPoint(
+          to,
+          side,
+          to.halfWidthMeters + this.fenceOffset(toEnvironment),
         )
         this.drawStyledBoundary(fromPoint, toPoint, FENCE_STYLE, transform)
       }
@@ -721,7 +792,6 @@ export class RaceRenderer {
     from: TrackDefinition['centerline'][number],
     to: TrackDefinition['centerline'][number],
     side: 'left' | 'right',
-    transform: CameraTransform,
   ) {
     const fromEnvironment = this.geometry.getTrackSideEnvironmentAt(
       from.distanceMeters,
@@ -736,21 +806,15 @@ export class RaceRenderer {
       side,
     )
     const style = BARRIER_STYLES[styleEnvironment.barrier]
-    const fromPoint = worldToCamera(
-      this.offsetTrackPoint(
-        from,
-        side,
-        from.halfWidthMeters + trackSideEnvironmentWidth(fromEnvironment),
-      ),
-      transform,
+    const fromPoint = this.offsetTrackPoint(
+      from,
+      side,
+      from.halfWidthMeters + trackSideEnvironmentWidth(fromEnvironment),
     )
-    const toPoint = worldToCamera(
-      this.offsetTrackPoint(
-        to,
-        side,
-        to.halfWidthMeters + trackSideEnvironmentWidth(toEnvironment),
-      ),
-      transform,
+    const toPoint = this.offsetTrackPoint(
+      to,
+      side,
+      to.halfWidthMeters + trackSideEnvironmentWidth(toEnvironment),
     )
     return { fromPoint, toPoint, style }
   }
@@ -763,14 +827,27 @@ export class RaceRenderer {
   ) {
     this.context.save()
     if (style.dashMeters) {
+      const tangentScale = projectedSegmentPixelsPerMeter(
+        fromPoint,
+        toPoint,
+        transform,
+      )
       this.context.setLineDash(
-        style.dashMeters.map((length) => length * transform.pixelsPerMeter),
+        style.dashMeters.map((length) => length * tangentScale),
       )
     }
     this.strokeSegment(
-      fromPoint,
-      toPoint,
-      Math.max(1.5, style.widthMeters * transform.pixelsPerMeter),
+      worldToCamera(fromPoint, transform),
+      worldToCamera(toPoint, transform),
+      Math.max(
+        1.5,
+        projectedTrackWidth(
+          fromPoint,
+          toPoint,
+          style.widthMeters,
+          transform,
+        ),
+      ),
       style.color,
     )
     this.context.restore()
@@ -788,18 +865,6 @@ export class RaceRenderer {
       x: point.x + normal.x * offsetMeters * direction,
       y: point.y + normal.y * offsetMeters * direction,
     }
-  }
-
-  private strokePolyline(points: Vector2[], width: number, color: string) {
-    if (points.length < 2) return
-    this.context.beginPath()
-    this.context.moveTo(points[0].x, points[0].y)
-    for (const point of points.slice(1)) this.context.lineTo(point.x, point.y)
-    this.context.lineCap = 'round'
-    this.context.lineJoin = 'round'
-    this.context.lineWidth = Math.max(1, width)
-    this.context.strokeStyle = color
-    this.context.stroke()
   }
 
   private strokeSegment(
@@ -822,29 +887,24 @@ export class RaceRenderer {
   private drawStartFinish(transform: CameraTransform) {
     const gate = this.track.startFinish
     const lateral = { x: -gate.forward.y, y: gate.forward.x }
-    const from = worldToCamera(
-      {
-        x: gate.position.x - lateral.x * gate.halfWidthMeters,
-        y: gate.position.y - lateral.y * gate.halfWidthMeters,
-      },
-      transform,
-    )
-    const to = worldToCamera(
-      {
-        x: gate.position.x + lateral.x * gate.halfWidthMeters,
-        y: gate.position.y + lateral.y * gate.halfWidthMeters,
-      },
-      transform,
-    )
+    const from = {
+      x: gate.position.x - lateral.x * gate.halfWidthMeters,
+      y: gate.position.y - lateral.y * gate.halfWidthMeters,
+    }
+    const to = {
+      x: gate.position.x + lateral.x * gate.halfWidthMeters,
+      y: gate.position.y + lateral.y * gate.halfWidthMeters,
+    }
+    const tangentScale = projectedSegmentPixelsPerMeter(from, to, transform)
     this.context.save()
     this.context.setLineDash([
-      Math.max(2, transform.pixelsPerMeter * 0.7),
-      Math.max(2, transform.pixelsPerMeter * 0.7),
+      Math.max(2, tangentScale * 0.7),
+      Math.max(2, tangentScale * 0.7),
     ])
     this.strokeSegment(
-      from,
-      to,
-      Math.max(2, transform.pixelsPerMeter * 0.45),
+      worldToCamera(from, transform),
+      worldToCamera(to, transform),
+      Math.max(2, projectedTrackWidth(from, to, 0.45, transform)),
       '#f0f0fa',
     )
     this.context.restore()
@@ -1009,27 +1069,44 @@ export class RaceRenderer {
     maximumBeamDistanceMeters: number,
   ) {
     const profile = PHYSICS_CONSTANTS.vehicleVisual
-    const point = worldToCamera(vehicle.renderPosition, transform)
-    const forwardPoint = worldToCamera(
-      {
-        x: vehicle.renderPosition.x + Math.cos(vehicle.renderAngle),
-        y: vehicle.renderPosition.y + Math.sin(vehicle.renderAngle),
-      },
-      transform,
+    const beamLengthMeters = Math.min(
+      this.getHeadlightBeamLengthMeters(transform),
+      maximumBeamDistanceMeters,
     )
-    const screenAngle = Math.atan2(
-      forwardPoint.y - point.y,
-      forwardPoint.x - point.x,
-    )
-    const vehicleLength = profile.lengthMeters * transform.pixelsPerMeter
-    const beamLength = Math.min(
-      this.getHeadlightBeamLengthMeters(transform) * transform.pixelsPerMeter,
-      maximumBeamDistanceMeters * transform.pixelsPerMeter,
-    )
-    const beamWidth =
-      beamLength * HEADLIGHT_VISUAL_SETTINGS.widthToLengthRatio
-    const beamStart = vehicleLength * 0.35
-    if (beamLength <= beamStart + 2) return
+    const beamStartMeters = profile.lengthMeters * 0.35
+    if (beamLengthMeters <= beamStartMeters + 0.5) return
+    const forward = {
+      x: Math.cos(vehicle.renderAngle),
+      y: Math.sin(vehicle.renderAngle),
+    }
+    const lateral = { x: -forward.y, y: forward.x }
+    const beamPoint = (forwardMeters: number, lateralMeters: number) =>
+      worldToCamera(
+        {
+          x:
+            vehicle.renderPosition.x +
+            forward.x * forwardMeters +
+            lateral.x * lateralMeters,
+          y:
+            vehicle.renderPosition.y +
+            forward.y * forwardMeters +
+            lateral.y * lateralMeters,
+        },
+        transform,
+      )
+    const startHalfWidthMeters =
+      profile.lengthMeters *
+      HEADLIGHT_VISUAL_SETTINGS.startHalfWidthToVehicleLengthRatio
+    const endHalfWidthMeters =
+      beamLengthMeters * HEADLIGHT_VISUAL_SETTINGS.widthToLengthRatio
+    const startCenter = beamPoint(beamStartMeters, 0)
+    const endCenter = beamPoint(beamLengthMeters, 0)
+    const beamPolygon = [
+      beamPoint(beamStartMeters, -startHalfWidthMeters),
+      beamPoint(beamLengthMeters, -endHalfWidthMeters),
+      beamPoint(beamLengthMeters, endHalfWidthMeters),
+      beamPoint(beamStartMeters, startHalfWidthMeters),
+    ]
     this.context.save()
     if (
       !this.clipHeadlightToVisibleTrack(
@@ -1041,13 +1118,11 @@ export class RaceRenderer {
       this.context.restore()
       return
     }
-    this.context.translate(point.x, point.y)
-    this.context.rotate(screenAngle)
     const gradient = this.context.createLinearGradient(
-      beamStart,
-      0,
-      beamLength,
-      0,
+      startCenter.x,
+      startCenter.y,
+      endCenter.x,
+      endCenter.y,
     )
     for (const stop of HEADLIGHT_VISUAL_SETTINGS.colorStops) {
       gradient.addColorStop(stop.offset, stop.color)
@@ -1055,16 +1130,10 @@ export class RaceRenderer {
 
     this.context.fillStyle = gradient
     this.context.beginPath()
-    this.context.moveTo(
-      beamStart,
-      -vehicleLength * HEADLIGHT_VISUAL_SETTINGS.startHalfWidthToVehicleLengthRatio,
-    )
-    this.context.lineTo(beamLength, -beamWidth)
-    this.context.lineTo(beamLength, beamWidth)
-    this.context.lineTo(
-      beamStart,
-      vehicleLength * HEADLIGHT_VISUAL_SETTINGS.startHalfWidthToVehicleLengthRatio,
-    )
+    this.context.moveTo(beamPolygon[0].x, beamPolygon[0].y)
+    for (const point of beamPolygon.slice(1)) {
+      this.context.lineTo(point.x, point.y)
+    }
     this.context.closePath()
     this.context.fill()
     this.context.restore()
@@ -1399,11 +1468,14 @@ export class RaceRenderer {
       this.context.fillStyle = mark.onGrass
         ? 'rgba(101, 68, 43, 0.42)'
         : 'rgba(3, 5, 9, 0.28)'
+      const radius = Math.max(0.8, transform.pixelsPerMeter * 0.18)
       this.context.beginPath()
-      this.context.arc(
+      this.context.ellipse(
         point.x,
         point.y,
-        Math.max(0.8, transform.pixelsPerMeter * 0.18),
+        radius,
+        Math.max(0.6, radius * transform.groundDepthScale),
+        0,
         0,
         Math.PI * 2,
       )
@@ -1418,17 +1490,6 @@ export class RaceRenderer {
     const context = this.context
     const profile = PHYSICS_CONSTANTS.vehicleVisual
     const point = worldToCamera(vehicle.renderPosition, transform)
-    const forwardPoint = worldToCamera(
-      {
-        x: vehicle.renderPosition.x + Math.cos(vehicle.renderAngle),
-        y: vehicle.renderPosition.y + Math.sin(vehicle.renderAngle),
-      },
-      transform,
-    )
-    const screenAngle = Math.atan2(
-      forwardPoint.y - point.y,
-      forwardPoint.x - point.x,
-    )
     const length = profile.lengthMeters * transform.pixelsPerMeter
     const width = profile.widthMeters * transform.pixelsPerMeter
     const shadowSettings = VEHICLE_SHADOW_SETTINGS[this.timeOfDay]
@@ -1447,10 +1508,15 @@ export class RaceRenderer {
       color: vehicle.color,
       x: point.x,
       y: point.y,
-      angleRadians: screenAngle,
+      relativeYawRadians: vehicleYawRelativeToCamera(
+        transform.orientation,
+        vehicle.renderAngle,
+      ),
       length,
       width,
       detail: 'race',
+      damage: vehicle.damage.kind,
+      groundDepthScale: transform.groundDepthScale,
       shadowAngleRadians: Math.atan2(
         shadowDirection.y - point.y,
         shadowDirection.x - point.x,
@@ -1459,27 +1525,10 @@ export class RaceRenderer {
       shadowOpacity: shadowSettings.opacity,
     })
 
-    if (vehicle.damage.kind !== 'none') {
-      context.save()
-      context.translate(point.x, point.y)
-      context.rotate(screenAngle)
-      context.strokeStyle = 'rgba(7, 11, 20, 0.78)'
-      context.lineWidth = Math.max(1, transform.pixelsPerMeter * 0.18)
-      context.beginPath()
-      context.moveTo(-length * 0.25, -width * 0.38)
-      context.lineTo(-length * 0.05, width * 0.32)
-      if (vehicle.damage.kind === 'total-loss') {
-        context.moveTo(length * 0.25, -width * 0.38)
-        context.lineTo(length * 0.02, width * 0.35)
-      }
-      context.stroke()
-      context.restore()
-    }
-
     context.fillStyle = '#f0f0fa'
     context.font = `700 ${Math.max(9, 1.3 * transform.pixelsPerMeter)}px Barlow`
     context.textAlign = 'center'
-    context.fillText(vehicle.name, point.x, point.y - width * 1.05)
+    context.fillText(vehicle.name, point.x, point.y - width * 1.2)
   }
 
   private drawMinimap(
