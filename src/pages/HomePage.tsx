@@ -17,6 +17,7 @@ import { VehiclePreview } from '@/components/race/VehiclePreview'
 import { Button } from '@/components/ui/button'
 import { getAvatar } from '@/lib/avatars'
 import { getErrorMessage } from '@/lib/error-messages'
+import { DEFAULT_VEHICLE_PAINT_COLOR } from '@/race/vehicle-paints'
 
 export function HomePage() {
   const { account, isUser, session, startGuestSession } = useAuth()
@@ -203,7 +204,7 @@ export function HomePage() {
                   </p>
                   <p className="mt-1 font-bold">Pronto para largar</p>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    Escolha pista, carro e pintura antes de entrar no grid.
+                    Escolha pista e pintura antes de entrar no grid.
                   </p>
                   <Button asChild className="mt-4" size="sm" variant="secondary">
                     <Link to="/race">Preparar corrida</Link>
@@ -212,7 +213,7 @@ export function HomePage() {
               </div>
               <VehiclePreview
                 className="h-36 w-full"
-                color="#2d7dff"
+                color={DEFAULT_VEHICLE_PAINT_COLOR}
               />
             </div>
           </div>

@@ -33,6 +33,8 @@ describe('main menu', () => {
       '/race',
     )
     expect(screen.getByText('Pronto para largar')).toBeInTheDocument()
+    expect(screen.getByText('Escolha pista e pintura antes de entrar no grid.')).toBeInTheDocument()
+    expect(screen.queryByText(/Escolha pista, carro e pintura/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/próximos módulos/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Próxima etapa/i)).not.toBeInTheDocument()
   })

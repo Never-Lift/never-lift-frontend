@@ -103,11 +103,29 @@ describe('Module 2b race setup', () => {
     await user.click(within(playerTwo).getByRole('button', { name: 'Personalizar' }))
 
     expect(
-      within(playerTwo).getByRole('button', { name: 'Selecionar cor #2d7dff' }),
+      within(playerTwo).getByRole('button', { name: 'Selecionar pintura Azul' }),
     ).toBeDisabled()
     expect(
-      within(playerTwo).getByRole('button', { name: 'Selecionar cor #ff2e88' }),
+      within(playerTwo).getByRole('button', { name: 'Selecionar pintura Vermelho' }),
     ).toBeEnabled()
+  })
+
+  it('offers only the restrained red, blue and green paint presets', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    await findStartButton()
+    await user.click(screen.getByRole('button', { name: 'Personalizar' }))
+
+    expect(screen.getByRole('button', { name: 'Selecionar pintura Vermelho' })).toHaveStyle({
+      backgroundColor: '#a84448',
+    })
+    expect(screen.getByRole('button', { name: 'Selecionar pintura Azul' })).toHaveStyle({
+      backgroundColor: '#365f82',
+    })
+    expect(screen.getByRole('button', { name: 'Selecionar pintura Verde' })).toHaveStyle({
+      backgroundColor: '#3f704f',
+    })
+    expect(screen.getAllByRole('button', { name: /Selecionar pintura/ })).toHaveLength(3)
   })
 
   it('fixes the selected visual preset before starting the race', async () => {
@@ -136,7 +154,7 @@ describe('Module 2b race setup', () => {
     expect(screen.queryByText(/Supercarro|Drift/)).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Personalizar' }))
 
-    await user.click(screen.getByRole('button', { name: 'Selecionar cor #ff2e88' }))
+    await user.click(screen.getByRole('button', { name: 'Selecionar pintura Vermelho' }))
     expect(
       screen.getByRole('complementary', { name: 'Resumo da corrida' }),
     ).toHaveTextContent('Piloto 1 · F1')
