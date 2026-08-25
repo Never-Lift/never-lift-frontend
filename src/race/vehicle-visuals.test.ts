@@ -5,8 +5,6 @@ import {
   drawVehicleVisual,
   getFormulaWheelSpecs,
   projectVehiclePoint,
-  quantizeVehicleViewAngle,
-  VEHICLE_DIRECTION_COUNT,
   vehicleYawRelativeToCamera,
 } from '@/race/vehicle-visuals'
 
@@ -75,6 +73,8 @@ function paint(
   relativeYawRadians = -Math.PI / 4,
   detail: 'race' | 'preview' = 'race',
   damage: 'none' | 'total-loss' = 'none',
+  length = 180,
+  width = 66,
 ) {
   const recording = createRecordingContext()
   drawVehicleVisual(recording.context, {
@@ -82,8 +82,8 @@ function paint(
     x: 160,
     y: 90,
     relativeYawRadians,
-    length: 180,
-    width: 66,
+    length,
+    width,
     detail,
     damage,
   })
@@ -100,13 +100,31 @@ describe('multidirectional F1 view', () => {
     expect(classifyVehicleView(-Math.PI / 4)).toBe('rear-right')
   })
 
-  it('quantizes a full rotation into 32 stable directions', () => {
-    expect(VEHICLE_DIRECTION_COUNT).toBe(32)
-    expect(quantizeVehicleViewAngle(0).directionIndex).toBe(0)
-    expect(quantizeVehicleViewAngle(Math.PI / 2).directionIndex).toBe(8)
-    expect(quantizeVehicleViewAngle(Math.PI).directionIndex).toBe(16)
-    expect(quantizeVehicleViewAngle(-Math.PI).directionIndex).toBe(16)
-    expect(quantizeVehicleViewAngle(-Math.PI / 2).directionIndex).toBe(24)
+  it('paints continuously between two nearby angles', () => {
+    const firstAngle = 0.01
+    const secondAngle = 0.02
+
+    const coordinates = (angle: number) =>
+      paint(angle).operations.filter(
+        (operation) =>
+          operation.startsWith('moveTo:') || operation.startsWith('lineTo:'),
+      )
+
+    expect(coordinates(firstAngle)).not.toEqual(coordinates(secondAngle))
+  })
+
+  it('keeps every one-degree steering pose distinct across a full turn segment', () => {
+    const poses = Array.from({ length: 21 }, (_, degrees) => {
+      const angle = (degrees * Math.PI) / 180
+      return paint(angle).operations
+        .filter(
+          (operation) =>
+            operation.startsWith('moveTo:') || operation.startsWith('lineTo:'),
+        )
+        .join('|')
+    })
+
+    expect(new Set(poses).size).toBe(poses.length)
   })
 
   it('selects a separate relative view for each split-screen camera', () => {
@@ -170,16 +188,34 @@ describe('single F1 visual painter', () => {
     }
   })
 
-  it('draws selected paint, four exposed tires, cockpit, helmet and halo', () => {
-    const operations = paint().operations
+  it('keeps the detailed F1 readable at its real race size', () => {
+    const raceLength = 60
+    const operations = paint(
+      -Math.PI / 4,
+      'race',
+      'none',
+      raceLength,
+      raceLength / 2.8,
+    ).operations
 
     expect(operations).toContain('fill:#2d7dff')
+    expect(operations).toContain('fill:#ff2e88')
     expect(
       operations.filter((operation) => operation === 'fill:#05070b').length,
     ).toBeGreaterThanOrEqual(4)
-    expect(operations.some((operation) => operation.startsWith('ellipse:'))).toBe(true)
+    expect(
+      operations.filter((operation) => operation === 'stroke:#d8bd32').length,
+    ).toBeGreaterThanOrEqual(4)
+    expect(
+      operations.filter((operation) => operation === 'stroke:#3a4857').length,
+    ).toBeGreaterThanOrEqual(8)
+    expect(
+      operations.some((operation) => operation.startsWith('ellipse:')),
+    ).toBe(true)
     expect(operations).toContain('fill:#07101b')
-    expect(operations).toContain('stroke:#9aa8b8')
+    expect(operations).toContain('fill:#a9e7ff')
+    expect(operations).toContain('fill:#ff4055')
+    expect(operations).toContain('stroke:#2d7dff')
   })
 
   it('renders distinct rear, front and side silhouettes', () => {
@@ -235,6 +271,7 @@ describe('single F1 visual painter', () => {
     expect(totalLoss.length).toBeGreaterThan(healthy.length)
     expect(totalLoss).toContain('stroke:rgba(7, 11, 20, 0.88)')
     expect(totalLoss).not.toContain('fill:#2d7dff')
+    expect(totalLoss).not.toContain('fill:#ff2e88')
   })
 
   it('does not touch the canvas for invalid dimensions', () => {

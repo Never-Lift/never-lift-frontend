@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { TrackChunk } from '@/lib/api'
 import {
   CAMERA_GROUND_DEPTH_SCALE,
+  CAMERA_VERTICAL_ANCHOR_RATIO,
   createCameraTransform,
   createMinimapTransform,
   createSplitViewports,
@@ -11,14 +12,13 @@ import {
   projectedSegmentPixelsPerMeter,
   projectedTrackWidth,
   RaceCamera,
-  TARGET_CAR_HEIGHT_RATIO,
   worldToCamera,
   worldToMinimap,
 } from '@/race/camera'
 import { signedAngleDelta } from '@/race/math'
 
 describe('camera and minimap transforms', () => {
-  it('maps the focused car to 60% height and keeps its visual size below 6%', () => {
+  it('places the focused car low enough to show over twice as much track ahead', () => {
     const viewport = { x: 0, y: 0, width: 1_000, height: 600 }
     const transform = createCameraTransform(
       { position: { x: 10, y: 20 }, orientation: 0 },
@@ -26,20 +26,33 @@ describe('camera and minimap transforms', () => {
       5.6,
     )
 
-    expect(worldToCamera({ x: 10, y: 20 }, transform)).toEqual({
-      x: 500,
-      y: 360,
-    })
-    expect(worldToCamera({ x: 20, y: 20 }, transform).y).toBeLessThan(360)
+    const focusedPoint = worldToCamera({ x: 10, y: 20 }, transform)
+    expect(focusedPoint.x).toBeCloseTo(500, 8)
+    expect(focusedPoint.y).toBeCloseTo(408, 8)
+    expect(worldToCamera({ x: 20, y: 20 }, transform).y).toBeLessThan(408)
     expect(worldToCamera({ x: 10, y: 10 }, transform).x).toBeGreaterThan(500)
-    const vehicleRatio =
+    const spaceAhead = transform.anchor.y - viewport.y
+    const spaceBehind = viewport.y + viewport.height - transform.anchor.y
+    expect(transform.anchor.y / viewport.height).toBeCloseTo(
+      CAMERA_VERTICAL_ANCHOR_RATIO,
+      8,
+    )
+    expect(spaceAhead / spaceBehind).toBeGreaterThan(2.1)
+
+    const longitudinalGroundRatio =
       (5.6 * transform.pixelsPerMeter * transform.groundDepthScale) /
       viewport.height
-    expect(vehicleRatio).toBeCloseTo(TARGET_CAR_HEIGHT_RATIO, 8)
-    expect(vehicleRatio).toBeLessThanOrEqual(MAXIMUM_CAR_HEIGHT_RATIO)
+    const lateralVehicleRatio =
+      (5.6 * transform.pixelsPerMeter) / viewport.height
+    expect(longitudinalGroundRatio).toBeCloseTo(
+      MAXIMUM_CAR_HEIGHT_RATIO * CAMERA_GROUND_DEPTH_SCALE,
+      8,
+    )
+    expect(longitudinalGroundRatio).toBeLessThan(MAXIMUM_CAR_HEIGHT_RATIO)
+    expect(lateralVehicleRatio).toBeCloseTo(MAXIMUM_CAR_HEIGHT_RATIO, 8)
   })
 
-  it('compresses distance ahead while preserving lateral scale', () => {
+  it('uses clearly perceptible ground foreshortening while preserving lateral scale', () => {
     const transform = createCameraTransform(
       { position: { x: 0, y: 0 }, orientation: 0 },
       { x: 0, y: 0, width: 1_000, height: 600 },
@@ -60,6 +73,8 @@ describe('camera and minimap transforms', () => {
     expect(Math.abs(ahead.y - origin.y)).toBeLessThan(
       Math.abs(right.x - origin.x),
     )
+    expect(CAMERA_GROUND_DEPTH_SCALE).toBeGreaterThan(0.74)
+    expect(CAMERA_GROUND_DEPTH_SCALE).toBeLessThan(0.75)
   })
 
   it('projects ribbon width from each segment normal', () => {
@@ -234,7 +249,7 @@ describe('dynamic camera stability', () => {
     expect(step).toBeLessThan(0.1)
   })
 
-  it('converges consistently at 30, 60 and 120 FPS', () => {
+  it('converges consistently at 5, 30, 60 and 120 FPS', () => {
     const runAtFps = (fps: number) => {
       const camera = new RaceCamera({ x: 0, y: 0 }, 0)
       for (let frame = 0; frame < fps; frame += 1) {
@@ -247,7 +262,9 @@ describe('dynamic camera stability', () => {
       return camera.getState().orientation
     }
 
+    const at5 = runAtFps(5)
     const at30 = runAtFps(30)
+    expect(at5).toBeCloseTo(at30, 2)
     expect(runAtFps(60)).toBeCloseTo(at30, 4)
     expect(runAtFps(120)).toBeCloseTo(at30, 4)
   })
