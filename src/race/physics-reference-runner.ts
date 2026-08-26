@@ -1,6 +1,7 @@
 import referenceScenarios from '../../contracts/module-2/v2/physics-reference-scenarios.json'
 
 import {
+  PHYSICS_CONSTANTS,
   PHYSICS_STEP_SECONDS,
   TIRE_MODEL,
   VEHICLE_DYNAMICS,
@@ -136,7 +137,7 @@ function createReferenceVehicle(
     trackDistanceMeters: 0,
     damage: {
       kind: 'none',
-      health: 100,
+      health: PHYSICS_CONSTANTS.damage.thresholds.maximumHealth,
       engineDamaged: false,
       steeringDamaged: false,
       steeringPull: 0,

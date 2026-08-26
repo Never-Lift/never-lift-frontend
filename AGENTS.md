@@ -20,7 +20,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/frontend-implementation-plan.md` — plano deste repositório, módulo a módulo.
 - `docs/backend-implementation-plan.md` — plano do repositório backend, incluído aqui só como referência da API/WebSocket que este cliente consome. Não implementar nada daqui.
 - `docs/game-design-guide.md` — fonte oficial das decisões visuais, de câmera, escala, telas e fase de implementação. Ler antes de qualquer trabalho de interface ou corrida.
-- `docs/contracts/module-2-shared-contracts.md`, `docs/contracts/module-2-physics-v2-proposal.md` e `contracts/module-2/v1/` — estado atual, proposta incompatível aprovada e contratos publicados do Módulo 2. O `v1` é histórico imutável; a Parte 2d publicará a linha `v2`.
+- `docs/contracts/module-2-shared-contracts.md`, `docs/contracts/module-2-physics-v2-proposal.md` e `contracts/module-2/v1/`/`v2/` — decisões e contratos publicados do Módulo 2. O `v1` é histórico imutável; o `v2` é a linha executável da Parte 2d.
 
 ## Stack e convenções deste repositório
 - TypeScript (strict) + Vite + React.
@@ -32,9 +32,9 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - O mesmo `RaceEngine` do Módulo 2 é reaproveitado como motor de predição no Módulo 3 — não duplicar a física numa segunda implementação.
 - Nunca desenhar um carro remoto direto na posição recebida no `state_snapshot` — sempre interpolar entre os dois snapshots mais recentes.
 - Física, pistas, checkpoints e snapshots usam a unidade compartilhada **1 unidade de mundo = 1 metro**. Pixels são somente uma projeção da câmera e nunca podem entrar nas regras físicas. A colisão v2 deve usar a mesma geometria métrica visível do monoposto e das faces internas das barreiras, sem margem invisível.
-- Na direção v2 aprovada, boost/nitro não existe e `Shift` fica sem função. O runtime v1.3 ainda contém um campo reservado sem efeito; a Parte 2d deve removê-lo de input, protocolo, HUD, controles personalizáveis e testes antes de ser marcada pronta.
+- No runtime v2, boost/nitro não existe e `Shift` fica sem função: input, protocolo, HUD, controles e testes não carregam a reserva histórica do v1.3.
 - Circuitos extensos não são bitmaps únicos: renderizar por trechos e descartar desenho fora da área visível.
-- O frontend consome as 24 geometrias pela API do backend. Todo artefato compartilhado publicado em `contracts/module-2/v1/` e na futura linha `v2/` deve continuar idêntico nos dois repositórios.
+- O frontend consome as 24 geometrias pela API do backend. Todo artefato compartilhado publicado em `contracts/module-2/v1/` e `contracts/module-2/v2/` deve continuar idêntico nos dois repositórios.
 
 ## Regra fixa: design e fase
 - `docs/game-design-guide.md` define a direção aprovada; não reinterpretar estilo, câmera ou composição em cada módulo.
@@ -60,7 +60,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único/condução fixa concluída; revisão de câmera 2.5D/F1 implementada e aguardando validação manual final; Parte 2d (dinâmica F1, colisões precisas, contrato físico v2 e remoção de boost) aprovada e documentada, implementação pendente |
+| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único/condução fixa concluída; revisão de câmera 2.5D/F1 aguardando validação manual final; Parte 2d (dinâmica F1, colisões precisas, contrato físico v2 e remoção de boost): implementação automatizada concluída; validação manual pendente |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/vácuo/pits/HUD) | não iniciado |

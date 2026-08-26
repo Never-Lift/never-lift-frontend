@@ -114,8 +114,14 @@
     "solverIterations": 8,
     "ccdMinimumSpeedMetersPerSecond": 12,
     "maximumCcdEventsPerStep": 4,
+    "ccdMaximumAngularArcStepMeters": 0.05,
+    "ccdAngularPoseSamplesPerMaximumArcStep": 4,
+    "ccdTimeEpsilonSeconds": 0.00000001,
+    "ccdAngularMotionEpsilonRadians": 0.00000001,
+    "ccdTimeRefinementIterations": 8,
     "geometryEpsilon": 0.00000001,
     "contactMergeDistanceMeters": 0.0001,
+    "contactPatchNormalVelocityMergeMetersPerSecond": 0.01,
     "manifoldNormalMergeCosine": 0.985,
     "carRestitution": 0.12,
     "carTangentialFriction": 0.65,
@@ -139,7 +145,7 @@
     },
     "positionCorrectionPercent": 0.72,
     "penetrationSlopMeters": 0.005,
-    "maximumContactPoints": 4
+    "maximumContactPoints": 2
   },
   "damage": {
     "minimumDeltaVMetersPerSecond": 3,
@@ -159,32 +165,63 @@
     "jumpStartLockSeconds": 5,
     "gridGapMeters": 8,
     "checkpointGateMarginMeters": 2,
-    "pitSpeedLimitMetersPerSecond": 22.2222222222
+    "pitSpeedLimitMetersPerSecond": 22.2222222222,
+    "pitLaneHalfWidthMeters": 3,
+    "minimumRaceDurationSeconds": 180,
+    "raceDurationReferenceSpeedMetersPerSecond": 12,
+    "progressProjectionMarginMeters": 30,
+    "startLightCount": 5,
+    "startLightStageSeconds": 1,
+    "lightsOutDelaySeconds": 1,
+    "localProjectionWindowMeters": 40,
+    "localProjectionRecoveryMarginMeters": 24,
+    "projectionDistanceToleranceMeters": 0.5,
+    "barrierBroadphaseCellMeters": 64
   },
   "bots": {
+    "planner": {
+      "steeringLookAheadBaseMeters": 12,
+      "steeringLookAheadSpeedSeconds": 0.35,
+      "steeringLookAheadReactionReferenceSeconds": 0.35,
+      "steeringLookAheadReactionGainMetersPerSecond": 12,
+      "steeringNoiseFrequencyRadiansPerSecond": 2.1,
+      "brakingLookAheadBaseMeters": 24,
+      "brakingLookAheadSpeedSeconds": 0.85,
+      "brakingLookAheadRecoveryGainSeconds": 0.2,
+      "brakingPreviewSampleCount": 6,
+      "racingLineSpeedFactorExponent": 1.3,
+      "terminalSpeedTargetMultiplier": 0.56,
+      "brakeHeadingErrorThresholdRadians": 0.58,
+      "maximumBrakeBase": 0.72,
+      "maximumBrakeRecoveryGain": 0.16,
+      "brakingRecoveryThrottle": 0.18,
+      "brakingTrackThrottle": 0.05,
+      "recoveryThrottleMultiplier": 0.48,
+      "trackThrottleMultiplier": 0.82,
+      "brakeDemandBase": 0.45,
+      "brakeDemandSpeedScaleMetersPerSecond": 14,
+      "steeringFullScaleHeadingErrorRadians": 0.42
+    },
     "easy": {
       "paceMultiplier": 0.76,
       "brakingSafetyMultiplier": 1.4,
       "steeringNoise": 0.06,
-      "reactionDelaySeconds": 0.3,
-      "recoveryMultiplier": 0.7,
-      "consistency": 0.72
+      "steeringLookAheadPenaltySeconds": 0.3,
+      "recoveryMultiplier": 0.7
     },
     "normal": {
       "paceMultiplier": 0.87,
       "brakingSafetyMultiplier": 1.2,
       "steeringNoise": 0.035,
-      "reactionDelaySeconds": 0.18,
-      "recoveryMultiplier": 0.85,
-      "consistency": 0.84
+      "steeringLookAheadPenaltySeconds": 0.18,
+      "recoveryMultiplier": 0.85
     },
     "hard": {
       "paceMultiplier": 0.96,
       "brakingSafetyMultiplier": 1.05,
       "steeringNoise": 0.012,
-      "reactionDelaySeconds": 0.08,
-      "recoveryMultiplier": 1,
-      "consistency": 0.95
+      "steeringLookAheadPenaltySeconds": 0.08,
+      "recoveryMultiplier": 1
     }
   }
 }

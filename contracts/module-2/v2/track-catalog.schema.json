@@ -9,6 +9,7 @@
     "catalogVersion",
     "physicsContractVersion",
     "seasonReference",
+    "calendarPolicy",
     "tracks"
   ],
   "properties": {

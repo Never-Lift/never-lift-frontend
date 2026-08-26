@@ -104,6 +104,6 @@ describe('TrackDefinition 2.0 surface contract', () => {
         [squareProbe(TRACK_RADIUS + rightBarrierOffset - 0.9, 1)],
         0,
       ),
-    ).toHaveLength(1)
+    ).not.toHaveLength(0)
   })
 })

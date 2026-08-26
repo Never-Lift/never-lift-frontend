@@ -20,9 +20,9 @@ As issues frontend #90 e backend #72 publicaram esta revisão incompatível de f
 
 O `v1.3.0` também contém uma reserva histórica de nitro/Shift que nunca ganhou efeito no Módulo 2. Essa decisão foi revogada para o sucessor, mas os arquivos dentro de `contracts/module-2/v1/` não serão reescritos silenciosamente.
 
-## Sucessor aprovado — Parte 2d e contrato 2.0.0
+## Linha executável — Parte 2d e contrato 2.0.0
 
-A Parte 2d substitui o integrador arcade por uma simulação acessível de F1 e remove boost/nitro integralmente antes do Módulo 3. A especificação normativa pré-implementação está em [`module-2-physics-v2-proposal.md`](module-2-physics-v2-proposal.md).
+A Parte 2d substituiu o integrador arcade por uma simulação acessível de F1 e removeu boost/nitro integralmente antes do Módulo 3. A especificação normativa e suas fontes estão em [`module-2-physics-v2-proposal.md`](module-2-physics-v2-proposal.md). A implementação automatizada está concluída; a validação manual permanece pendente.
 
 Decisões fechadas:
 
@@ -37,7 +37,7 @@ Decisões fechadas:
 - `physicsContractVersion` persistida em salas, resultados, recordes e fantasmas;
 - nova linha `contracts/module-2/v2/`, schema de pista `2.0.0` e catálogo `2026.6`; o catálogo `2026.5` permanece válido somente para o runtime v1.
 
-O diretório v2 só se torna executável quando constantes fundamentadas, schemas, geometrias, motor TypeScript e cenários passarem juntos. Não publicar valores desconhecidos como `null` ou tuning arbitrário.
+O diretório v2 foi ativado junto de constantes fundamentadas, schemas, geometrias, motor TypeScript e cenários. Não publicar valores desconhecidos como `null` ou tuning arbitrário.
 
 ## Catálogo e pista
 
@@ -110,13 +110,13 @@ O frontend M2 deve:
 
 O backend M3 deve reproduzir os mesmos cenários dentro das tolerâncias declaradas. Divergência é bug.
 
-O contrato físico `1.3.0` define um único F1, uma única condução e fixa limiares de impacto, vida e efeitos moderados de dano. Impacto fraco danifica direção, médio danifica motor, alto combina ambos e crítico causa perda total; a vida cumulativa também permite que colisões menores repetidas terminem a corrida. Motor danificado reduz moderadamente aceleração e velocidade máxima, direção danificada aplica um leve desvio persistente para um lado sem retirar autoridade de esterço, e perda total ignora inputs e aumenta o arrasto até a parada. O frontend aplica essas regras na corrida local; o backend deve consumir os mesmos valores ao implementar a simulação autoritativa.
+O contrato físico histórico `1.3.0` definiu um único F1, uma única condução e limiares simples de impacto, vida e dano. Ele permanece somente para interpretar resultados antigos; o runtime atual usa o contrato `2.0.0` descrito abaixo.
 
-O contrato `2.0.0` não reaproveita aceleração/frenagem constantes, hard cap de velocidade, correção linear de aderência, `targetYawRate` nem `collisionRadiusMeters`. Ele deve publicar equações, ordem de integração, propriedades de massa/geometria, controles, powertrain, freios, pneus, aerodinâmica, superfícies, solver e tolerâncias. Cenários cobrem aceleração, coast-down, frenagem/travamento, curva constante, subesterço/sobresterço, power-oversteer, transições de superfície, impactos excêntricos, folga em muros e CCD. O TypeScript congela os estados esperados depois da calibração; o Java os reproduz dentro das tolerâncias.
+O contrato `2.0.0` não reaproveita aceleração/frenagem constantes, hard cap de velocidade, correção linear de aderência, `targetYawRate` nem `collisionRadiusMeters`. Ele publica equações, ordem de integração, propriedades de massa/geometria, controles, powertrain, freios, pneus, aerodinâmica, superfícies, solver e tolerâncias. Cenários cobrem aceleração, coast-down, frenagem/travamento, curva constante, subesterço/sobresterço, power-oversteer, transições de superfície, impactos excêntricos, folga em muros e CCD. O TypeScript congela os estados esperados; o Java deverá reproduzi-los dentro das tolerâncias no Módulo 3.
 
 ## Resultado local e segurança
 
-O backend obtém o usuário do JWT e nunca aceita um `userId` arbitrário como identidade. Guest e bot não criam resultado associado a uma conta. O Módulo 2 persiste dados consultáveis; a API pública de histórico continua pertencendo ao Módulo 8. Ao ativar a Parte 2d, cada resultado passa a carregar `physicsContractVersion`, impedindo comparação direta entre tempos de motores incompatíveis.
+O backend obtém o usuário do JWT e nunca aceita um `userId` arbitrário como identidade. Guest e bot não criam resultado associado a uma conta. O Módulo 2 persiste dados consultáveis; a API pública de histórico continua pertencendo ao Módulo 8. Cada resultado v2 carrega `physicsContractVersion`, impedindo comparação direta entre tempos de motores incompatíveis.
 
 ## Fluxo Git
 

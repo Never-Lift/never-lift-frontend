@@ -370,8 +370,8 @@ Os itens abaixo precisam de protótipo, mas não autorizam trocar a direção de
 - quantidade de trechos de pista mantidos em memória — na Parte 2b, somente os `chunks` cuja projeção intercepta a viewport, com margem equivalente à largura visual da pista, são desenhados;
 - compressão e resolução final de sprites e imagens estáticas;
 - pequenos ajustes métricos de cada circuito para jogabilidade;
-- passo físico v2 entre `1/60 s` e `1/120 s`, congelado somente após benchmark de estabilidade, paridade e CPU; CCD é obrigatório em qualquer escolha;
-- massa, inércia, centro de gravidade, curva de potência, relações de marcha, `CdA`, `ClA` e coeficientes de pneu do contrato 2.0, fundamentados antes de entrar no JSON executável;
+- passo físico v2 congelado em `1/120 s`; CCD linear e angular permanece obrigatório nessa frequência;
+- massa, inércia, centro de gravidade, curva de potência, relações de marcha, `CdA`, `ClA` e coeficientes de pneu fundamentados e publicados no JSON executável do contrato `2.0.0`;
 - faixas de aceleração `0–100/200/300`, velocidade terminal emergente, frenagem em tempo/distância e raio mínimo de curva, validadas por cenários reproduzíveis;
 - rampas digitais de acelerador, freio e esterço, calibradas para teclado sem funcionar como controle de tração ou ABS;
 - tolerância final entre silhueta e collider dentro do limite aprovado de `2–5 cm` e ausência de contato invisível nas barreiras.
