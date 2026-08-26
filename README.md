@@ -32,7 +32,7 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 ## Módulo 2 — motor local, pistas e ambiente
 
-- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.6`, prévia do traçado, país, comprimento e ambiente, além do F1 único e sua paleta de pinturas predefinidas.
+- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.7`, prévia do traçado, país, comprimento e ambiente, além do F1 único e sua paleta de pinturas predefinidas.
 - O runtime v2 usa passo fixo de `1/120s`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
 - A Parte 2d implementa o contrato físico `2.0.0`: corpo rígido 2D, pneus com aderência combinada, transferência de carga, downforce/drag, tração traseira, câmbio automático, frenagem sem ABS, colisores compostos precisos, manifold, torque de impacto e CCD. A especificação e as fontes estão em `docs/contracts/module-2-physics-v2-proposal.md`.
 - O frontend carrega `TrackDefinition` `2.0.0` por `GET /api/tracks/{id}` e a injeta no motor. Grid, centerline, largura, superfícies, checkpoints direcionais, linha de corrida, zebras, limites e faces canônicas de barreira vêm da mesma definição métrica usada pelo backend. A centerline é suavizada e amostrada a cada aproximadamente 5 m para que asfalto, áreas externas, barreiras e grades acompanhem as curvas. Cada lado pode combinar asfalto externo, grama e brita antes de uma barreira de impacto (`concrete-wall`, `guardrail`, `tecpro` ou `tyre-barrier`) e de uma grade de detritos externa opcional; a face desenhada da barreira é também seu limite físico.
@@ -44,7 +44,7 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 - O dano mecânico v2 é cumulativo e deriva da variação de velocidade normal do impacto. Danos de direção e motor afetam a dinâmica; impactos críticos ou perda de toda a integridade causam perda total, que desativa os controles.
 - Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result` com `trackId`, `trackCatalogVersion` e `physicsContractVersion` efetivamente usados.
 
-As Partes 2a, 2b e 2c e o catálogo `2026.5` passaram pela validação manual integrada em 24/08/2026. A simplificação posterior para F1 único/condução fixa e os refinamentos de câmera 2.5D/F1 ainda exigem validação manual final. Na Parte 2d, a implementação automatizada está concluída e a validação manual permanece pendente; por isso a Parte 2d e o Módulo 2 continuam em andamento e o Módulo 3 ainda não deve começar.
+As Partes 2a, 2b e 2c e o catálogo `2026.5` passaram pela validação manual integrada em 24/08/2026. A simplificação posterior para F1 único/condução fixa e os refinamentos de câmera 2.5D/F1 ainda exigem validação manual final. Na Parte 2d, a implementação automatizada está concluída. A revisão `2026.7` reposiciona zebras fora do asfalto, suaviza e unifica as faces físicas/visuais das barreiras, acrescenta pits visuais nas 24 pistas, estruturas de passagem elevada e obstáculos de escape em Monza, corrige a largada de Mônaco e remove o cenário provisório disperso. A validação manual dessa revisão permanece pendente; por isso a Parte 2d e o Módulo 2 continuam em andamento e o Módulo 3 ainda não deve começar.
 
 ## Roadmap
 
@@ -52,7 +52,7 @@ Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está re
 
 A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.
 
-A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md), na [proposta aprovada da física v2](docs/contracts/module-2-physics-v2-proposal.md) e em [`contracts/module-2/v2/`](contracts/module-2/v2/). O `v1` preserva o catálogo `2026.5` e a física `1.3.0` como histórico imutável; o runtime atual usa a linha `v2`, catálogo `2026.6` e física `2.0.0`. O frontend mantém somente a pista selecionada em memória; as 24 geometrias completas pertencem ao backend e chegam pela API.
+A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md), na [proposta aprovada da física v2](docs/contracts/module-2-physics-v2-proposal.md), no [relatório da revisão estrutural das pistas](docs/module-2-track-visual-audit-2026.7.md) e em [`contracts/module-2/v2/`](contracts/module-2/v2/). O `v1` preserva o catálogo `2026.5` e a física `1.3.0` como histórico imutável; o runtime atual usa a linha `v2`, catálogo `2026.7` e física `2.0.0`. O frontend mantém somente a pista selecionada em memória; as 24 geometrias completas pertencem ao backend e chegam pela API.
 
 ## Pré-requisitos
 

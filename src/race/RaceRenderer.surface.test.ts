@@ -49,6 +49,11 @@ type RendererInternals = {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) => void
+  drawPitInfrastructure: (transform: CameraTransform) => void
+  drawBridgeUnderstructure: (
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) => void
   splitByElevationLayer: (
     points: TrackDefinition['centerline'],
   ) => Array<{
@@ -543,7 +548,7 @@ describe('RaceRenderer audited surfaces', () => {
     ).toBe(true)
   })
 
-  it('draws alternating curb stripes inside the selected track edge', () => {
+  it('draws continuous alternating curb stripes outside the selected track edge', () => {
     const track = createStraightTransitionTrack()
     track.curbs = [
       {
@@ -579,8 +584,8 @@ describe('RaceRenderer audited surfaces', () => {
     for (const stroke of curbStrokes) {
       expect(stroke.lineCap).toBe('butt')
       expect(stroke.path).toHaveLength(2)
-      expect(stroke.path[0].y).toBeCloseTo(-4.5, 8)
-      expect(stroke.path[1].y).toBeCloseTo(-4.5, 8)
+      expect(stroke.path[0].y).toBeCloseTo(-5.5, 8)
+      expect(stroke.path[1].y).toBeCloseTo(-5.5, 8)
     }
   })
 
@@ -600,9 +605,99 @@ describe('RaceRenderer audited surfaces', () => {
     expect(fenceStrokes).toHaveLength(2)
     for (const stroke of fenceStrokes) {
       expect(stroke.path).toHaveLength(2)
-      expect(Math.min(stroke.path[0].x, stroke.path[1].x)).toBeCloseTo(0, 8)
-      expect(Math.max(stroke.path[0].x, stroke.path[1].x)).toBeCloseTo(10, 8)
+      expect(Math.min(stroke.path[0].x, stroke.path[1].x)).toBeGreaterThanOrEqual(0)
+      expect(Math.min(stroke.path[0].x, stroke.path[1].x)).toBeLessThan(1)
+      expect(Math.max(stroke.path[0].x, stroke.path[1].x)).toBeGreaterThan(9)
+      expect(Math.max(stroke.path[0].x, stroke.path[1].x)).toBeLessThan(11)
     }
+  })
+
+  it('extrudes debris fencing above the canonical barrier face', () => {
+    const track = createStraightTransitionTrack()
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawTrackFences(track.centerline, IDENTITY_TRANSFORM)
+
+    const meshFaces = operations.filter(
+      (operation) =>
+        operation.kind === 'fill' &&
+        operation.color === 'rgba(70, 84, 102, 0.22)',
+    )
+    const posts = operations.filter(
+      (operation) =>
+        operation.kind === 'stroke' && operation.color === '#748194',
+    )
+    expect(meshFaces.length).toBeGreaterThan(0)
+    expect(posts.length).toBeGreaterThan(0)
+    expect(
+      posts.some(
+        (post) =>
+          post.path.length === 2 &&
+          Math.abs(post.path[1].y - post.path[0].y) > 1,
+      ),
+    ).toBe(true)
+  })
+
+  it('draws a connected pit lane, box markings and repeated garages', () => {
+    const track = createStraightTransitionTrack()
+    track.pitLane.path = Array.from({ length: 25 }, (_, index) => ({
+      x: index,
+      y: -11,
+    }))
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawPitInfrastructure(IDENTITY_TRANSFORM)
+
+    expect(
+      operations.filter(
+        (operation) =>
+          operation.kind === 'stroke' && operation.color === '#2d3540',
+      ).length,
+    ).toBe(24)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'fill' && operation.color === '#596575',
+      ),
+    ).toBe(true)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'fill' &&
+          operation.color === 'rgba(218, 224, 233, 0.28)',
+      ),
+    ).toBe(true)
+  })
+
+  it('draws a visible deck underside and supports for the Suzuka overpass', () => {
+    const track = createStraightTransitionTrack()
+    track.id = 'suzuka'
+    const elevated = track.centerline.map((point) => ({
+      ...point,
+      elevationLayer: 1,
+    }))
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawBridgeUnderstructure(
+      elevated,
+      IDENTITY_TRANSFORM,
+    )
+
+    expect(
+      operations.filter(
+        (operation) =>
+          operation.kind === 'stroke' && operation.color === '#111720',
+      ).length,
+    ).toBe(elevated.length - 1)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'stroke' && operation.color === '#222a34',
+      ),
+    ).toBe(true)
   })
 
   it('splits elevation transitions at the same midpoint used by TrackGeometry', () => {

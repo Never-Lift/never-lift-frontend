@@ -268,7 +268,7 @@ describe('track API compatibility guard', () => {
       vi.fn().mockResolvedValue(
         jsonResponse({
           schemaVersion: '2.0.0',
-          catalogVersion: '2026.7',
+          catalogVersion: '2026.6',
           physicsContractVersion: '2.0.0',
           seasonReference: 2026,
           tracks: Array.from({ length: 24 }, () => ({})),

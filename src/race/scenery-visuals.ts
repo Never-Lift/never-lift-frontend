@@ -12,6 +12,7 @@ export type SceneryVisualCategory =
   | 'bridge'
   | 'floodlight'
   | 'gantry'
+  | 'escape-obstacle'
   | 'generic'
 
 export type SceneryRenderLayer = 'ground' | 'overhead'
@@ -28,6 +29,7 @@ export function classifySceneryKind(kind: string): SceneryVisualCategory {
   const normalized = kind.toLowerCase()
 
   if (normalized.includes('start-gantry')) return 'gantry'
+  if (normalized.includes('escape-bollard')) return 'escape-obstacle'
   if (normalized.includes('floodlight')) return 'floodlight'
   if (normalized.includes('waterfront-tower')) return 'building'
   if (
@@ -294,6 +296,26 @@ export function drawSceneryVisual({
         context.arc(size * offset, 0, Math.max(1, size * 0.035), 0, Math.PI * 2)
         context.fill()
       }
+      break
+    }
+    case 'escape-obstacle': {
+      context.fillStyle = '#d6dbe3'
+      context.beginPath()
+      context.arc(0, 0, size * 0.42, 0, Math.PI * 2)
+      context.fill()
+      context.fillStyle = '#d4473f'
+      context.beginPath()
+      context.arc(0, 0, size * 0.28, 0, Math.PI * 2)
+      context.fill()
+      context.fillStyle = '#eef1f5'
+      context.beginPath()
+      context.arc(0, 0, size * 0.1, 0, Math.PI * 2)
+      context.fill()
+      context.strokeStyle = '#222a34'
+      context.lineWidth = Math.max(1, size * 0.08)
+      context.beginPath()
+      context.arc(0, 0, size * 0.42, 0, Math.PI * 2)
+      context.stroke()
       break
     }
     default: {
