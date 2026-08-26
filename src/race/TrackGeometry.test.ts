@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { PHYSICS_CONSTANTS } from '@/race/constants'
 import { crossesGate, TrackGeometry } from '@/race/TrackGeometry'
 import { LONG_TRACK, SHORT_TRACK } from '@/test/track-fixtures'
 
@@ -144,6 +145,23 @@ describe('TrackGeometry', () => {
     expect(
       geometry.getSurfaceAt({ x: runoffRadius + 14, y: 0 }, 0),
     ).toBe('gravel')
+  })
+
+  it('uses the contracted pit-lane half width for surface classification', () => {
+    const definition = structuredClone(SHORT_TRACK)
+    definition.pitLane.path = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+    ]
+    const geometry = new TrackGeometry(definition)
+    const pitHalfWidth = PHYSICS_CONSTANTS.race.pitLaneHalfWidthMeters
+
+    expect(geometry.getSurfaceAt({ x: 10, y: pitHalfWidth - 0.01 })).toBe(
+      definition.surfaceModel.pitLane,
+    )
+    expect(geometry.getSurfaceAt({ x: 10, y: pitHalfWidth + 0.01 })).not.toBe(
+      definition.surfaceModel.pitLane,
+    )
   })
 
   it('accepts a directional gate only in order-compatible forward movement', () => {

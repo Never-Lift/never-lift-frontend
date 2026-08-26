@@ -6,9 +6,11 @@ import {
 } from '@/race/constants'
 import {
   JUMP_START_LOCK_TICKS,
+  LIGHTS_OUT_DELAY_TICKS,
   LocalRaceSession,
   START_LIGHT_COUNT,
   START_LIGHT_TICKS,
+  START_RELEASE_TICK,
 } from '@/race/LocalRaceSession'
 import { RaceEngine } from '@/race/RaceEngine'
 import type { DriverInput } from '@/race/types'
@@ -55,7 +57,9 @@ function inputs(
 }
 
 function release(session: LocalRaceSession, frameRate = 60, input = NEUTRAL_INPUT) {
-  const maximumFrames = frameRate * 8
+  const maximumFrames = Math.ceil(
+    frameRate * (START_RELEASE_TICK * PHYSICS_STEP_SECONDS + 1),
+  )
   for (let frame = 0; frame < maximumFrames && !session.isReleased(); frame += 1) {
     session.advanceFrame(1 / frameRate, inputs(input))
   }
@@ -63,7 +67,24 @@ function release(session: LocalRaceSession, frameRate = 60, input = NEUTRAL_INPU
 }
 
 describe('LocalRaceSession start procedure', () => {
-  it('turns on five red lights in order, then releases on lights-out', () => {
+  it('derives every start-sequence duration from the published v2 contract', () => {
+    expect(START_LIGHT_COUNT).toBe(PHYSICS_CONSTANTS.race.startLightCount)
+    expect(START_LIGHT_TICKS).toBe(
+      Math.round(
+        PHYSICS_CONSTANTS.race.startLightStageSeconds / PHYSICS_STEP_SECONDS,
+      ),
+    )
+    expect(LIGHTS_OUT_DELAY_TICKS).toBe(
+      Math.round(
+        PHYSICS_CONSTANTS.race.lightsOutDelaySeconds / PHYSICS_STEP_SECONDS,
+      ),
+    )
+    expect(START_RELEASE_TICK).toBe(
+      START_LIGHT_COUNT * START_LIGHT_TICKS + LIGHTS_OUT_DELAY_TICKS,
+    )
+  })
+
+  it('turns on the contracted red lights in order, then releases on lights-out', () => {
     const { engine, session } = createSession()
     const initial = engine.getVehicleState('player-1')
 
@@ -83,7 +104,7 @@ describe('LocalRaceSession start procedure', () => {
       expect(engine.getVehicleState('player-1')?.position).toEqual(initial?.position)
     }
 
-    for (let tick = 0; tick < START_LIGHT_TICKS; tick += 1) {
+    for (let tick = 0; tick < LIGHTS_OUT_DELAY_TICKS; tick += 1) {
       session.advanceFrame(PHYSICS_STEP_SECONDS, inputs())
     }
     expect(session.getStartLightState()).toEqual({
@@ -107,7 +128,9 @@ describe('LocalRaceSession start procedure', () => {
         }
       }
 
-      expect(observed).toEqual([0, 1, 2, 3, 4, 5])
+      expect(observed).toEqual(
+        Array.from({ length: START_LIGHT_COUNT + 1 }, (_, index) => index),
+      )
       expect(session.getStartLightState().stage).toBe('lights-out')
       expect(engine.getSimulationTimeSeconds()).toBeLessThanOrEqual(
         PHYSICS_STEP_SECONDS,

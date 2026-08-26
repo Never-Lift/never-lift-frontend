@@ -42,6 +42,10 @@ export type CollisionResponseOptions = {
   penetrationSlopMeters: number
 }
 
+export type CollisionResponseOptionsResolver = (
+  manifold: CollisionManifold,
+) => CollisionResponseOptions
+
 export type CollisionResolution = {
   impactSpeed: number
   normalImpulse: number
@@ -51,12 +55,21 @@ export type CollisionResolution = {
 }
 
 const GEOMETRY_EPSILON = physicsConstants.collision.geometryEpsilon
+const CONTACT_MERGE_DISTANCE_METERS =
+  physicsConstants.collision.contactMergeDistanceMeters
 const CONTACT_MERGE_DISTANCE_SQUARED =
-  physicsConstants.collision.contactMergeDistanceMeters ** 2
+  CONTACT_MERGE_DISTANCE_METERS ** 2
+const CONTACT_PATCH_NORMAL_VELOCITY_MERGE_METERS_PER_SECOND =
+  physicsConstants.collision
+    .contactPatchNormalVelocityMergeMetersPerSecond
 const MAXIMUM_CONTACT_POINTS =
   physicsConstants.collision.maximumContactPoints
 const MANIFOLD_NORMAL_MERGE_COSINE =
   physicsConstants.collision.manifoldNormalMergeCosine
+
+function compareColliderIds(first: string, second: string) {
+  return first < second ? -1 : first > second ? 1 : 0
+}
 
 export type ColliderBounds = {
   minX: number
@@ -256,7 +269,7 @@ function collisionContacts(
       ),
     ]
   }
-  const planarContactLimit = Math.min(2, MAXIMUM_CONTACT_POINTS)
+  const planarContactLimit = MAXIMUM_CONTACT_POINTS
   if (contacts.length <= planarContactLimit) return contacts
 
   const tangent = perpendicularLeft(normal)
@@ -348,7 +361,7 @@ function reducedContactSet(
   normal: Vector2,
 ) {
   const unique = uniquePoints(contacts)
-  if (unique.length <= 2) return unique
+  if (unique.length <= MAXIMUM_CONTACT_POINTS) return unique
   const tangent = perpendicularLeft(normal)
   const ordered = [...unique].sort(
     (left, right) =>
@@ -356,7 +369,28 @@ function reducedContactSet(
       left.x - right.x ||
       left.y - right.y,
   )
-  return [ordered[0], ordered.at(-1)!]
+  if (MAXIMUM_CONTACT_POINTS === 1) return [ordered[0]]
+  return Array.from({ length: MAXIMUM_CONTACT_POINTS }, (_, index) =>
+    ordered[
+      Math.round(
+        (index * (ordered.length - 1)) /
+          (MAXIMUM_CONTACT_POINTS - 1),
+      )
+    ],
+  )
+}
+
+function manifoldsShareContact(
+  first: CollisionManifold,
+  second: CollisionManifold,
+) {
+  return first.contacts.some((firstContact) =>
+    second.contacts.some(
+      (secondContact) =>
+        distanceSquared(firstContact, secondContact) <=
+        CONTACT_MERGE_DISTANCE_SQUARED,
+    ),
+  )
 }
 
 /**
@@ -370,15 +404,18 @@ export function consolidateCollisionManifolds(
   const clusters: CollisionManifold[][] = []
   for (const manifold of [...manifolds].sort(
     (left, right) =>
-      left.firstColliderId.localeCompare(right.firstColliderId) ||
-      left.secondColliderId.localeCompare(right.secondColliderId),
+      compareColliderIds(left.firstColliderId, right.firstColliderId) ||
+      compareColliderIds(left.secondColliderId, right.secondColliderId),
   )) {
     const cluster = clusters.find(
       (candidate) =>
         dot(candidate[0].normal, manifold.normal) >=
           MANIFOLD_NORMAL_MERGE_COSINE &&
         candidate[0].secondCollisionMaterial ===
-          manifold.secondCollisionMaterial,
+          manifold.secondCollisionMaterial &&
+        candidate.some((clustered) =>
+          manifoldsShareContact(clustered, manifold),
+        ),
     )
     if (cluster) cluster.push(manifold)
     else clusters.push([manifold])
@@ -402,8 +439,8 @@ export function consolidateCollisionManifolds(
     })
     .sort(
       (left, right) =>
-        left.firstColliderId.localeCompare(right.firstColliderId) ||
-        left.secondColliderId.localeCompare(right.secondColliderId),
+        compareColliderIds(left.firstColliderId, right.firstColliderId) ||
+        compareColliderIds(left.secondColliderId, right.secondColliderId),
     )
 }
 
@@ -452,6 +489,86 @@ export function findCompoundCollisionManifold(
         : deepest,
     null,
   )
+}
+
+function buildSolverContactPatches(
+  firstBody: RigidBody2D,
+  secondBody: RigidBody2D,
+  manifolds: readonly CollisionManifold[],
+) {
+  const contactCentroid = (manifold: CollisionManifold) =>
+    manifold.contacts.length === 0
+      ? scale(add(firstBody.position, secondBody.position), 0.5)
+      : scale(
+          manifold.contacts.reduce(
+            (sum, contact) => add(sum, contact),
+            { x: 0, y: 0 },
+          ),
+          1 / manifold.contacts.length,
+        )
+  const normalVelocity = (manifold: CollisionManifold) => {
+    const contact = contactCentroid(manifold)
+    return dot(
+      subtract(
+        velocityAtPoint(secondBody, subtract(contact, secondBody.position)),
+        velocityAtPoint(firstBody, subtract(contact, firstBody.position)),
+      ),
+      manifold.normal,
+    )
+  }
+  const sharesPhysicalPatch = (
+    clustered: CollisionManifold,
+    candidate: CollisionManifold,
+  ) => {
+    if (manifoldsShareContact(clustered, candidate)) return true
+    const clusteredContact = contactCentroid(clustered)
+    const candidateContact = contactCentroid(candidate)
+    const planeSeparationMeters = Math.abs(
+      dot(subtract(candidateContact, clusteredContact), clustered.normal),
+    )
+    return (
+      planeSeparationMeters <= CONTACT_MERGE_DISTANCE_METERS &&
+      Math.abs(normalVelocity(candidate) - normalVelocity(clustered)) <=
+        CONTACT_PATCH_NORMAL_VELOCITY_MERGE_METERS_PER_SECOND
+    )
+  }
+  const clusters: CollisionManifold[][] = []
+  for (const manifold of [...manifolds].sort(
+    (left, right) =>
+      compareColliderIds(left.firstColliderId, right.firstColliderId) ||
+      compareColliderIds(left.secondColliderId, right.secondColliderId),
+  )) {
+    const cluster = clusters.find(
+      (candidate) =>
+        dot(candidate[0].normal, manifold.normal) >=
+          MANIFOLD_NORMAL_MERGE_COSINE &&
+        candidate[0].firstCollisionMaterial ===
+          manifold.firstCollisionMaterial &&
+        candidate[0].secondCollisionMaterial ===
+          manifold.secondCollisionMaterial &&
+        candidate.some((clustered) =>
+          sharesPhysicalPatch(clustered, manifold),
+        ),
+    )
+    if (cluster) cluster.push(manifold)
+    else clusters.push([manifold])
+  }
+
+  return clusters.map((cluster) => {
+    const representative = cluster.reduce((best, candidate) =>
+      candidate.penetrationMeters > best.penetrationMeters +
+      GEOMETRY_EPSILON
+        ? candidate
+        : best,
+    )
+    return {
+      ...representative,
+      contacts: reducedContactSet(
+        cluster.flatMap((manifold) => manifold.contacts),
+        representative.normal,
+      ),
+    }
+  })
 }
 
 function velocityAtPoint(body: RigidBody2D, radius: Vector2) {
@@ -599,16 +716,20 @@ export function resolveRigidBodyCollisions(
   first: RigidBody2D,
   second: RigidBody2D,
   manifolds: readonly CollisionManifold[],
-  options: CollisionResponseOptions,
+  options: CollisionResponseOptions | CollisionResponseOptionsResolver,
   iterations = physicsConstants.collision.solverIterations,
 ): CollisionResolution {
   if (iterations < 1 || !Number.isInteger(iterations)) {
     throw new Error('O solver de contato exige pelo menos uma iteração inteira.')
   }
-  const ordered = [...manifolds].sort(
+  // Detection keeps spatially distinct contacts as separate manifolds. The
+  // impulse solver batches co-directional contacts into one physical patch,
+  // so a symmetric front-wing impact has one resultant through the contact
+  // centroid instead of an order-dependent yaw impulse.
+  const ordered = buildSolverContactPatches(first, second, manifolds).sort(
     (left, right) =>
-      left.firstColliderId.localeCompare(right.firstColliderId) ||
-      left.secondColliderId.localeCompare(right.secondColliderId),
+      compareColliderIds(left.firstColliderId, right.firstColliderId) ||
+      compareColliderIds(left.secondColliderId, right.secondColliderId),
   )
   const total: CollisionResolution = {
     impactSpeed: 0,
@@ -619,13 +740,15 @@ export function resolveRigidBodyCollisions(
   }
   const firstVelocityBefore = { ...first.velocity }
   const secondVelocityBefore = { ...second.velocity }
-  const iterationOptions = {
-    ...options,
-    positionCorrectionPercent:
-      options.positionCorrectionPercent / iterations,
-  }
   for (let iteration = 0; iteration < iterations; iteration += 1) {
     for (const manifold of ordered) {
+      const manifoldOptions =
+        typeof options === 'function' ? options(manifold) : options
+      const iterationOptions = {
+        ...manifoldOptions,
+        positionCorrectionPercent:
+          manifoldOptions.positionCorrectionPercent / iterations,
+      }
       const resolution = resolveRigidBodyCollision(
         first,
         second,

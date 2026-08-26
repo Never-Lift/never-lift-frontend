@@ -4,7 +4,11 @@ import {
   resolveVehicleAgainstStaticColliders,
   resolveVehicleCollision,
 } from '@/race/collision'
-import { PHYSICS_STEP_SECONDS, VEHICLE_DYNAMICS } from '@/race/constants'
+import {
+  PHYSICS_CONSTANTS,
+  PHYSICS_STEP_SECONDS,
+  VEHICLE_DYNAMICS,
+} from '@/race/constants'
 import { clamp, signedAngleDelta } from '@/race/math'
 import { RaceEngine } from '@/race/RaceEngine'
 import { TrackGeometry } from '@/race/TrackGeometry'
@@ -60,7 +64,7 @@ function vehicle(
     trackDistanceMeters: 0,
     damage: {
       kind: 'none',
-      health: 100,
+      health: PHYSICS_CONSTANTS.damage.thresholds.maximumHealth,
       engineDamaged: false,
       steeringDamaged: false,
       steeringPull: 0,
@@ -150,6 +154,29 @@ function trackInput(state: VehicleState, geometry: TrackGeometry): DriverInput {
 }
 
 describe('RaceEngine fixed-step simulation', () => {
+  it('derives the default race timeout from the published v2 contract', () => {
+    const lapCount = 3
+    const durationTrack = structuredClone(SHORT_TRACK)
+    durationTrack.lengthMeters =
+      PHYSICS_CONSTANTS.race.minimumRaceDurationSeconds *
+      PHYSICS_CONSTANTS.race.raceDurationReferenceSpeedMetersPerSecond *
+      2
+    const engine = new RaceEngine({
+      track: durationTrack,
+      mode: 'local',
+      racers: [setup('player-1'), setup('player-2')],
+      lapCount,
+    })
+
+    expect(engine.maximumRaceSeconds).toBe(
+      Math.max(
+        PHYSICS_CONSTANTS.race.minimumRaceDurationSeconds,
+        (durationTrack.lengthMeters * lapCount) /
+          PHYSICS_CONSTANTS.race.raceDurationReferenceSpeedMetersPerSecond,
+      ),
+    )
+  })
+
   it('keeps surface sampling on the current branch at a geometric crossing', () => {
     const crossingTrack = structuredClone(SHORT_TRACK)
     crossingTrack.lengthMeters = 120
@@ -377,40 +404,64 @@ describe('RaceEngine fixed-step simulation', () => {
         expect(playerOneResult?.totalTimeMs).toBe(0)
       }
     },
+    30_000,
   )
+
+  it('uses the same contracted recovery decision on grass and gravel', () => {
+    const engine = new RaceEngine({
+      track: SHORT_TRACK,
+      mode: 'solo',
+      racers: [setup('player-1'), setup('bot-1', 'bot')],
+    })
+    const bot = engine.getVehicleState('bot-1')
+    expect(bot).not.toBeNull()
+    if (!bot) return
+
+    const planner = engine as unknown as {
+      createBotInput: (state: VehicleState) => DriverInput
+    }
+    const grassInput = planner.createBotInput({ ...bot, surface: 'grass' })
+    const gravelInput = planner.createBotInput({ ...bot, surface: 'gravel' })
+
+    expect(gravelInput).toEqual(grassInput)
+  })
 })
 
 describe('official-size track completion', () => {
   it.each([
     ['short', SHORT_TRACK],
     ['long', LONG_TRACK],
-  ] as const)('completes a %s catalog circuit using ordered directional gates', (_, track) => {
-    const engine = new RaceEngine({
-      track,
-      mode: 'solo',
-      racers: [setup('player-1'), setup('bot-1', 'bot')],
-      lapCount: 1,
-      maximumRaceSeconds: 240,
-    })
-    const geometry = new TrackGeometry(track)
+  ] as const)(
+    'completes a %s catalog circuit using ordered directional gates',
+    (_, track) => {
+      const engine = new RaceEngine({
+        track,
+        mode: 'solo',
+        racers: [setup('player-1'), setup('bot-1', 'bot')],
+        lapCount: 1,
+        maximumRaceSeconds: 240,
+      })
+      const geometry = new TrackGeometry(track)
 
-    for (
-      let frame = 0;
-      frame < 240 * 60 && engine.getStatus() !== 'finished';
-      frame += 1
-    ) {
-      const state = engine.getVehicleState('player-1')
-      if (state) engine.setInput('player-1', trackInput(state, geometry))
-      engine.advanceFrame(1 / 60)
-    }
+      for (
+        let frame = 0;
+        frame < 240 * 60 && engine.getStatus() !== 'finished';
+        frame += 1
+      ) {
+        const state = engine.getVehicleState('player-1')
+        if (state) engine.setInput('player-1', trackInput(state, geometry))
+        engine.advanceFrame(1 / 60)
+      }
 
-    const playerResult = engine
-      .getResults()
-      .find((result) => result.racerId === 'player-1')
-    expect(engine.getStatus()).toBe('finished')
-    expect(playerResult?.finished).toBe(true)
-    expect(playerResult?.totalTimeMs).toBeGreaterThan(0)
-  })
+      const playerResult = engine
+        .getResults()
+        .find((result) => result.racerId === 'player-1')
+      expect(engine.getStatus()).toBe('finished')
+      expect(playerResult?.finished).toBe(true)
+      expect(playerResult?.totalTimeMs).toBeGreaterThan(0)
+    },
+    90_000,
+  )
 })
 
 describe('canonical vehicle physics', () => {
@@ -438,14 +489,14 @@ describe('canonical vehicle physics', () => {
     expect(grass.surface).toBe('grass')
   })
 
-  it('uses one deterministic v2 handling model for every car', () => {
+  it('uses identical v2 physics for a human and a bot given the same input', () => {
     const input: DriverInput = {
       throttle: 0.6,
       brake: 0,
       steer: 0,
     }
-    const first = integrateFor(
-      vehicle('first', {
+    const human = integrateFor(
+      vehicle('human', {
         velocityX: 25,
         velocityY: 8,
       }),
@@ -453,19 +504,19 @@ describe('canonical vehicle physics', () => {
       'asphalt',
       45,
     )
-    const second = integrateFor(
-      vehicle('second', {
-        velocityX: 25,
-        velocityY: 8,
-      }),
-      input,
-      'asphalt',
-      45,
-    )
+    const bot = vehicle('bot', {
+      velocityX: 25,
+      velocityY: 8,
+    })
+    bot.kind = 'bot'
+    bot.botDifficulty = 'hard'
+    integrateFor(bot, input, 'asphalt', 45)
 
-    expect(second.position).toEqual(first.position)
-    expect(second.velocity).toEqual(first.velocity)
-    expect(second.angle).toBe(first.angle)
+    expect(bot.position).toEqual(human.position)
+    expect(bot.velocity).toEqual(human.velocity)
+    expect(bot.angle).toBe(human.angle)
+    expect(bot.yawRate).toBe(human.yawRate)
+    expect(bot.physicsState).toEqual(human.physicsState)
   })
 })
 

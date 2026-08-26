@@ -26,6 +26,7 @@ import {
   type ColliderBounds,
   type CollisionManifold,
 } from '@/race/rigid-body-collision'
+import { PHYSICS_CONSTANTS } from '@/race/constants'
 import type { SurfaceId, Vector2 } from '@/race/types'
 import type { WorldConvexCollider } from '@/race/vehicle-geometry'
 
@@ -63,10 +64,13 @@ export type TrackEnvironmentSample = {
   totalEnvironmentWidthMeters: number
 }
 
-const LOCAL_PROJECTION_WINDOW_METERS = 40
-const LOCAL_PROJECTION_RECOVERY_MARGIN_METERS = 24
-const PROJECTION_DISTANCE_TOLERANCE_METERS = 0.5
-const BARRIER_BROADPHASE_CELL_METERS = 64
+const {
+  localProjectionWindowMeters: LOCAL_PROJECTION_WINDOW_METERS,
+  localProjectionRecoveryMarginMeters:
+    LOCAL_PROJECTION_RECOVERY_MARGIN_METERS,
+  projectionDistanceToleranceMeters: PROJECTION_DISTANCE_TOLERANCE_METERS,
+  barrierBroadphaseCellMeters: BARRIER_BROADPHASE_CELL_METERS,
+} = PHYSICS_CONSTANTS.race
 
 type BarrierColliderRecord = {
   face: BarrierFaceSegment
@@ -516,7 +520,8 @@ export class TrackGeometry {
   ): SurfaceId {
     if (
       this.definition.pitLane.path.length >= 2 &&
-      distanceToPath(point, this.definition.pitLane.path) <= 3
+      distanceToPath(point, this.definition.pitLane.path) <=
+        PHYSICS_CONSTANTS.race.pitLaneHalfWidthMeters
     ) {
       return this.definition.surfaceModel.pitLane
     }

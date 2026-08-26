@@ -110,7 +110,12 @@ export class RaceEngine {
     this.mode = options.mode
     this.lapCount = options.lapCount ?? 1
     this.maximumRaceSeconds =
-      options.maximumRaceSeconds ?? Math.max(180, options.track.lengthMeters / 12)
+      options.maximumRaceSeconds ??
+      Math.max(
+        PHYSICS_CONSTANTS.race.minimumRaceDurationSeconds,
+        (options.track.lengthMeters * this.lapCount) /
+          PHYSICS_CONSTANTS.race.raceDurationReferenceSpeedMetersPerSecond,
+      )
     this.vehicles = options.racers.map((racer, index) =>
       createVehicle(racer, index, this.geometry),
     )
@@ -228,15 +233,20 @@ export class RaceEngine {
   private createBotInput(vehicle: VehicleState): DriverInput {
     const difficultyId = vehicle.botDifficulty ?? 'normal'
     const difficulty = PHYSICS_CONSTANTS.bots[difficultyId]
+    const planner = PHYSICS_CONSTANTS.bots.planner
     const speed = magnitude(vehicle.velocity)
     const projection = this.geometry.project(
       vehicle.position,
       vehicle.trackDistanceMeters,
     )
     const steeringLookAheadMeters =
-      12 +
-      speed * 0.35 +
-      Math.max(0, 0.35 - difficulty.reactionDelaySeconds) * 12
+      planner.steeringLookAheadBaseMeters +
+      speed * planner.steeringLookAheadSpeedSeconds +
+      Math.max(
+        0,
+        planner.steeringLookAheadReactionReferenceSeconds -
+          difficulty.steeringLookAheadPenaltySeconds,
+      ) * planner.steeringLookAheadReactionGainMetersPerSecond
     const target = this.geometry.getRacingLinePoint(
       projection.distanceMeters + steeringLookAheadMeters,
     )
@@ -247,16 +257,26 @@ export class RaceEngine {
     const headingError = signedAngleDelta(vehicle.angle, desiredHeading)
     const deterministicNoise =
       Math.sin(
-        this.simulationTimeSeconds * 2.1 +
+        this.simulationTimeSeconds *
+          planner.steeringNoiseFrequencyRadiansPerSecond +
           vehicle.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0),
       ) * difficulty.steeringNoise
     const brakingHorizonMeters =
-      24 + speed * (0.85 + difficulty.recoveryMultiplier * 0.2)
+      planner.brakingLookAheadBaseMeters +
+      speed *
+        (planner.brakingLookAheadSpeedSeconds +
+          difficulty.recoveryMultiplier *
+            planner.brakingLookAheadRecoveryGainSeconds)
     let upcomingSpeedFactor = target.targetSpeedFactor
-    for (let sample = 1; sample <= 6; sample += 1) {
+    for (
+      let sample = 1;
+      sample <= planner.brakingPreviewSampleCount;
+      sample += 1
+    ) {
       const preview = this.geometry.getRacingLinePoint(
         projection.distanceMeters +
-          (brakingHorizonMeters * sample) / 6,
+          (brakingHorizonMeters * sample) /
+            planner.brakingPreviewSampleCount,
       )
       upcomingSpeedFactor = Math.min(
         upcomingSpeedFactor,
@@ -265,30 +285,44 @@ export class RaceEngine {
     }
     const targetSpeed =
       PHYSICS_CONSTANTS.vehiclePerformance.maxForwardSpeed *
-      upcomingSpeedFactor ** 1.3 *
+      upcomingSpeedFactor ** planner.racingLineSpeedFactorExponent *
       difficulty.paceMultiplier *
-      0.56
+      planner.terminalSpeedTargetMultiplier
     const safeTargetSpeed =
       targetSpeed / difficulty.brakingSafetyMultiplier
-    const isRecovering = vehicle.surface === 'grass'
+    const isRecovering =
+      vehicle.surface === 'grass' || vehicle.surface === 'gravel'
     const needsBraking =
-      speed > safeTargetSpeed || Math.abs(headingError) > 0.58
-    const maximumBrake = 0.72 + difficulty.recoveryMultiplier * 0.16
+      speed > safeTargetSpeed ||
+      Math.abs(headingError) > planner.brakeHeadingErrorThresholdRadians
+    const maximumBrake =
+      planner.maximumBrakeBase +
+      difficulty.recoveryMultiplier * planner.maximumBrakeRecoveryGain
 
     return {
       throttle: needsBraking
         ? isRecovering
-          ? 0.18
-          : 0.05
-        : difficulty.paceMultiplier * (isRecovering ? 0.48 : 0.82),
+          ? planner.brakingRecoveryThrottle
+          : planner.brakingTrackThrottle
+        : difficulty.paceMultiplier *
+          (isRecovering
+            ? planner.recoveryThrottleMultiplier
+            : planner.trackThrottleMultiplier),
       brake: needsBraking
         ? clamp(
-            0.45 + Math.max(0, speed - safeTargetSpeed) / 14,
+            planner.brakeDemandBase +
+              Math.max(0, speed - safeTargetSpeed) /
+                planner.brakeDemandSpeedScaleMetersPerSecond,
             0,
             maximumBrake,
           )
         : 0,
-      steer: clamp(headingError / 0.42 + deterministicNoise, -1, 1),
+      steer: clamp(
+        headingError / planner.steeringFullScaleHeadingErrorRadians +
+          deterministicNoise,
+        -1,
+        1,
+      ),
     }
   }
 
@@ -326,8 +360,11 @@ export class RaceEngine {
       checkpoints[vehicle.nextCheckpointIndex]?.distanceMeters ??
       this.track.lengthMeters
     if (
-      projection.distanceMeters >= previousGateDistance - 30 &&
-      projection.distanceMeters <= nextGateDistance + 30
+      projection.distanceMeters >=
+        previousGateDistance -
+          PHYSICS_CONSTANTS.race.progressProjectionMarginMeters &&
+      projection.distanceMeters <=
+        nextGateDistance + PHYSICS_CONSTANTS.race.progressProjectionMarginMeters
     ) {
       vehicle.lapProgressMeters = Math.max(
         vehicle.lapProgressMeters,

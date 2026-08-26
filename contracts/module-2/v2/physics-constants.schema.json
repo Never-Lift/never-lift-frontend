@@ -82,8 +82,9 @@
     "bots": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["easy", "normal", "hard"],
+      "required": ["planner", "easy", "normal", "hard"],
       "properties": {
+        "planner": { "$ref": "#/$defs/botPlanner" },
         "easy": { "$ref": "#/$defs/bot" },
         "normal": { "$ref": "#/$defs/bot" },
         "hard": { "$ref": "#/$defs/bot" }
@@ -186,13 +187,19 @@
     "collision": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["solverIterations", "ccdMinimumSpeedMetersPerSecond", "maximumCcdEventsPerStep", "geometryEpsilon", "contactMergeDistanceMeters", "manifoldNormalMergeCosine", "carRestitution", "carTangentialFriction", "barrierMaterials", "positionCorrectionPercent", "penetrationSlopMeters", "maximumContactPoints"],
+      "required": ["solverIterations", "ccdMinimumSpeedMetersPerSecond", "maximumCcdEventsPerStep", "ccdMaximumAngularArcStepMeters", "ccdAngularPoseSamplesPerMaximumArcStep", "ccdTimeEpsilonSeconds", "ccdAngularMotionEpsilonRadians", "ccdTimeRefinementIterations", "geometryEpsilon", "contactMergeDistanceMeters", "contactPatchNormalVelocityMergeMetersPerSecond", "manifoldNormalMergeCosine", "carRestitution", "carTangentialFriction", "barrierMaterials", "positionCorrectionPercent", "penetrationSlopMeters", "maximumContactPoints"],
       "properties": {
         "solverIterations": { "type": "integer", "minimum": 1, "maximum": 32 },
         "ccdMinimumSpeedMetersPerSecond": { "type": "number", "minimum": 0 },
         "maximumCcdEventsPerStep": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "ccdMaximumAngularArcStepMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.1 },
+        "ccdAngularPoseSamplesPerMaximumArcStep": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "ccdTimeEpsilonSeconds": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.001 },
+        "ccdAngularMotionEpsilonRadians": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.001 },
+        "ccdTimeRefinementIterations": { "type": "integer", "minimum": 1, "maximum": 32 },
         "geometryEpsilon": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.000001 },
         "contactMergeDistanceMeters": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.01 },
+        "contactPatchNormalVelocityMergeMetersPerSecond": { "type": "number", "minimum": 0, "maximum": 1 },
         "manifoldNormalMergeCosine": { "type": "number", "minimum": -1, "maximum": 1 },
         "carRestitution": { "type": "number", "minimum": 0, "maximum": 1 },
         "carTangentialFriction": { "type": "number", "minimum": 0, "maximum": 2 },
@@ -242,26 +249,64 @@
     "race": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["jumpStartThrottleThreshold", "jumpStartLockSeconds", "gridGapMeters", "checkpointGateMarginMeters", "pitSpeedLimitMetersPerSecond"],
+      "required": ["jumpStartThrottleThreshold", "jumpStartLockSeconds", "gridGapMeters", "checkpointGateMarginMeters", "pitSpeedLimitMetersPerSecond", "pitLaneHalfWidthMeters", "minimumRaceDurationSeconds", "raceDurationReferenceSpeedMetersPerSecond", "progressProjectionMarginMeters", "startLightCount", "startLightStageSeconds", "lightsOutDelaySeconds", "localProjectionWindowMeters", "localProjectionRecoveryMarginMeters", "projectionDistanceToleranceMeters", "barrierBroadphaseCellMeters"],
       "properties": {
         "jumpStartThrottleThreshold": { "type": "number", "minimum": 0, "maximum": 1 },
         "jumpStartLockSeconds": { "type": "number", "minimum": 0 },
         "gridGapMeters": { "type": "number", "exclusiveMinimum": 0 },
         "checkpointGateMarginMeters": { "type": "number", "minimum": 0 },
-        "pitSpeedLimitMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 }
+        "pitSpeedLimitMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "pitLaneHalfWidthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "minimumRaceDurationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "raceDurationReferenceSpeedMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "progressProjectionMarginMeters": { "type": "number", "minimum": 0 },
+        "startLightCount": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "startLightStageSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "lightsOutDelaySeconds": { "type": "number", "minimum": 0 },
+        "localProjectionWindowMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "localProjectionRecoveryMarginMeters": { "type": "number", "minimum": 0 },
+        "projectionDistanceToleranceMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "barrierBroadphaseCellMeters": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "botPlanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steeringLookAheadBaseMeters", "steeringLookAheadSpeedSeconds", "steeringLookAheadReactionReferenceSeconds", "steeringLookAheadReactionGainMetersPerSecond", "steeringNoiseFrequencyRadiansPerSecond", "brakingLookAheadBaseMeters", "brakingLookAheadSpeedSeconds", "brakingLookAheadRecoveryGainSeconds", "brakingPreviewSampleCount", "racingLineSpeedFactorExponent", "terminalSpeedTargetMultiplier", "brakeHeadingErrorThresholdRadians", "maximumBrakeBase", "maximumBrakeRecoveryGain", "brakingRecoveryThrottle", "brakingTrackThrottle", "recoveryThrottleMultiplier", "trackThrottleMultiplier", "brakeDemandBase", "brakeDemandSpeedScaleMetersPerSecond", "steeringFullScaleHeadingErrorRadians"],
+      "properties": {
+        "steeringLookAheadBaseMeters": { "type": "number", "minimum": 0, "maximum": 250 },
+        "steeringLookAheadSpeedSeconds": { "type": "number", "minimum": 0, "maximum": 10 },
+        "steeringLookAheadReactionReferenceSeconds": { "type": "number", "minimum": 0, "maximum": 10 },
+        "steeringLookAheadReactionGainMetersPerSecond": { "type": "number", "minimum": 0, "maximum": 250 },
+        "steeringNoiseFrequencyRadiansPerSecond": { "type": "number", "minimum": 0, "maximum": 20 },
+        "brakingLookAheadBaseMeters": { "type": "number", "minimum": 0, "maximum": 250 },
+        "brakingLookAheadSpeedSeconds": { "type": "number", "minimum": 0, "maximum": 10 },
+        "brakingLookAheadRecoveryGainSeconds": { "type": "number", "minimum": 0, "maximum": 10 },
+        "brakingPreviewSampleCount": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "racingLineSpeedFactorExponent": { "type": "number", "exclusiveMinimum": 0, "maximum": 4 },
+        "terminalSpeedTargetMultiplier": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brakeHeadingErrorThresholdRadians": { "type": "number", "exclusiveMinimum": 0, "maximum": 3.141592653589793 },
+        "maximumBrakeBase": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maximumBrakeRecoveryGain": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brakingRecoveryThrottle": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brakingTrackThrottle": { "type": "number", "minimum": 0, "maximum": 1 },
+        "recoveryThrottleMultiplier": { "type": "number", "minimum": 0, "maximum": 1 },
+        "trackThrottleMultiplier": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brakeDemandBase": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brakeDemandSpeedScaleMetersPerSecond": { "type": "number", "exclusiveMinimum": 0, "maximum": 200 },
+        "steeringFullScaleHeadingErrorRadians": { "type": "number", "exclusiveMinimum": 0, "maximum": 3.141592653589793 }
       }
     },
     "bot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["paceMultiplier", "brakingSafetyMultiplier", "steeringNoise", "reactionDelaySeconds", "recoveryMultiplier", "consistency"],
+      "required": ["paceMultiplier", "brakingSafetyMultiplier", "steeringNoise", "steeringLookAheadPenaltySeconds", "recoveryMultiplier"],
       "properties": {
         "paceMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
         "brakingSafetyMultiplier": { "type": "number", "minimum": 1 },
         "steeringNoise": { "type": "number", "minimum": 0 },
-        "reactionDelaySeconds": { "type": "number", "minimum": 0 },
-        "recoveryMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
-        "consistency": { "type": "number", "minimum": 0, "maximum": 1 }
+        "steeringLookAheadPenaltySeconds": { "type": "number", "minimum": 0 },
+        "recoveryMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
       }
     }
   }

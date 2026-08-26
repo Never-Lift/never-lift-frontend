@@ -17,7 +17,8 @@ recordes e fantasmas não podem misturar versões físicas.
 
 - `module-2-decisions.json`: decisões fechadas de produto e compatibilidade;
 - `physics-model.md`: fórmulas, sinais e ordem canônica do integrador;
-- `physics-constants*.json`: schema e calibração compartilhada;
+- `physics-constants*.json`: schema e calibração compartilhada, incluindo o
+  planejador determinístico dos bots; dificuldade altera decisões, nunca física;
 - `vehicle-definition*.json`: dimensões e união de colliders convexos do F1;
 - `physics-reference-scenarios*.json`: entradas e faixas de referência;
 - `realtime-race-protocol.schema.json`: envelopes planejados do Módulo 3, já

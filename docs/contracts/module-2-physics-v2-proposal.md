@@ -4,7 +4,7 @@
 
 Esta proposta foi aprovada em 25/08/2026 e define a substituição da física arcade do contrato `1.3.0` por uma dinâmica acessível de monoposto inspirada na Fórmula 1 de 2026. Ela também remove definitivamente boost/nitro do produto.
 
-Este documento é deliberadamente **não executável**. O runtime continua usando `contracts/module-2/v1/` até que constantes calibradas, schemas, geometrias, motor TypeScript e testes sejam entregues juntos. Não publicar JSON com números inventados nem apontar parcialmente o runtime para a versão 2.
+O desenho deste documento foi publicado como contrato executável em `contracts/module-2/v2/`, junto de constantes, schemas, geometrias, motor TypeScript e cenários. A implementação automatizada está concluída; a validação manual e a calibração final permanecem pendentes. O `v1` continua apenas como histórico imutável.
 
 A mudança pertence à **Parte 2d do Módulo 2** e precisa terminar antes do Módulo 3, porque o motor Java autoritativo deverá reproduzir as mesmas fórmulas e os mesmos cenários determinísticos.
 
@@ -25,7 +25,7 @@ A mudança pertence à **Parte 2d do Módulo 2** e precisa terminar antes do Mó
 O monoposto continua original e não copia um carro ou equipe. A geração 2026 serve como referência física:
 
 - largura máxima de `1,90 m`, entre-eixos máximo de `3,40 m`, direção somente no eixo dianteiro e tração somente no eixo traseiro;
-- massa de calibração próxima de `770 kg`, confirmada na folha de constantes antes de ativar o runtime;
+- massa de calibração de `770 kg`, publicada na folha de constantes do runtime v2;
 - velocidade normalmente observável próxima de `335 km/h`, podendo se aproximar de `350 km/h` depois de uma saída de curva e reta suficientes;
 - velocidade final resultante do equilíbrio entre potência e arrasto, nunca de um corte rígido;
 - frenagem validada por curvas completas de velocidade, tempo e distância. A referência inicial de Miami 2026 é `320 → 78 km/h` em `3,66 s` e `165 m`, com pico informado de `4 g`;
@@ -66,7 +66,7 @@ Forças e regras obrigatórias:
 8. Arrasto e downforce variam aproximadamente com o quadrado da velocidade, com balanço aerodinâmico dianteiro/traseiro e sensibilidade realista à carga dos pneus.
 9. Potência e força trativa variam com RPM/marcha/velocidade; o câmbio automático usa oito relações e trocas determinísticas.
 10. Asfalto, zebra, grama, brita e pit lane têm atrito e resistência próprios. Limite de velocidade dos pits é regra de prova, não teto físico da superfície.
-11. Integração usa passo fixo independente do FPS. `1/120 s` será comparado a `1/60 s`; a opção mais simples que fechar estabilidade, paridade e orçamento de CPU será congelada no contrato. CCD continua obrigatório em ambos os casos.
+11. Integração usa passo fixo de `1/120 s`, independente do FPS, congelado após comparação com `1/60 s`. CCD é obrigatório.
 
 Entradas normalizadas continuam sendo `throttle`, `brake` e `steer`. Rampas de teclado pertencem ao contrato determinístico para que local, predição e servidor tenham o mesmo resultado; elas não são controle de tração nem ABS.
 
@@ -107,9 +107,9 @@ O protocolo do Módulo 3 nasce diretamente sem nitro; não existe compatibilidad
 
 `POST /api/races/local-result`, salas, resultados, recordes e fantasmas precisam persistir `physicsContractVersion`. Tempos de contratos físicos incompatíveis não podem ser comparados como se fossem da mesma categoria.
 
-## Linha de contrato planejada
+## Linha de contrato publicada
 
-`contracts/module-2/v1/` é publicado e imutável. A implementação criará uma linha paralela:
+`contracts/module-2/v1/` é publicado e imutável. A Parte 2d publicou a linha paralela:
 
 ```text
 contracts/module-2/v2/
@@ -130,7 +130,7 @@ contracts/module-2/v2/
     <track-id>.json
 ```
 
-Constantes desconhecidas não entram como `null` ou valores arbitrários no JSON executável. Primeiro são pesquisadas/calibradas; depois constantes, schemas, runtime TypeScript e testes são ativados no mesmo conjunto de mudanças. O backend recebe cópia idêntica antes de iniciar seu motor Java.
+Constantes desconhecidas não entram como `null` ou valores arbitrários no JSON executável. Constantes, schemas, runtime TypeScript e testes foram ativados no mesmo conjunto de mudanças; o backend empacota uma cópia byte a byte idêntica antes de iniciar seu motor Java no Módulo 3.
 
 ## Testes e critérios da Parte 2d
 
@@ -159,4 +159,4 @@ Critério manual mínimo:
 - validar contatos carro–carro e carro–muro de diferentes ângulos sem sobreposição, colisão invisível ou enrosco;
 - confirmar que `Shift` não executa nem envia qualquer ação.
 
-Somente depois desses testes e da validação manual a Parte 2d pode ser marcada pronta e o Módulo 3 pode começar.
+Os testes automatizados foram implementados, mas somente depois de todos passarem no estado final e da validação manual acima a Parte 2d pode ser marcada pronta e o Módulo 3 pode começar.

@@ -12,6 +12,7 @@ import {
   findCompoundCollisionManifold,
   isConvexPolygon,
   resolveRigidBodyCollision,
+  resolveRigidBodyCollisions,
   type CollisionManifold,
   type RigidBody2D,
 } from '@/race/rigid-body-collision'
@@ -157,6 +158,88 @@ describe('SAT manifold and rigid-body impulses', () => {
 
     expect(car.velocity.x).toBeGreaterThan(23.5)
     expect(car.velocity.y).toBeLessThanOrEqual(0)
+    expect(Number.isFinite(car.angularVelocity)).toBe(true)
+  })
+
+  it('keeps spatially separate co-normal contacts as independent solver patches', () => {
+    const car = body()
+    car.angularVelocity = 2
+    const wall = body({ x: 2, y: 0 }, { x: 0, y: 0 }, 0)
+    const sharedMaterials = {
+      secondCollisionMaterial: 'concrete-wall' as const,
+    }
+    const manifolds: CollisionManifold[] = [
+      {
+        normal: { x: 1, y: 0 },
+        penetrationMeters: 0.01,
+        contacts: [{ x: 1, y: 1 }],
+        firstColliderId: 'car-upper-tyre',
+        secondColliderId: 'wall-upper',
+        ...sharedMaterials,
+      },
+      {
+        normal: { x: 1, y: 0 },
+        penetrationMeters: 0.01,
+        contacts: [{ x: 1, y: -1 }],
+        firstColliderId: 'car-lower-tyre',
+        secondColliderId: 'wall-lower',
+        ...sharedMaterials,
+      },
+    ]
+
+    const resolution = resolveRigidBodyCollisions(
+      car,
+      wall,
+      manifolds,
+      RESPONSE,
+      1,
+    )
+
+    // With positive yaw, the upper contact is separating while the lower one
+    // is closing. Collapsing both distant contacts to their centroid erases
+    // those opposite local velocities and incorrectly produces no impulse.
+    expect(resolution.normalImpulse).toBeGreaterThan(0)
+    expect(car.angularVelocity).toBeLessThan(2)
+  })
+
+  it('resolves simultaneous barrier contacts with each canonical material calibration', () => {
+    const car = body({ x: 0, y: 0 }, { x: 12, y: 0 })
+    const wall = body({ x: 2, y: 0 }, { x: 0, y: 0 }, 0)
+    const manifolds: CollisionManifold[] = [
+      {
+        normal: { x: 1, y: 0 },
+        penetrationMeters: 0.02,
+        contacts: [{ x: 1, y: 0.75 }],
+        firstColliderId: 'front-wing-left',
+        secondColliderId: 'guardrail-segment',
+        secondCollisionMaterial: 'guardrail',
+      },
+      {
+        normal: { x: 1, y: 0 },
+        penetrationMeters: 0.02,
+        contacts: [{ x: 1, y: -0.75 }],
+        firstColliderId: 'front-wing-right',
+        secondColliderId: 'tecpro-segment',
+        secondCollisionMaterial: 'tecpro',
+      },
+    ]
+    const resolvedMaterials: string[] = []
+
+    const resolution = resolveRigidBodyCollisions(
+      car,
+      wall,
+      manifolds,
+      (manifold) => {
+        resolvedMaterials.push(manifold.secondCollisionMaterial ?? 'missing')
+        return manifold.secondCollisionMaterial === 'guardrail'
+          ? { ...RESPONSE, restitution: 0.04, friction: 0.18 }
+          : { ...RESPONSE, restitution: 0.01, friction: 0.3 }
+      },
+      1,
+    )
+
+    expect(resolvedMaterials).toEqual(['guardrail', 'tecpro'])
+    expect(resolution.normalImpulse).toBeGreaterThan(0)
     expect(Number.isFinite(car.angularVelocity)).toBe(true)
   })
 })

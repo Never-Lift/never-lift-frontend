@@ -1,4 +1,4 @@
-import { sweepCompoundColliders } from '@/race/continuous-collision'
+import { sweepCompoundCollidersWithRotation } from '@/race/continuous-collision'
 import { PHYSICS_CONSTANTS } from '@/race/constants'
 import {
   lerp,
@@ -41,7 +41,9 @@ const VEHICLE_MAXIMUM_AXIS_EXTENT_METERS = Math.hypot(
   F1_VEHICLE_COLLIDER.widthMeters / 2,
 )
 const COLLISION_TIME_EPSILON_SECONDS =
-  PHYSICS_CONSTANTS.collision.geometryEpsilon
+  PHYSICS_CONSTANTS.collision.ccdTimeEpsilonSeconds
+const COLLISION_ANGULAR_MOTION_EPSILON_RADIANS =
+  PHYSICS_CONSTANTS.collision.ccdAngularMotionEpsilonRadians
 
 function vehicleBody(vehicle: VehicleState): RigidBody2D {
   return {
@@ -85,10 +87,8 @@ function carResponseOptions() {
   )
 }
 
-function barrierResponseOptions(
-  manifolds: readonly CollisionManifold[],
-) {
-  const material = primaryManifold(manifolds).secondCollisionMaterial
+function barrierResponseOptions(manifold: CollisionManifold) {
+  const material = manifold.secondCollisionMaterial
   if (!material) {
     throw new Error(
       'Collider de barreira sem material físico canônico do contrato v2.',
@@ -210,6 +210,35 @@ function vehicleColliders(body: RigidBody2D) {
   })
 }
 
+function completeSimultaneousImpactManifolds(
+  current: readonly CollisionManifold[],
+  reportedAtImpact: readonly CollisionManifold[],
+) {
+  const completed = new Map(
+    current.map((manifold) => [
+      `${manifold.firstColliderId}:${manifold.secondColliderId}`,
+      manifold,
+    ]),
+  )
+  for (const manifold of reportedAtImpact) {
+    const key = `${manifold.firstColliderId}:${manifold.secondColliderId}`
+    if (!completed.has(key)) completed.set(key, manifold)
+  }
+  return [...completed.values()].sort(
+    (left, right) =>
+      (left.firstColliderId < right.firstColliderId
+        ? -1
+        : left.firstColliderId > right.firstColliderId
+          ? 1
+          : 0) ||
+      (left.secondColliderId < right.secondColliderId
+        ? -1
+        : left.secondColliderId > right.secondColliderId
+          ? 1
+          : 0),
+  )
+}
+
 function collidersAtVehiclePose(vehicle: VehicleState) {
   return createVehicleWorldCollider({
     position: vehicle.position,
@@ -257,7 +286,7 @@ export function resolveVehicleAgainstStaticColliders(
       body,
       staticBody(),
       manifolds,
-      barrierResponseOptions(manifolds),
+      barrierResponseOptions,
       PHYSICS_CONSTANTS.collision.solverIterations,
     )
     synchronizeResolvedBody(vehicle, body)
@@ -306,12 +335,25 @@ export function resolveVehicleAgainstStaticColliders(
     )
     const shouldSweep =
       magnitude(travelVelocity) >=
-      PHYSICS_CONSTANTS.collision.ccdMinimumSpeedMetersPerSecond
+        PHYSICS_CONSTANTS.collision.ccdMinimumSpeedMetersPerSecond ||
+      Math.abs(travelAngularVelocity) * remainingSeconds >
+        COLLISION_ANGULAR_MOTION_EPSILON_RADIANS
     const impact =
-      startManifolds.length === 0 && shouldSweep
-        ? sweepCompoundColliders(
-            { colliders: startColliders, velocity: travelVelocity },
-            { colliders: barriers, velocity: { x: 0, y: 0 } },
+      startManifolds.length === 0
+        && shouldSweep
+        ? sweepCompoundCollidersWithRotation(
+            {
+              colliders: startColliders,
+              position: body.position,
+              velocity: travelVelocity,
+              angularVelocity: travelAngularVelocity,
+            },
+            {
+              colliders: barriers,
+              position: { x: 0, y: 0 },
+              velocity: { x: 0, y: 0 },
+              angularVelocity: 0,
+            },
             remainingSeconds,
           )
         : null
@@ -330,7 +372,7 @@ export function resolveVehicleAgainstStaticColliders(
           body,
           staticBody(),
           endManifolds,
-          barrierResponseOptions(endManifolds),
+          barrierResponseOptions,
           PHYSICS_CONSTANTS.collision.solverIterations,
         )
         const primary = primaryManifold(endManifolds)
@@ -352,20 +394,26 @@ export function resolveVehicleAgainstStaticColliders(
       body.angle + travelAngularVelocity * elapsedSeconds,
     )
     remainingSeconds = Math.max(0, remainingSeconds - elapsedSeconds)
-    const manifolds =
+    let manifolds: readonly CollisionManifold[] =
       startManifolds.length > 0
         ? startManifolds
         : findCompoundCollisionManifolds(
             vehicleColliders(body),
             barriers,
           )
+    if (impact && startManifolds.length === 0) {
+      manifolds = completeSimultaneousImpactManifolds(
+        manifolds,
+        impact.manifolds,
+      )
+    }
     const resolvedManifolds =
-      manifolds.length > 0 ? manifolds : [impact!.manifold]
+      manifolds.length > 0 ? manifolds : impact!.manifolds
     const resolution = resolveRigidBodyCollisions(
       body,
       staticBody(),
       resolvedManifolds,
-      barrierResponseOptions(resolvedManifolds),
+      barrierResponseOptions,
       PHYSICS_CONSTANTS.collision.solverIterations,
     )
     const primary = primaryManifold(resolvedManifolds)
@@ -430,6 +478,10 @@ export function resolveVehicleCollision(
 
   const firstMotion = motionVelocity(first, deltaSeconds)
   const secondMotion = motionVelocity(second, deltaSeconds)
+  const firstAngularMotion =
+    signedAngleDelta(first.previousAngle, first.angle) / deltaSeconds
+  const secondAngularMotion =
+    signedAngleDelta(second.previousAngle, second.angle) / deltaSeconds
   const relativeSpeed = magnitude(subtract(firstMotion, secondMotion))
   const firstAtStart = createVehicleWorldCollider({
     position: first.previousPosition,
@@ -439,15 +491,29 @@ export function resolveVehicleCollision(
     position: second.previousPosition,
     angle: second.previousAngle,
   })
-  const impact =
+  const shouldSweep =
     relativeSpeed >=
-    PHYSICS_CONSTANTS.collision.ccdMinimumSpeedMetersPerSecond
-      ? sweepCompoundColliders(
-          { colliders: firstAtStart, velocity: firstMotion },
-          { colliders: secondAtStart, velocity: secondMotion },
-          deltaSeconds,
-        )
-      : null
+      PHYSICS_CONSTANTS.collision.ccdMinimumSpeedMetersPerSecond ||
+    (Math.abs(firstAngularMotion) + Math.abs(secondAngularMotion)) *
+      deltaSeconds >
+      COLLISION_ANGULAR_MOTION_EPSILON_RADIANS
+  const impact = shouldSweep
+    ? sweepCompoundCollidersWithRotation(
+        {
+          colliders: firstAtStart,
+          position: first.previousPosition,
+          velocity: firstMotion,
+          angularVelocity: firstAngularMotion,
+        },
+        {
+          colliders: secondAtStart,
+          position: second.previousPosition,
+          velocity: secondMotion,
+          angularVelocity: secondAngularMotion,
+        },
+        deltaSeconds,
+      )
+    : null
 
   if (!impact) {
     const manifolds = findCompoundCollisionManifolds(
@@ -483,19 +549,23 @@ export function resolveVehicleCollision(
 
   let remainingSeconds = deltaSeconds - impact.timeSeconds
   let eventIndex = 0
-  let pendingManifold: CollisionManifold | null = impact.manifold
+  let pendingManifolds: CollisionManifold[] | null = impact.manifolds
   while (
-    pendingManifold &&
+    pendingManifolds &&
     eventIndex < PHYSICS_CONSTANTS.collision.maximumCcdEventsPerStep
   ) {
-    const impactManifolds = findCompoundCollisionManifolds(
+    let impactManifolds: readonly CollisionManifold[] = findCompoundCollisionManifolds(
       vehicleColliders(firstBody),
       vehicleColliders(secondBody),
+    )
+    impactManifolds = completeSimultaneousImpactManifolds(
+      impactManifolds,
+      pendingManifolds,
     )
     const manifolds =
       impactManifolds.length > 0
         ? impactManifolds
-        : [pendingManifold]
+        : pendingManifolds
     const resolution = resolveRigidBodyCollisions(
       firstBody,
       secondBody,
@@ -509,22 +579,32 @@ export function resolveVehicleCollision(
     eventIndex += 1
     if (remainingSeconds <= COLLISION_TIME_EPSILON_SECONDS) break
 
-    const nextImpact = sweepCompoundColliders(
-      { colliders: vehicleColliders(firstBody), velocity: firstBody.velocity },
-      { colliders: vehicleColliders(secondBody), velocity: secondBody.velocity },
+    const nextImpact = sweepCompoundCollidersWithRotation(
+      {
+        colliders: vehicleColliders(firstBody),
+        position: firstBody.position,
+        velocity: firstBody.velocity,
+        angularVelocity: firstBody.angularVelocity,
+      },
+      {
+        colliders: vehicleColliders(secondBody),
+        position: secondBody.position,
+        velocity: secondBody.velocity,
+        angularVelocity: secondBody.angularVelocity,
+      },
       remainingSeconds,
     )
     if (!nextImpact) {
       advanceBody(firstBody, remainingSeconds)
       advanceBody(secondBody, remainingSeconds)
       remainingSeconds = 0
-      pendingManifold = null
+      pendingManifolds = null
       break
     }
     advanceBody(firstBody, nextImpact.timeSeconds)
     advanceBody(secondBody, nextImpact.timeSeconds)
     remainingSeconds -= nextImpact.timeSeconds
-    pendingManifold = nextImpact.manifold
+    pendingManifolds = nextImpact.manifolds
     if (nextImpact.timeSeconds <= COLLISION_TIME_EPSILON_SECONDS) {
       const escapeSeconds = Math.min(
         remainingSeconds,

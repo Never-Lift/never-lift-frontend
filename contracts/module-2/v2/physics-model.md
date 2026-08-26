@@ -161,6 +161,97 @@ não muda.
 esterço. Ao trocar esquerda por direita, a mesma função cruza zero naturalmente.
 Nenhuma rampa consulta FPS, relógio de parede ou tipo de dispositivo.
 
+## Planejador determinístico dos bots
+
+Bots escolhem somente `throttle`, `brake` e `steer`. Depois dessa decisão, eles
+entram no mesmo integrador, pneus, superfícies, colisores, dano e progressão dos
+humanos; dificuldade nunca multiplica potência, aderência, freio, massa ou dano.
+Todas as constantes da decisão ficam em `bots.planner`, enquanto `bots.easy`,
+`bots.normal` e `bots.hard` alteram apenas ritmo, margem, ruído, antecipação e
+recuperação.
+
+Para `speed = length(velocity)` e a projeção atual na racing line:
+
+```text
+steeringLookAhead =
+  steeringLookAheadBaseMeters
+  + speed * steeringLookAheadSpeedSeconds
+  + max(0,
+        steeringLookAheadReactionReferenceSeconds
+        - difficulty.steeringLookAheadPenaltySeconds)
+    * steeringLookAheadReactionGainMetersPerSecond
+
+target = racingLine(projectionDistance + steeringLookAhead)
+headingError = signedAngleDelta(vehicleAngle, heading(target - position))
+
+vehicleIdSeed = sum of every UTF-16 code unit in vehicleId
+noise = sin(simulationTime * steeringNoiseFrequencyRadiansPerSecond
+            + vehicleIdSeed)
+        * difficulty.steeringNoise
+
+brakingLookAhead =
+  brakingLookAheadBaseMeters
+  + speed * (brakingLookAheadSpeedSeconds
+             + difficulty.recoveryMultiplier
+               * brakingLookAheadRecoveryGainSeconds)
+```
+
+Começando no alvo de esterço, amostrar `brakingPreviewSampleCount` pontos
+igualmente espaçados até `brakingLookAhead` e usar o menor
+`targetSpeedFactor`. Então:
+
+```text
+targetSpeed = terminalSpeed
+              * pow(minimumTargetSpeedFactor,
+                    racingLineSpeedFactorExponent)
+              * difficulty.paceMultiplier
+              * terminalSpeedTargetMultiplier
+safeTargetSpeed = targetSpeed / difficulty.brakingSafetyMultiplier
+recovering = surface is grass or gravel
+needsBraking = speed > safeTargetSpeed
+               or abs(headingError) > brakeHeadingErrorThresholdRadians
+maximumBrake = maximumBrakeBase
+               + difficulty.recoveryMultiplier * maximumBrakeRecoveryGain
+
+throttle = needsBraking
+  ? (recovering ? brakingRecoveryThrottle : brakingTrackThrottle)
+  : difficulty.paceMultiplier
+    * (recovering ? recoveryThrottleMultiplier : trackThrottleMultiplier)
+brake = needsBraking
+  ? clamp(brakeDemandBase
+          + max(0, speed - safeTargetSpeed)
+            / brakeDemandSpeedScaleMetersPerSecond,
+          0,
+          maximumBrake)
+  : 0
+steer = clamp(headingError / steeringFullScaleHeadingErrorRadians + noise,
+              -1,
+              1)
+```
+
+`maximumBrakeBase + maximumBrakeRecoveryGain` deve ser menor ou igual a `1`.
+O planejador é reavaliado em cada passo fixo;
+`steeringLookAheadPenaltySeconds` reduz somente a antecipação decisória dos
+níveis lentos nessa fórmula, sem introduzir atraso temporal ou vantagem na
+física. Não existem parâmetros publicados sem efeito.
+
+## Orquestração determinística da corrida
+
+Os valores em `race` também fazem parte do contrato executável. A duração limite
+é `max(minimumRaceDurationSeconds, trackLength /
+raceDurationReferenceSpeedMetersPerSecond * laps)`. A projeção global aceita a
+margem `progressProjectionMarginMeters`; a projeção local usa
+`localProjectionWindowMeters`, amplia a busca por
+`localProjectionRecoveryMarginMeters` quando necessário e considera distâncias
+equivalentes dentro de `projectionDistanceToleranceMeters`. A grade espacial das
+barreiras usa células de `barrierBroadphaseCellMeters`.
+
+A área de pit estende `pitLaneHalfWidthMeters` para cada lado da linha canônica.
+A largada acende `startLightCount` estágios, separados por
+`startLightStageSeconds`, e aguarda `lightsOutDelaySeconds` antes de liberar a
+corrida. Esses valores governam humanos e bots igualmente e não consultam FPS ou
+relógio de parede.
+
 ## Aerodinâmica
 
 ```text
@@ -182,7 +273,25 @@ impulso normal. Colisão carro-carro usa `carRestitution` e
 `carTangentialFriction`. Colisão com barreira consulta obrigatoriamente
 `barrierMaterials[material]`; concreto, guardrail, Tecpro e pneus têm
 restituição e atrito próprios e não podem cair silenciosamente num valor global.
+Em contatos simultâneos com materiais diferentes, cada manifold usa a calibração
+do próprio collider antes das iterações do solver.
+Cada manifold 2D preserva no máximo `maximumContactPoints=2`, os extremos do
+segmento de contato; peças convexas distintas continuam produzindo manifolds
+distintos quando seus contatos não coincidem.
 CCD varre os colliders entre estado anterior e candidato para impedir tunneling.
+Translação usa swept SAT exato. Quando existe rotação, o intervalo é dividido
+de modo que a soma dos arcos máximos dos envelopes não exceda
+`ccdMaximumAngularArcStepMeters`; cada intervalo possui
+`ceil(intervalArc / (ccdMaximumAngularArcStepMeters /
+ccdAngularPoseSamplesPerMaximumArcStep))` amostras uniformes na pose real, além
+dos candidatos do swept SAT linear. Comparações temporais usam
+`ccdTimeEpsilonSeconds`, enquanto a decisão de ativar a varredura rotacional usa
+`ccdAngularMotionEpsilonRadians`. Entre dois probes primários, o algoritmo testa
+também a pose real do ponto médio quando os envelopes conservadores ainda podem
+se cruzar; isso reduz tunneling transitório sem transformar o envelope em contato.
+Cada candidato é confirmado na pose realmente rotacionada e o primeiro intervalo ocupado é refinado por
+`ccdTimeRefinementIterations`. Um manifold da pose congelada nunca pode, sozinho,
+produzir contato invisível.
 
 Objetos e contatos são ordenados por identificador, índice de shape, índice de
 segmento e ponto. O solver nunca depende da ordem de iteração de hash maps.
@@ -190,6 +299,10 @@ Manifolds de shapes compostos sobrepostos no mesmo corpo são consolidados quand
 seus pontos estão até `contactMergeDistanceMeters` e o produto escalar de suas
 normais é pelo menos `manifoldNormalMergeCosine`, impedindo aplicar o mesmo
 impulso mais de uma vez sem apagar contatos de direções materialmente distintas.
+No solver, contatos coplanares e co-normais podem formar um único patch apenas
+quando suas velocidades normais locais diferem no máximo
+`contactPatchNormalVelocityMergeMetersPerSecond`; contatos afastados com uma
+extremidade fechando e outra separando continuam independentes.
 
 ## Origem dos valores e estado da calibração
 

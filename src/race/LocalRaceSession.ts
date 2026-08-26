@@ -3,9 +3,15 @@ import { clamp } from '@/race/math'
 import type { RaceEngine } from '@/race/RaceEngine'
 import type { DriverInput } from '@/race/types'
 
-export const START_LIGHT_COUNT = 5
-export const START_LIGHT_TICKS = Math.round(1 / PHYSICS_STEP_SECONDS)
-export const START_RELEASE_TICK = (START_LIGHT_COUNT + 1) * START_LIGHT_TICKS
+export const START_LIGHT_COUNT = PHYSICS_CONSTANTS.race.startLightCount
+export const START_LIGHT_TICKS = Math.round(
+  PHYSICS_CONSTANTS.race.startLightStageSeconds / PHYSICS_STEP_SECONDS,
+)
+export const LIGHTS_OUT_DELAY_TICKS = Math.round(
+  PHYSICS_CONSTANTS.race.lightsOutDelaySeconds / PHYSICS_STEP_SECONDS,
+)
+export const START_RELEASE_TICK =
+  START_LIGHT_COUNT * START_LIGHT_TICKS + LIGHTS_OUT_DELAY_TICKS
 export const JUMP_START_LOCK_TICKS = Math.round(
   PHYSICS_CONSTANTS.race.jumpStartLockSeconds / PHYSICS_STEP_SECONDS,
 )

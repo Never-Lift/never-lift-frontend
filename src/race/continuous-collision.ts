@@ -1,9 +1,18 @@
 import physicsConstants from '../../contracts/module-2/v2/physics-constants.json'
 
-import { add, dot, normalize, perpendicularLeft, scale, subtract } from '@/race/math'
+import {
+  add,
+  dot,
+  normalize,
+  perpendicularLeft,
+  rotate,
+  scale,
+  subtract,
+} from '@/race/math'
 import {
   colliderBounds,
   colliderBoundsIntersect,
+  consolidateCollisionManifolds,
   findCompoundCollisionManifolds,
   findCollisionManifold,
   resolveRigidBodyCollisions,
@@ -20,12 +29,22 @@ export type SweptColliderBody = {
   velocity: Vector2
 }
 
+export type SweptPoseColliderBody = SweptColliderBody & {
+  position: Vector2
+  angularVelocity: number
+}
+
 export type TimeOfImpact = {
   timeSeconds: number
   normal: Vector2
   firstColliderId: string
   secondColliderId: string
   manifold: CollisionManifold
+}
+
+export type CompoundTimeOfImpact = {
+  timeSeconds: number
+  manifolds: CollisionManifold[]
 }
 
 export type ContinuousCollisionBody = {
@@ -41,6 +60,27 @@ export type ContinuousCollisionStepResult = {
 }
 
 const SWEEP_EPSILON = physicsConstants.collision.geometryEpsilon
+const TIME_EPSILON_SECONDS = physicsConstants.collision.ccdTimeEpsilonSeconds
+const STATIC_COLLIDER_BOUNDS = new WeakMap<
+  WorldConvexCollider,
+  ReturnType<typeof colliderBounds>
+>()
+
+function isStaticPoseBody(body: SweptPoseColliderBody) {
+  return (
+    body.velocity.x === 0 &&
+    body.velocity.y === 0 &&
+    body.angularVelocity === 0
+  )
+}
+
+function cachedStaticColliderBounds(collider: WorldConvexCollider) {
+  const cached = STATIC_COLLIDER_BOUNDS.get(collider)
+  if (cached) return cached
+  const bounds = colliderBounds(collider)
+  STATIC_COLLIDER_BOUNDS.set(collider, bounds)
+  return bounds
+}
 
 function axesOf(vertices: readonly Vector2[]) {
   const axes: Vector2[] = []
@@ -110,6 +150,407 @@ function centerOf(collider: WorldConvexCollider) {
     ),
     1 / collider.vertices.length,
   )
+}
+
+function colliderRadius(
+  collider: WorldConvexCollider,
+  body: SweptPoseColliderBody,
+) {
+  return collider.vertices.reduce(
+    (radius, vertex) =>
+      Math.max(
+        radius,
+        Math.hypot(vertex.x - body.position.x, vertex.y - body.position.y),
+      ),
+    0,
+  )
+}
+
+function colliderAtPoseTime(
+  collider: WorldConvexCollider,
+  body: SweptPoseColliderBody,
+  timeSeconds: number,
+): WorldConvexCollider {
+  if (timeSeconds <= TIME_EPSILON_SECONDS || isStaticPoseBody(body)) {
+    return collider
+  }
+  const translatedPosition = add(
+    body.position,
+    scale(body.velocity, timeSeconds),
+  )
+  const angularOffset = body.angularVelocity * timeSeconds
+  return {
+    id: collider.id,
+    collisionMaterial: collider.collisionMaterial,
+    vertices: collider.vertices.map((vertex) =>
+      add(
+        translatedPosition,
+        rotate(subtract(vertex, body.position), angularOffset),
+      ),
+    ),
+  }
+}
+
+function maximumColliderRadius(body: SweptPoseColliderBody) {
+  return body.colliders.reduce(
+    (maximum, collider) =>
+      collider.vertices.reduce(
+        (partMaximum, vertex) =>
+          Math.max(
+            partMaximum,
+            Math.hypot(
+              vertex.x - body.position.x,
+              vertex.y - body.position.y,
+            ),
+          ),
+        maximum,
+      ),
+    0,
+  )
+}
+
+function colliderMotionBounds(
+  collider: WorldConvexCollider,
+  body: SweptPoseColliderBody,
+  maximumTimeSeconds: number,
+) {
+  if (isStaticPoseBody(body)) {
+    return cachedStaticColliderBounds(collider)
+  }
+  const bounds = sweptBounds(collider, body.velocity, maximumTimeSeconds)
+  const angularTravelRadians =
+    Math.abs(body.angularVelocity) * maximumTimeSeconds
+  const angularDisplacementMeters =
+    angularTravelRadians <= Math.PI
+      ? 2 *
+        colliderRadius(collider, body) *
+        Math.sin(angularTravelRadians / 2)
+      : 2 * colliderRadius(collider, body)
+  bounds.minX -= angularDisplacementMeters
+  bounds.minY -= angularDisplacementMeters
+  bounds.maxX += angularDisplacementMeters
+  bounds.maxY += angularDisplacementMeters
+  return bounds
+}
+
+type PoseColliderPair = {
+  first: WorldConvexCollider
+  second: WorldConvexCollider
+}
+
+function candidateColliderPairs(
+  first: SweptPoseColliderBody,
+  second: SweptPoseColliderBody,
+  maximumTimeSeconds: number,
+): PoseColliderPair[] {
+  const firstEntries = first.colliders.map((collider) => ({
+    collider,
+    bounds: colliderMotionBounds(collider, first, maximumTimeSeconds),
+  }))
+  const secondEntries = second.colliders.map((collider) => ({
+    collider,
+    bounds: colliderMotionBounds(collider, second, maximumTimeSeconds),
+  }))
+  const pairs: PoseColliderPair[] = []
+  for (const firstEntry of firstEntries) {
+    for (const secondEntry of secondEntries) {
+      if (!colliderBoundsIntersect(firstEntry.bounds, secondEntry.bounds)) {
+        continue
+      }
+      pairs.push({ first: firstEntry.collider, second: secondEntry.collider })
+    }
+  }
+  return pairs.sort(
+    (left, right) =>
+      (left.first.id < right.first.id
+        ? -1
+        : left.first.id > right.first.id
+          ? 1
+          : 0) ||
+      (left.second.id < right.second.id
+        ? -1
+        : left.second.id > right.second.id
+          ? 1
+          : 0),
+  )
+}
+
+function pairMayOverlapDuringPoseGap(
+  first: SweptPoseColliderBody,
+  second: SweptPoseColliderBody,
+  pair: PoseColliderPair,
+  gapStartSeconds: number,
+  gapDurationSeconds: number,
+) {
+  const firstCollider = colliderAtPoseTime(pair.first, first, gapStartSeconds)
+  const secondCollider = colliderAtPoseTime(pair.second, second, gapStartSeconds)
+  const firstAtGapStart: SweptPoseColliderBody = {
+    colliders: [firstCollider],
+    position: add(first.position, scale(first.velocity, gapStartSeconds)),
+    velocity: first.velocity,
+    angularVelocity: first.angularVelocity,
+  }
+  const secondAtGapStart: SweptPoseColliderBody = {
+    colliders: [secondCollider],
+    position: add(second.position, scale(second.velocity, gapStartSeconds)),
+    velocity: second.velocity,
+    angularVelocity: second.angularVelocity,
+  }
+  return colliderBoundsIntersect(
+    colliderMotionBounds(firstCollider, firstAtGapStart, gapDurationSeconds),
+    colliderMotionBounds(secondCollider, secondAtGapStart, gapDurationSeconds),
+  )
+}
+
+function orderedUniqueProbeTimes(times: ReadonlySet<number>) {
+  const ordered = [...times].sort((left, right) => left - right)
+  return ordered.filter(
+    (timeSeconds, index) =>
+      index === 0 ||
+      timeSeconds - ordered[index - 1] > TIME_EPSILON_SECONDS,
+  )
+}
+
+function manifoldsForPairsAtPoseTime(
+  first: SweptPoseColliderBody,
+  second: SweptPoseColliderBody,
+  pairs: readonly PoseColliderPair[],
+  timeSeconds: number,
+): CollisionManifold[] {
+  const firstAtTime = new Map<string, WorldConvexCollider>()
+  const secondAtTime = new Map<string, WorldConvexCollider>()
+  const manifolds: CollisionManifold[] = []
+  for (const pair of pairs) {
+    let firstCollider = firstAtTime.get(pair.first.id)
+    if (!firstCollider) {
+      firstCollider = colliderAtPoseTime(pair.first, first, timeSeconds)
+      firstAtTime.set(pair.first.id, firstCollider)
+    }
+    let secondCollider = secondAtTime.get(pair.second.id)
+    if (!secondCollider) {
+      secondCollider = colliderAtPoseTime(pair.second, second, timeSeconds)
+      secondAtTime.set(pair.second.id, secondCollider)
+    }
+    const manifold = findCollisionManifold(firstCollider, secondCollider)
+    if (manifold) manifolds.push(manifold)
+  }
+  return consolidateCollisionManifolds(manifolds)
+}
+
+function refineFirstOccupiedPose(
+  first: SweptPoseColliderBody,
+  second: SweptPoseColliderBody,
+  pairs: readonly PoseColliderPair[],
+  clearTimeSeconds: number,
+  occupiedTimeSeconds: number,
+  occupiedManifolds: CollisionManifold[],
+) {
+  let lowerTimeSeconds = clearTimeSeconds
+  let upperTimeSeconds = occupiedTimeSeconds
+  let upperManifolds = occupiedManifolds
+  for (
+    let iteration = 0;
+    iteration < physicsConstants.collision.ccdTimeRefinementIterations;
+    iteration += 1
+  ) {
+    const middleTimeSeconds = (lowerTimeSeconds + upperTimeSeconds) / 2
+    const middleManifolds = manifoldsForPairsAtPoseTime(
+      first,
+      second,
+      pairs,
+      middleTimeSeconds,
+    )
+    if (middleManifolds.length === 0) {
+      lowerTimeSeconds = middleTimeSeconds
+    } else {
+      upperTimeSeconds = middleTimeSeconds
+      upperManifolds = middleManifolds
+    }
+  }
+  return { timeSeconds: upperTimeSeconds, manifolds: upperManifolds }
+}
+
+function simultaneousLinearImpactManifolds(
+  first: SweptPoseColliderBody,
+  second: SweptPoseColliderBody,
+  maximumTimeSeconds: number,
+  impact: TimeOfImpact,
+) {
+  const manifolds: CollisionManifold[] = []
+  for (const pair of candidateColliderPairs(
+    first,
+    second,
+    maximumTimeSeconds,
+  )) {
+    const candidate = sweepConvexColliders(
+      pair.first,
+      first.velocity,
+      pair.second,
+      second.velocity,
+      maximumTimeSeconds,
+    )
+    if (
+      candidate &&
+      Math.abs(candidate.timeSeconds - impact.timeSeconds) <=
+        TIME_EPSILON_SECONDS
+    ) {
+      manifolds.push(candidate.manifold)
+    }
+  }
+  const consolidated = consolidateCollisionManifolds(manifolds)
+  return consolidated.length > 0 ? consolidated : [impact.manifold]
+}
+
+/**
+ * Deterministic pose sweep for angular motion. Angular envelope travel splits
+ * the step into contract-sized intervals. Each interval uses exact linear
+ * swept SAT as a candidate generator, but only a manifold evaluated at the
+ * actual translated-and-rotated pose can become a contact.
+ */
+export function sweepCompoundCollidersWithRotation(
+  first: SweptPoseColliderBody,
+  second: SweptPoseColliderBody,
+  maximumTimeSeconds: number,
+): CompoundTimeOfImpact | null {
+  if (maximumTimeSeconds < 0) {
+    throw new Error('O intervalo de CCD não pode ser negativo.')
+  }
+  const maximumAngularTravelMeters =
+    (Math.abs(first.angularVelocity) * maximumColliderRadius(first) +
+      Math.abs(second.angularVelocity) * maximumColliderRadius(second)) *
+    maximumTimeSeconds
+  if (maximumAngularTravelMeters <= SWEEP_EPSILON) {
+    const impact = sweepCompoundColliders(first, second, maximumTimeSeconds)
+    if (!impact) return null
+    return {
+      timeSeconds: impact.timeSeconds,
+      manifolds: simultaneousLinearImpactManifolds(
+        first,
+        second,
+        maximumTimeSeconds,
+        impact,
+      ),
+    }
+  }
+
+  const candidatePairs = candidateColliderPairs(
+    first,
+    second,
+    maximumTimeSeconds,
+  )
+  if (candidatePairs.length === 0) return null
+
+  const initialManifolds = manifoldsForPairsAtPoseTime(
+    first,
+    second,
+    candidatePairs,
+    0,
+  )
+  if (initialManifolds.length > 0) {
+    return { timeSeconds: 0, manifolds: initialManifolds }
+  }
+
+  const intervalCount = Math.max(
+    1,
+    Math.ceil(
+      maximumAngularTravelMeters /
+        physicsConstants.collision.ccdMaximumAngularArcStepMeters,
+    ),
+  )
+  let clearTimeSeconds = 0
+  for (let interval = 1; interval <= intervalCount; interval += 1) {
+    const intervalEndSeconds =
+      (maximumTimeSeconds * interval) / intervalCount
+    const intervalSeconds = intervalEndSeconds - clearTimeSeconds
+    const intervalAngularTravelMeters = maximumAngularTravelMeters / intervalCount
+    const subdivisions = Math.max(
+      1,
+      Math.ceil(
+        intervalAngularTravelMeters /
+          (physicsConstants.collision.ccdMaximumAngularArcStepMeters /
+            physicsConstants.collision
+              .ccdAngularPoseSamplesPerMaximumArcStep),
+      ),
+    )
+    const probeTimes = new Set<number>()
+    for (const pair of candidatePairs) {
+      const impact = sweepConvexColliders(
+        colliderAtPoseTime(pair.first, first, clearTimeSeconds),
+        first.velocity,
+        colliderAtPoseTime(pair.second, second, clearTimeSeconds),
+        second.velocity,
+        intervalSeconds,
+      )
+      if (
+        impact &&
+        impact.timeSeconds > TIME_EPSILON_SECONDS &&
+        impact.timeSeconds < intervalSeconds - TIME_EPSILON_SECONDS
+      ) {
+        probeTimes.add(clearTimeSeconds + impact.timeSeconds)
+      }
+    }
+    for (let sample = 1; sample <= subdivisions; sample += 1) {
+      probeTimes.add(
+        clearTimeSeconds + (intervalSeconds * sample) / subdivisions,
+      )
+    }
+
+    let previousProbeTimeSeconds = clearTimeSeconds
+    for (const probeTimeSeconds of orderedUniqueProbeTimes(probeTimes)) {
+      const gapDurationSeconds =
+        probeTimeSeconds - previousProbeTimeSeconds
+      if (
+        gapDurationSeconds > TIME_EPSILON_SECONDS &&
+        candidatePairs.some((pair) =>
+          pairMayOverlapDuringPoseGap(
+            first,
+            second,
+            pair,
+            previousProbeTimeSeconds,
+            gapDurationSeconds,
+          ),
+        )
+      ) {
+        const midpointSeconds =
+          previousProbeTimeSeconds + gapDurationSeconds / 2
+        const midpointManifolds = manifoldsForPairsAtPoseTime(
+          first,
+          second,
+          candidatePairs,
+          midpointSeconds,
+        )
+        if (midpointManifolds.length > 0) {
+          return refineFirstOccupiedPose(
+            first,
+            second,
+            candidatePairs,
+            previousProbeTimeSeconds,
+            midpointSeconds,
+            midpointManifolds,
+          )
+        }
+      }
+      const probeManifolds = manifoldsForPairsAtPoseTime(
+        first,
+        second,
+        candidatePairs,
+        probeTimeSeconds,
+      )
+      if (probeManifolds.length > 0) {
+        return refineFirstOccupiedPose(
+          first,
+          second,
+          candidatePairs,
+          previousProbeTimeSeconds,
+          probeTimeSeconds,
+          probeManifolds,
+        )
+      }
+      previousProbeTimeSeconds = probeTimeSeconds
+    }
+    clearTimeSeconds = intervalEndSeconds
+  }
+  return null
 }
 
 /**
@@ -187,11 +628,11 @@ export function sweepConvexColliders(
       entryAxis = axis
     }
     exitTime = Math.min(exitTime, axisExit)
-    if (entryTime - exitTime > SWEEP_EPSILON) return null
+    if (entryTime - exitTime > TIME_EPSILON_SECONDS) return null
   }
   if (
-    entryTime < -SWEEP_EPSILON ||
-    entryTime > maximumTimeSeconds + SWEEP_EPSILON
+    entryTime < -TIME_EPSILON_SECONDS ||
+    entryTime > maximumTimeSeconds + TIME_EPSILON_SECONDS
   ) {
     return null
   }
@@ -252,9 +693,9 @@ export function sweepCompoundColliders(
       if (
         impact &&
         (!earliest ||
-          impact.timeSeconds < earliest.timeSeconds - SWEEP_EPSILON ||
+          impact.timeSeconds < earliest.timeSeconds - TIME_EPSILON_SECONDS ||
           (Math.abs(impact.timeSeconds - earliest.timeSeconds) <=
-            SWEEP_EPSILON &&
+            TIME_EPSILON_SECONDS &&
             `${impact.firstColliderId}:${impact.secondColliderId}` <
               `${earliest.firstColliderId}:${earliest.secondColliderId}`))
       ) {
