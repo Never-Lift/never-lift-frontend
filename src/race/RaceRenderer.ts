@@ -7,6 +7,7 @@ import type {
   TrackSurfaceMaterial,
 } from '@/lib/api'
 import {
+  CAMERA_HEIGHT_SCALE,
   createCameraTransform,
   createMinimapTransform,
   createSplitViewports,
@@ -104,6 +105,11 @@ const FENCE_STYLE = {
   dashMeters: [0.8, 0.45],
 }
 const FENCE_GAP_METERS = 0.18
+const FENCE_HEIGHT_METERS = 2.6
+const FENCE_POST_SPACING_METERS = 3
+const PIT_LANE_WIDTH_METERS = 6
+const PIT_BUILDING_HEIGHT_METERS = 3.2
+const BRIDGE_DECK_HEIGHT_METERS = 2.4
 
 const CURB_PALETTES: Record<TrackCurbPalette, string[]> = {
   'red-white': ['#d9283b', '#f0f0fa'],
@@ -361,9 +367,15 @@ export class RaceRenderer {
       const sections = visibleTrackSections.filter(
         (section) => section.elevationLayer === elevationLayer,
       )
+      if (this.track.id === 'suzuka' && elevationLayer > 0) {
+        for (const { points } of sections) {
+          this.drawBridgeUnderstructure(points, transform)
+        }
+      }
       for (const { points } of sections) {
         this.drawTrackEnvironments(points, transform)
       }
+      if (elevationLayer === 0) this.drawPitInfrastructure(transform)
       for (const { points } of sections) {
         this.drawTrackAsphalt(points, transform)
       }
@@ -520,62 +532,49 @@ export class RaceRenderer {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) {
-    for (let pointIndex = 0; pointIndex < points.length - 1; pointIndex += 1) {
-      const from = points[pointIndex]
-      const to = points[pointIndex + 1]
-      if (to.distanceMeters <= from.distanceMeters) continue
-
-      for (const curb of this.track.curbs) {
-        const overlapFrom = Math.max(
-          from.distanceMeters,
-          curb.fromDistanceMeters,
+    const visibleFrom = points[0]?.distanceMeters ?? 0
+    const visibleTo = points.at(-1)?.distanceMeters ?? 0
+    for (const curb of this.track.curbs) {
+      const overlapFrom = Math.max(visibleFrom, curb.fromDistanceMeters)
+      const overlapTo = Math.min(visibleTo, curb.toDistanceMeters)
+      if (overlapTo <= overlapFrom) continue
+      const colors = CURB_PALETTES[curb.palette]
+      let stripeIndex = Math.floor(
+        (overlapFrom - curb.fromDistanceMeters + 0.0001) /
+          curb.stripeLengthMeters,
+      )
+      while (true) {
+        const stripeFrom = Math.max(
+          overlapFrom,
+          curb.fromDistanceMeters + stripeIndex * curb.stripeLengthMeters,
         )
-        const overlapTo = Math.min(to.distanceMeters, curb.toDistanceMeters)
-        if (overlapTo <= overlapFrom) continue
-
-        const colors = CURB_PALETTES[curb.palette]
-        let stripeFrom = overlapFrom
-        while (stripeFrom < overlapTo - Number.EPSILON) {
-          const stripeIndex = Math.floor(
-            (stripeFrom - curb.fromDistanceMeters + 0.0001) /
-              curb.stripeLengthMeters,
-          )
-          const nextBoundary =
-            curb.fromDistanceMeters +
-            (stripeIndex + 1) * curb.stripeLengthMeters
-          const stripeTo = Math.min(overlapTo, nextBoundary)
-          const fromPoint = this.interpolateTrackPointAtDistance(
-            from,
-            to,
-            stripeFrom,
-          )
-          const toPoint = this.interpolateTrackPointAtDistance(
-            from,
-            to,
-            stripeTo,
-          )
-          const insetFrom = Math.max(
-            0,
-            fromPoint.halfWidthMeters - curb.widthMeters / 2,
-          )
-          const insetTo = Math.max(
-            0,
-            toPoint.halfWidthMeters - curb.widthMeters / 2,
-          )
-          const curbFrom = this.offsetTrackPoint(
-            fromPoint,
+        const stripeTo = Math.min(
+          overlapTo,
+          curb.fromDistanceMeters +
+            (stripeIndex + 1) * curb.stripeLengthMeters,
+        )
+        if (stripeTo <= stripeFrom + Number.EPSILON) break
+        const curbPoints = this.trackPointsForRange(
+          points,
+          stripeFrom,
+          stripeTo,
+        ).map((point) =>
+          this.offsetTrackPoint(
+            point,
             curb.side,
-            insetFrom,
-          )
-          const curbTo = this.offsetTrackPoint(toPoint, curb.side, insetTo)
-          this.strokeSegment(
-            worldToCamera(curbFrom, transform),
-            worldToCamera(curbTo, transform),
+            point.halfWidthMeters + curb.widthMeters / 2,
+          ),
+        )
+        const first = curbPoints[0]
+        const last = curbPoints.at(-1)
+        if (first && last) {
+          this.strokePolyline(
+            curbPoints.map((point) => worldToCamera(point, transform)),
             Math.max(
               1.5,
               projectedTrackWidth(
-                curbFrom,
-                curbTo,
+                first,
+                last,
                 curb.widthMeters,
                 transform,
               ),
@@ -583,10 +582,45 @@ export class RaceRenderer {
             colors[stripeIndex % colors.length],
             'butt',
           )
-          stripeFrom = stripeTo
         }
+        if (stripeTo >= overlapTo - Number.EPSILON) break
+        stripeIndex += 1
       }
     }
+  }
+
+  private trackPointsForRange(
+    points: TrackDefinition['centerline'],
+    fromDistanceMeters: number,
+    toDistanceMeters: number,
+  ) {
+    const pointAt = (distanceMeters: number) => {
+      const exact = points.find(
+        (point) => Math.abs(point.distanceMeters - distanceMeters) <= 1e-6,
+      )
+      if (exact) return exact
+      const endIndex = points.findIndex(
+        (point) => point.distanceMeters > distanceMeters,
+      )
+      const safeEndIndex = Math.max(
+        1,
+        endIndex < 0 ? points.length - 1 : endIndex,
+      )
+      return this.interpolateTrackPointAtDistance(
+        points[safeEndIndex - 1],
+        points[safeEndIndex],
+        distanceMeters,
+      )
+    }
+    return [
+      pointAt(fromDistanceMeters),
+      ...points.filter(
+        (point) =>
+          point.distanceMeters > fromDistanceMeters + 1e-6 &&
+          point.distanceMeters < toDistanceMeters - 1e-6,
+      ),
+      pointAt(toDistanceMeters),
+    ]
   }
 
   private interpolateTrackPointAtDistance(
@@ -632,8 +666,16 @@ export class RaceRenderer {
         )
         const environmentWidth = trackSideEnvironmentWidth(environment)
         if (environmentWidth <= Number.EPSILON) continue
-        const fromEnvironmentWidth = trackSideEnvironmentWidth(fromEnvironment)
-        const toEnvironmentWidth = trackSideEnvironmentWidth(toEnvironment)
+        const fromEnvironmentWidth = this.canonicalEnvironmentWidthAt(
+          from,
+          side,
+          fromEnvironment,
+        )
+        const toEnvironmentWidth = this.canonicalEnvironmentWidthAt(
+          to,
+          side,
+          toEnvironment,
+        )
         let innerOffset = 0
         for (const zone of environment.zones) {
           const outerOffset = innerOffset + zone.widthMeters
@@ -652,6 +694,42 @@ export class RaceRenderer {
         }
       }
     }
+  }
+
+  private canonicalEnvironmentWidthAt(
+    point: TrackDefinition['centerline'][number],
+    side: 'left' | 'right',
+    fallback: TrackSideEnvironment,
+  ) {
+    const segment = this.track.barrierGeometry.segments.find(
+      (candidate) =>
+        candidate.side === side &&
+        point.distanceMeters >= candidate.fromDistanceMeters - 1e-6 &&
+        point.distanceMeters <= candidate.toDistanceMeters + 1e-6,
+    )
+    if (!segment) return trackSideEnvironmentWidth(fallback)
+    const endIndex = segment.path.findIndex(
+      (candidate) => candidate.distanceMeters >= point.distanceMeters,
+    )
+    const safeEndIndex = Math.max(
+      1,
+      endIndex < 0 ? segment.path.length - 1 : endIndex,
+    )
+    const from = segment.path[safeEndIndex - 1]
+    const to = segment.path[safeEndIndex]
+    const span = to.distanceMeters - from.distanceMeters
+    const ratio = span <= Number.EPSILON
+      ? 0
+      : (point.distanceMeters - from.distanceMeters) / span
+    const barrierPoint = {
+      x: from.x + (to.x - from.x) * ratio,
+      y: from.y + (to.y - from.y) * ratio,
+    }
+    return Math.max(
+      0,
+      Math.hypot(barrierPoint.x - point.x, barrierPoint.y - point.y) -
+        point.halfWidthMeters,
+    )
   }
 
   private fillTrackZone(
@@ -818,35 +896,103 @@ export class RaceRenderer {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) {
-    for (const side of ['left', 'right'] as const) {
-      for (let index = 0; index < points.length - 1; index += 1) {
-        const from = points[index]
-        const to = points[index + 1]
-        const fromEnvironment = this.geometry.getTrackSideEnvironmentAt(
-          from.distanceMeters,
-          side,
-        )
-        const toEnvironment = this.geometry.getTrackSideEnvironmentAt(
-          to.distanceMeters,
-          side,
-        )
-        const segmentEnvironment = this.geometry.getTrackSideEnvironmentAt(
-          (from.distanceMeters + to.distanceMeters) / 2,
-          side,
-        )
-        if (!segmentEnvironment.fence) continue
-        const fromPoint = this.offsetTrackPoint(
-          from,
-          side,
-          from.halfWidthMeters + this.fenceOffset(fromEnvironment),
-        )
-        const toPoint = this.offsetTrackPoint(
-          to,
-          side,
-          to.halfWidthMeters + this.fenceOffset(toEnvironment),
-        )
-        this.drawStyledBoundary(fromPoint, toPoint, FENCE_STYLE, transform)
+    const visibleFromDistance = points[0]?.distanceMeters ?? 0
+    const visibleToDistance = points.at(-1)?.distanceMeters ?? 0
+    const visibleElevationLayer = points[0]?.elevationLayer ?? 0
+    for (const barrier of this.track.barrierGeometry.segments) {
+      const environment = this.track.trackLimits.segments[
+        barrier.trackLimitSegmentIndex
+      ]?.[barrier.side]
+      if (
+        !environment?.fence ||
+        barrier.toDistanceMeters < visibleFromDistance ||
+        barrier.fromDistanceMeters > visibleToDistance
+      ) {
+        continue
       }
+      for (let index = 0; index < barrier.path.length - 1; index += 1) {
+        const from = barrier.path[index]
+        const to = barrier.path[index + 1]
+        if (
+          from.elevationLayer !== visibleElevationLayer ||
+          to.distanceMeters < visibleFromDistance ||
+          from.distanceMeters > visibleToDistance
+        ) {
+          continue
+        }
+        const delta = { x: to.x - from.x, y: to.y - from.y }
+        const length = Math.hypot(delta.x, delta.y)
+        if (length <= Number.EPSILON) continue
+        const direction = barrier.side === 'left' ? 1 : -1
+        const outward = {
+          x: (-delta.y / length) * direction,
+          y: (delta.x / length) * direction,
+        }
+        const offset =
+          barrier.thicknessMeters +
+          FENCE_GAP_METERS +
+          FENCE_STYLE.widthMeters / 2
+        this.drawFenceSegment(
+          { x: from.x + outward.x * offset, y: from.y + outward.y * offset },
+          { x: to.x + outward.x * offset, y: to.y + outward.y * offset },
+          transform,
+        )
+      }
+    }
+  }
+
+  private drawFenceSegment(
+    fromPoint: Vector2,
+    toPoint: Vector2,
+    transform: CameraTransform,
+  ) {
+    const from = worldToCamera(fromPoint, transform)
+    const to = worldToCamera(toPoint, transform)
+    const height =
+      FENCE_HEIGHT_METERS * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
+    const topFrom = { x: from.x, y: from.y - height }
+    const topTo = { x: to.x, y: to.y - height }
+    this.context.beginPath()
+    this.context.moveTo(from.x, from.y)
+    this.context.lineTo(to.x, to.y)
+    this.context.lineTo(topTo.x, topTo.y)
+    this.context.lineTo(topFrom.x, topFrom.y)
+    this.context.closePath()
+    this.context.fillStyle = 'rgba(70, 84, 102, 0.22)'
+    this.context.fill()
+
+    this.strokeSegment(
+      topFrom,
+      topTo,
+      Math.max(1, transform.pixelsPerMeter * 0.08),
+      FENCE_STYLE.color,
+    )
+    this.strokeSegment(
+      { x: from.x, y: from.y - height * 0.52 },
+      { x: to.x, y: to.y - height * 0.52 },
+      Math.max(1, transform.pixelsPerMeter * 0.045),
+      'rgba(137, 150, 168, 0.62)',
+    )
+    const lengthMeters = Math.hypot(
+      toPoint.x - fromPoint.x,
+      toPoint.y - fromPoint.y,
+    )
+    const postCount = Math.max(
+      1,
+      Math.ceil(lengthMeters / FENCE_POST_SPACING_METERS),
+    )
+    for (let index = 0; index <= postCount; index += 1) {
+      const ratio = index / postCount
+      const ground = {
+        x: from.x + (to.x - from.x) * ratio,
+        y: from.y + (to.y - from.y) * ratio,
+      }
+      this.strokeSegment(
+        ground,
+        { x: ground.x, y: ground.y - height },
+        Math.max(1, transform.pixelsPerMeter * 0.07),
+        '#748194',
+      )
     }
   }
 
@@ -922,6 +1068,207 @@ export class RaceRenderer {
     this.context.lineWidth = Math.max(1, width)
     this.context.strokeStyle = color
     this.context.stroke()
+  }
+
+  private strokePolyline(
+    points: Vector2[],
+    width: number,
+    color: string,
+    lineCap: CanvasLineCap = 'round',
+  ) {
+    if (points.length < 2) return
+    this.context.beginPath()
+    this.context.moveTo(points[0].x, points[0].y)
+    for (const point of points.slice(1)) this.context.lineTo(point.x, point.y)
+    this.context.lineCap = lineCap
+    this.context.lineJoin = 'round'
+    this.context.lineWidth = Math.max(1, width)
+    this.context.strokeStyle = color
+    this.context.stroke()
+  }
+
+  private drawPitInfrastructure(transform: CameraTransform) {
+    const path = this.track.pitLane.path
+    if (path.length < 2) return
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const from = path[index]
+      const to = path[index + 1]
+      this.strokeSegment(
+        worldToCamera(from, transform),
+        worldToCamera(to, transform),
+        projectedTrackWidth(from, to, PIT_LANE_WIDTH_METERS, transform),
+        '#2d3540',
+      )
+    }
+
+    for (const sideDirection of [-1, 1]) {
+      const edge = path.map((point, index) => {
+        const previous = path[Math.max(0, index - 1)]
+        const next = path[Math.min(path.length - 1, index + 1)]
+        const delta = { x: next.x - previous.x, y: next.y - previous.y }
+        const length = Math.max(Number.EPSILON, Math.hypot(delta.x, delta.y))
+        return {
+          x: point.x + (-delta.y / length) * sideDirection * (PIT_LANE_WIDTH_METERS / 2),
+          y: point.y + (delta.x / length) * sideDirection * (PIT_LANE_WIDTH_METERS / 2),
+        }
+      })
+      this.strokePolyline(
+        edge.map((point) => worldToCamera(point, transform)),
+        Math.max(1, transform.pixelsPerMeter * 0.12),
+        'rgba(229, 233, 239, 0.82)',
+      )
+    }
+    this.drawPitGarages(path, transform)
+  }
+
+  private drawPitGarages(path: Vector2[], transform: CameraTransform) {
+    const firstIndex = Math.floor(path.length * 0.27)
+    const lastIndex = Math.floor(path.length * 0.73)
+    const step = Math.max(1, Math.floor((lastIndex - firstIndex) / 10))
+    for (let index = firstIndex; index < lastIndex; index += step) {
+      const from = path[index]
+      const to = path[Math.min(path.length - 1, index + step)]
+      const delta = { x: to.x - from.x, y: to.y - from.y }
+      const length = Math.hypot(delta.x, delta.y)
+      if (length <= Number.EPSILON) continue
+      const tangent = { x: delta.x / length, y: delta.y / length }
+      const midpoint = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+      const projection = this.geometry.project(midpoint)
+      const away = {
+        x: midpoint.x - projection.point.x,
+        y: midpoint.y - projection.point.y,
+      }
+      const awayLength = Math.hypot(away.x, away.y)
+      const outward = awayLength > 0.2
+        ? { x: away.x / awayLength, y: away.y / awayLength }
+        : { x: -tangent.y, y: tangent.x }
+      const boxCenter = {
+        x: midpoint.x + outward.x * 1.4,
+        y: midpoint.y + outward.y * 1.4,
+      }
+      const boxHalfLength = Math.min(3.2, length * 0.36)
+      const boxHalfWidth = 1.05
+      const boxCorners = this.orientedRectangle(
+        boxCenter,
+        tangent,
+        outward,
+        boxHalfLength,
+        boxHalfWidth,
+      )
+      this.fillWorldPolygon(boxCorners, transform, 'rgba(218, 224, 233, 0.28)')
+
+      const garageCenter = {
+        x: midpoint.x + outward.x * 6.2,
+        y: midpoint.y + outward.y * 6.2,
+      }
+      const garageCorners = this.orientedRectangle(
+        garageCenter,
+        tangent,
+        outward,
+        Math.max(3.3, Math.min(5.2, length * 0.48)),
+        2.2,
+      )
+      this.drawExtrudedBuilding(garageCorners, transform)
+    }
+  }
+
+  private orientedRectangle(
+    center: Vector2,
+    tangent: Vector2,
+    normal: Vector2,
+    halfLength: number,
+    halfWidth: number,
+  ) {
+    return [
+      { x: center.x - tangent.x * halfLength - normal.x * halfWidth, y: center.y - tangent.y * halfLength - normal.y * halfWidth },
+      { x: center.x + tangent.x * halfLength - normal.x * halfWidth, y: center.y + tangent.y * halfLength - normal.y * halfWidth },
+      { x: center.x + tangent.x * halfLength + normal.x * halfWidth, y: center.y + tangent.y * halfLength + normal.y * halfWidth },
+      { x: center.x - tangent.x * halfLength + normal.x * halfWidth, y: center.y - tangent.y * halfLength + normal.y * halfWidth },
+    ]
+  }
+
+  private fillWorldPolygon(
+    points: Vector2[],
+    transform: CameraTransform,
+    color: string,
+  ) {
+    const projected = points.map((point) => worldToCamera(point, transform))
+    this.context.beginPath()
+    this.context.moveTo(projected[0].x, projected[0].y)
+    for (const point of projected.slice(1)) this.context.lineTo(point.x, point.y)
+    this.context.closePath()
+    this.context.fillStyle = color
+    this.context.fill()
+  }
+
+  private drawExtrudedBuilding(
+    corners: Vector2[],
+    transform: CameraTransform,
+  ) {
+    const base = corners.map((point) => worldToCamera(point, transform))
+    const height =
+      PIT_BUILDING_HEIGHT_METERS * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
+    const top = base.map((point) => ({ x: point.x, y: point.y - height }))
+    this.context.beginPath()
+    this.context.moveTo(base[1].x, base[1].y)
+    this.context.lineTo(base[2].x, base[2].y)
+    this.context.lineTo(top[2].x, top[2].y)
+    this.context.lineTo(top[1].x, top[1].y)
+    this.context.closePath()
+    this.context.fillStyle = '#313a46'
+    this.context.fill()
+    this.context.beginPath()
+    this.context.moveTo(base[2].x, base[2].y)
+    this.context.lineTo(base[3].x, base[3].y)
+    this.context.lineTo(top[3].x, top[3].y)
+    this.context.lineTo(top[2].x, top[2].y)
+    this.context.closePath()
+    this.context.fillStyle = '#252d37'
+    this.context.fill()
+    this.context.beginPath()
+    this.context.moveTo(top[0].x, top[0].y)
+    for (const point of top.slice(1)) this.context.lineTo(point.x, point.y)
+    this.context.closePath()
+    this.context.fillStyle = '#596575'
+    this.context.fill()
+  }
+
+  private drawBridgeUnderstructure(
+    points: TrackDefinition['centerline'],
+    transform: CameraTransform,
+  ) {
+    if (points.length < 2) return
+    const depth =
+      BRIDGE_DECK_HEIGHT_METERS *
+      transform.pixelsPerMeter *
+      CAMERA_HEIGHT_SCALE
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const from = points[index]
+      const to = points[index + 1]
+      const projectedFrom = worldToCamera(from, transform)
+      const projectedTo = worldToCamera(to, transform)
+      this.strokeSegment(
+        { x: projectedFrom.x, y: projectedFrom.y + depth },
+        { x: projectedTo.x, y: projectedTo.y + depth },
+        projectedTrackWidth(
+          from,
+          to,
+          (from.halfWidthMeters + to.halfWidthMeters) + 1.8,
+          transform,
+        ),
+        '#111720',
+      )
+      if (index % 7 === 0) {
+        const columnWidth = Math.max(2, transform.pixelsPerMeter * 0.7)
+        this.strokeSegment(
+          { x: projectedFrom.x, y: projectedFrom.y + depth * 0.55 },
+          { x: projectedFrom.x, y: projectedFrom.y + depth * 2.1 },
+          columnWidth,
+          '#222a34',
+          'butt',
+        )
+      }
+    }
   }
 
   private drawStartFinish(transform: CameraTransform) {

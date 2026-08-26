@@ -533,8 +533,9 @@ export class TrackGeometry {
         projection.distanceMeters >= candidate.fromDistanceMeters &&
         projection.distanceMeters <= candidate.toDistanceMeters &&
         projection.distanceFromCenterMeters >=
-          projection.halfWidthMeters - candidate.widthMeters &&
-        projection.distanceFromCenterMeters <= projection.halfWidthMeters,
+          projection.halfWidthMeters &&
+        projection.distanceFromCenterMeters <=
+          projection.halfWidthMeters + candidate.widthMeters,
     )
     if (curb) return 'curb'
     return environment.material

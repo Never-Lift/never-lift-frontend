@@ -34,7 +34,7 @@
       "const": "2.0.0"
     },
     "catalogVersion": {
-      "const": "2026.6"
+      "const": "2026.7"
     },
     "id": {
       "type": "string",

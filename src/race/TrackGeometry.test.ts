@@ -140,7 +140,7 @@ describe('TrackGeometry', () => {
     const geometry = new TrackGeometry(definition)
 
     expect(
-      geometry.getSurfaceAt({ x: runoffRadius + 7.5, y: 0 }, 0),
+      geometry.getSurfaceAt({ x: runoffRadius + 8.5, y: 0 }, 0),
     ).toBe('curb')
     expect(
       geometry.getSurfaceAt({ x: runoffRadius + 14, y: 0 }, 0),

@@ -122,8 +122,8 @@ Regras:
 
 ### 6.1 Catálogo e escala compartilhada
 
-- O catálogo `2026.5` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. Os circuitos usam nomes reais, traçados reconhecíveis, ambientes laterais auditados e landmarks semânticos específicos por pista, destinados ao uso pessoal informado pelo proprietário.
-- Curvas, asfalto, áreas externas, barreiras e grades derivam da mesma centerline métrica suavizada, amostrada a cada aproximadamente 5 m. Zebras são segmentos explícitos do contrato, colocados no lado interno e na saída das curvas conforme o traçado e o número oficial de curvas, com paletas específicas quando a identidade do circuito é conhecida.
+- O catálogo histórico `2026.5` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. O runtime `2026.7` preserva nomes reais, traçados reconhecíveis e ambientes laterais auditados, mas remove os landmarks provisórios dispersos; até a rodada futura de cenário temático, permanecem somente o fundo base e a infraestrutura necessária da pista.
+- Curvas, asfalto, áreas externas, barreiras e grades derivam da mesma centerline métrica suavizada, amostrada a cada aproximadamente 5 m. Zebras são segmentos explícitos do contrato, colocados além da borda do asfalto no lado interno e na saída das curvas conforme o traçado e o número oficial de curvas, com paletas específicas quando a identidade do circuito é conhecida. As 24 pistas já expõem pit lane, boxes e garagens visuais; a funcionalidade de parada continua reservada ao Módulo 5.
 - Se houver decisão futura de distribuição pública, nomes, marcas e apresentação devem ser revistos antes da publicação.
 - Circuitos podem ter comprimentos diferentes e próximos das proporções reais.
 - Unidade compartilhada de mundo: **1 unidade = 1 metro**.

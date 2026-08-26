@@ -20,6 +20,7 @@ describe('scenery visual registry', () => {
     ['waterfront', 'water'],
     ['track-overpass', 'bridge'],
     ['start-gantry', 'gantry'],
+    ['escape-bollard', 'escape-obstacle'],
     ['floodlights', 'floodlight'],
     ['waterfront-towers', 'building'],
     ['city-skyline', 'building'],

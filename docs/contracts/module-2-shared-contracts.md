@@ -35,7 +35,13 @@ Decisões fechadas:
 - CCD, manifold, impulsos no ponto de contato, torque e solver iterativo determinístico;
 - dano cumulativo classificado por impulso/energia ou `delta-v`, não apenas pela velocidade absoluta;
 - `physicsContractVersion` persistida em salas, resultados, recordes e fantasmas;
-- nova linha `contracts/module-2/v2/`, schema de pista `2.0.0` e catálogo `2026.6`; o catálogo `2026.5` permanece válido somente para o runtime v1.
+- nova linha `contracts/module-2/v2/`, schema de pista `2.0.0` e catálogo executável `2026.7`; o catálogo `2026.5` permanece válido somente para o runtime v1 e o `2026.6` registra a publicação inicial das faces canônicas.
+
+### Revisão estrutural e visual do catálogo 2026.7
+
+A implementação automatizada está concluída e a validação manual permanece pendente. A revisão preserva o contrato físico `2.0.0`, mas regenera as 24 pistas para suavizar as faces canônicas usadas simultaneamente por colisão e desenho, impedir que braços vizinhos na mesma elevação se cubram, unir trechos de zebra separados por lacunas pequenas e posicionar a zebra além da borda do asfalto. Todas as pistas recebem caminho e estruturas visuais de pit; Mônaco tem a origem da volta reposicionada na reta oficial; Monza recebe obstáculos na área de escape da primeira chicane; e Suzuka expõe a estrutura inferior e os apoios da passagem elevada. Landmarks provisórios dispersos foram removidos até a rodada futura de cenário temático.
+
+O relatório de auditoria e a lista de validação manual estão em [`../module-2-track-visual-audit-2026.7.md`](../module-2-track-visual-audit-2026.7.md).
 
 O diretório v2 foi ativado junto de constantes fundamentadas, schemas, geometrias, motor TypeScript e cenários. Não publicar valores desconhecidos como `null` ou tuning arbitrário.
 
