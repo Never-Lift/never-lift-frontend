@@ -34,7 +34,7 @@
       "const": "2.0.0"
     },
     "catalogVersion": {
-      "const": "2026.8"
+      "const": "2026.9"
     },
     "id": {
       "type": "string",
@@ -248,7 +248,8 @@
       "required": [
         "preset",
         "landmarks",
-        "staticObjects"
+        "staticObjects",
+        "escapeRoads"
       ],
       "properties": {
         "preset": {
@@ -271,6 +272,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/sceneryObject"
+          }
+        },
+        "escapeRoads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/escapeRoad"
           }
         }
       }
@@ -519,6 +526,15 @@
             "maroon-white",
             "blue-white"
           ]
+        },
+        "outerColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "outerWidthMeters": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1.5
         }
       }
     },
@@ -566,6 +582,9 @@
         },
         "fence": {
           "const": "debris-fence"
+        },
+        "fenceVisualStyle": {
+          "$ref": "#/$defs/fenceVisualStyle"
         }
       }
     },
@@ -632,6 +651,9 @@
         },
         "visualStyle": {
           "$ref": "#/$defs/infrastructurePalette"
+        },
+        "dimensions": {
+          "$ref": "#/$defs/infrastructureDimensions"
         }
       }
     },
@@ -693,17 +715,220 @@
             "buildingHeightMeters": {
               "type": "number",
               "minimum": 3,
-              "maximum": 8
+              "maximum": 24
+            },
+            "laneWidthMeters": {
+              "type": "number",
+              "minimum": 6,
+              "maximum": 16
+            },
+            "garageStartRatio": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 0.8
+            },
+            "garageEndRatio": {
+              "type": "number",
+              "minimum": 0.2,
+              "maximum": 0.95
+            },
+            "pitBoxLengthMeters": {
+              "type": "number",
+              "minimum": 3,
+              "maximum": 12
+            },
+            "pitBoxDepthMeters": {
+              "type": "number",
+              "minimum": 1.5,
+              "maximum": 4
+            },
+            "pitBoxCenterOffsetMeters": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "garageDepthMeters": {
+              "type": "number",
+              "minimum": 3,
+              "maximum": 16
+            },
+            "garageCenterOffsetMeters": {
+              "type": "number",
+              "minimum": 6,
+              "maximum": 24
+            },
+            "pitWallHeightMeters": {
+              "type": "number",
+              "minimum": 0.6,
+              "maximum": 1.5
+            },
+            "canopyDepthMeters": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 5
             }
           },
           "required": [
             "architecture",
             "garageCount",
-            "buildingHeightMeters"
+            "buildingHeightMeters",
+            "laneWidthMeters",
+            "garageStartRatio",
+            "garageEndRatio",
+            "pitBoxLengthMeters",
+            "pitBoxDepthMeters",
+            "pitBoxCenterOffsetMeters",
+            "garageDepthMeters",
+            "garageCenterOffsetMeters",
+            "pitWallHeightMeters",
+            "canopyDepthMeters"
           ]
         }
       ],
       "unevaluatedProperties": false
+    },
+    "infrastructureDimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lengthMeters",
+        "depthMeters",
+        "heightMeters"
+      ],
+      "properties": {
+        "lengthMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 400
+        },
+        "depthMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120
+        },
+        "heightMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 80
+        }
+      }
+    },
+    "escapeObstacleRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "blockLengthMeters",
+        "palette"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/vector"
+        },
+        "to": {
+          "$ref": "#/$defs/vector"
+        },
+        "blockLengthMeters": {
+          "type": "number",
+          "minimum": 0.4,
+          "maximum": 4
+        },
+        "palette": {
+          "const": "red-white"
+        }
+      }
+    },
+    "escapeRoad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "affectsPhysics",
+        "elevationLayer",
+        "widthMeters",
+        "path",
+        "obstacleRows"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "slalom-block-rows"
+        },
+        "affectsPhysics": {
+          "const": false
+        },
+        "elevationLayer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "widthMeters": {
+          "type": "number",
+          "minimum": 4,
+          "maximum": 16
+        },
+        "path": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/vector"
+          }
+        },
+        "obstacleRows": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/escapeObstacleRow"
+          }
+        }
+      }
+    },
+    "fenceVisualStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "heightMeters",
+        "postSpacingMeters",
+        "postColor",
+        "meshColor",
+        "meshOpacity",
+        "cantileverMeters"
+      ],
+      "properties": {
+        "heightMeters": {
+          "type": "number",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "postSpacingMeters": {
+          "type": "number",
+          "minimum": 1.5,
+          "maximum": 5
+        },
+        "postColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "meshColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "meshOpacity": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.5
+        },
+        "cantileverMeters": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.2
+        }
+      }
     },
     "barrierFacePoint": {
       "type": "object",

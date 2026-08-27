@@ -35,13 +35,13 @@ Decisões fechadas:
 - CCD, manifold, impulsos no ponto de contato, torque e solver iterativo determinístico;
 - dano cumulativo classificado por impulso/energia ou `delta-v`, não apenas pela velocidade absoluta;
 - `physicsContractVersion` persistida em salas, resultados, recordes e fantasmas;
-- nova linha `contracts/module-2/v2/`, schema de pista `2.0.0` e catálogo executável `2026.8`; o catálogo `2026.5` permanece válido somente para o runtime v1, o `2026.6` registra a publicação inicial das faces canônicas e o `2026.7` a primeira revisão estrutural.
+- nova linha `contracts/module-2/v2/`, schema de pista `2.0.0` e catálogo executável `2026.9`; o catálogo `2026.5` permanece válido somente para o runtime v1, o `2026.6` registra a publicação inicial das faces canônicas, o `2026.7` a primeira revisão estrutural e o `2026.8` a primeira rodada de infraestrutura visual.
 
-### Revisões estruturais e visuais dos catálogos 2026.7/2026.8
+### Revisões estruturais e visuais dos catálogos 2026.7–2026.9
 
-A implementação automatizada está concluída e a validação manual permanece pendente. A revisão preserva o contrato físico `2.0.0`, mas regenera as 24 pistas para suavizar as faces canônicas usadas simultaneamente por colisão e desenho, impedir que braços vizinhos na mesma elevação se cubram, unir trechos de zebra separados por lacunas pequenas e posicionar a zebra além da borda do asfalto. Todas as pistas recebem caminho e estruturas visuais de pit; Mônaco tem a origem da volta reposicionada na reta oficial; Monza recebe obstáculos na área de escape da primeira chicane; e Suzuka expõe a estrutura inferior e os apoios da passagem elevada. Landmarks provisórios dispersos foram removidos até a rodada futura de cenário temático.
+A implementação automatizada está concluída e a validação manual permanece pendente. A linha preserva o contrato físico `2.0.0`, mas regenera as 24 pistas para suavizar as faces canônicas usadas simultaneamente por colisão e desenho, impedir que braços vizinhos na mesma elevação se cubram e posicionar zebras além da borda do asfalto. O `2026.9` substitui a inferência global de zebras por perfis explícitos por curva, publica medidas de pit, estruturas e cercas e recusa geração em que uma estrutura atravesse asfalto, barreira ou outra estrutura. Mônaco mantém a origem da volta na reta oficial; Monza publica o corredor asfaltado e as fileiras alternadas de blocos do Rettifilo em `sceneryLayout.escapeRoads`, explicitamente fora da física; e a passagem elevada de Suzuka é composta em camada isolada para não acumular círculos de transparência. Landmarks provisórios dispersos permanecem fora do catálogo até a rodada futura de cenário temático.
 
-O relatório atual, incluindo perfis de boxes, arquibancadas, cercas, continuidade de zebras e a transparência contextual do cruzamento de Suzuka, está em [`../module-2-track-visual-audit-2026.8.md`](../module-2-track-visual-audit-2026.8.md). O relatório `2026.7` permanece como histórico da primeira revisão.
+O relatório atual, incluindo método, fontes, decisões por circuito, limitações e validações automatizadas, está em [`../module-2-track-visual-audit-2026.9.md`](../module-2-track-visual-audit-2026.9.md). Os relatórios `2026.7` e `2026.8` permanecem históricos.
 
 O diretório v2 foi ativado junto de constantes fundamentadas, schemas, geometrias, motor TypeScript e cenários. Não publicar valores desconhecidos como `null` ou tuning arbitrário.
 

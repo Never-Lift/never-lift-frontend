@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { TrackDefinition } from '@/lib/api'
 import {
   CAMERA_GROUND_DEPTH_SCALE,
+  CAMERA_HEIGHT_SCALE,
   CAMERA_VERTICAL_ANCHOR_RATIO,
   type CameraTransform,
 } from '@/race/camera'
@@ -12,6 +13,7 @@ import {
   calculateTrackCullMarginMeters,
   findSuzukaCrossingPoints,
   RaceRenderer,
+  sceneryVisualMetrics,
   sortVehiclesByProjectedDepth,
 } from '@/race/RaceRenderer'
 import type { InterpolatedVehicleState } from '@/race/types'
@@ -23,7 +25,13 @@ type DrawOperation = {
   width: number
   lineCap: CanvasLineCap
   lineDashOffset: number
+  opacity: number
   path: Array<{ x: number; y: number }>
+}
+
+type CompositeOperation = {
+  source: CanvasImageSource
+  opacity: number
 }
 
 type RendererInternals = {
@@ -52,9 +60,26 @@ type RendererInternals = {
     transform: CameraTransform,
   ) => void
   drawPitInfrastructure: (transform: CameraTransform) => void
+  drawEscapeRoadSurfaces: (
+    transform: CameraTransform,
+    elevationLayer: number,
+  ) => void
+  drawEscapeRoadObstacleRows: (
+    transform: CameraTransform,
+    elevationLayer: number,
+  ) => void
+  drawScenery: (
+    transform: CameraTransform,
+    layer: 'ground' | 'overhead',
+  ) => void
   drawBridgeUnderstructure: (
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
+  ) => void
+  drawIsolatedOpacityLayer: (
+    viewport: { x: number; y: number; width: number; height: number },
+    opacity: number,
+    draw: () => void,
   ) => void
   splitByElevationLayer: (
     points: TrackDefinition['centerline'],
@@ -72,9 +97,11 @@ function createRecordingContext() {
     ['lineCap', 'butt'],
     ['lineJoin', 'miter'],
     ['lineDashOffset', 0],
+    ['globalAlpha', 1],
   ])
   const propertyStack: Array<Map<PropertyKey, unknown>> = []
   const operations: DrawOperation[] = []
+  const composites: CompositeOperation[] = []
   let currentPath: Array<{ x: number; y: number }> = []
   const noOperation = vi.fn()
   const context = new Proxy(
@@ -113,7 +140,16 @@ function createRecordingContext() {
               width: Number(properties.get('lineWidth')),
               lineCap: properties.get('lineCap') as CanvasLineCap,
               lineDashOffset: Number(properties.get('lineDashOffset')),
+              opacity: Number(properties.get('globalAlpha')),
               path: currentPath.map((point) => ({ ...point })),
+            })
+          }
+        }
+        if (property === 'drawImage') {
+          return (source: CanvasImageSource) => {
+            composites.push({
+              source,
+              opacity: Number(properties.get('globalAlpha')),
             })
           }
         }
@@ -128,7 +164,7 @@ function createRecordingContext() {
       },
     },
   ) as CanvasRenderingContext2D
-  return { context, operations }
+  return { context, operations, composites }
 }
 
 function createCanvas(context: CanvasRenderingContext2D) {
@@ -561,14 +597,17 @@ describe('RaceRenderer audited surfaces', () => {
         widthMeters: 1,
         stripeLengthMeters: 2.5,
         palette: 'red-white',
+        outerColor: '#2f8548',
+        outerWidthMeters: 0.4,
       },
     ]
     const { context, operations } = createRecordingContext()
     const renderer = new RaceRenderer(createCanvas(context), track)
+    const curbTransform = { ...IDENTITY_TRANSFORM, pixelsPerMeter: 10 }
 
     internals(renderer).drawTrackCurbs(
       track.centerline.slice(0, 2),
-      IDENTITY_TRANSFORM,
+      curbTransform,
     )
 
     const curbStrokes = operations.filter(
@@ -586,9 +625,18 @@ describe('RaceRenderer audited surfaces', () => {
     for (const stroke of curbStrokes) {
       expect(stroke.lineCap).toBe('butt')
       expect(stroke.path).toHaveLength(2)
-      expect(stroke.path[0].y).toBeCloseTo(-5.5, 8)
-      expect(stroke.path[1].y).toBeCloseTo(-5.5, 8)
+      expect(stroke.path[0].y).toBeCloseTo(-55, 8)
+      expect(stroke.path[1].y).toBeCloseTo(-55, 8)
     }
+    const outerPaint = operations.filter(
+      (operation) =>
+        operation.kind === 'stroke' && operation.color === '#2f8548',
+    )
+    expect(outerPaint).toHaveLength(1)
+    expect(outerPaint[0].lineCap).toBe('butt')
+    expect(outerPaint[0].width).toBeCloseTo(4, 8)
+    expect(outerPaint[0].path[0].y).toBeCloseTo(-62, 8)
+    expect(outerPaint[0].path[1].y).toBeCloseTo(-62, 8)
   })
 
   it('does not extend a fence into the next unfenced segment', () => {
@@ -624,7 +672,8 @@ describe('RaceRenderer audited surfaces', () => {
     const meshFaces = operations.filter(
       (operation) =>
         operation.kind === 'fill' &&
-        operation.color === 'rgba(70, 84, 102, 0.22)',
+        operation.color === '#697789' &&
+        operation.opacity === 0.22,
     )
     const posts = operations.filter(
       (operation) =>
@@ -639,6 +688,60 @@ describe('RaceRenderer audited surfaces', () => {
           Math.abs(post.path[1].y - post.path[0].y) > 1,
       ),
     ).toBe(true)
+  })
+
+  it('uses the authored mesh, height, post spacing and cantilever for each fence segment', () => {
+    const track = createStraightTransitionTrack()
+    const barrier = track.barrierGeometry.segments.find(
+      (candidate) =>
+        candidate.trackLimitSegmentIndex === 0 && candidate.side === 'left',
+    )!
+    barrier.path = [
+      {
+        x: 0,
+        y: 65,
+        distanceMeters: 0,
+        elevationLayer: 0,
+      },
+      {
+        x: 10,
+        y: 65,
+        distanceMeters: 10,
+        elevationLayer: 0,
+      },
+    ]
+    track.barrierGeometry.segments = [barrier]
+    track.trackLimits.segments[0].left.fenceVisualStyle = {
+      heightMeters: 4,
+      postSpacingMeters: 5,
+      postColor: '#123456',
+      meshColor: '#654321',
+      meshOpacity: 0.31,
+      cantileverMeters: 0.6,
+    }
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawTrackFences(track.centerline, IDENTITY_TRANSFORM)
+
+    const mesh = operations.filter(
+      (operation) =>
+        operation.kind === 'fill' && operation.color === '#654321',
+    )
+    const postsAndTopRail = operations.filter(
+      (operation) =>
+        operation.kind === 'stroke' && operation.color === '#123456',
+    )
+    expect(mesh).toHaveLength(1)
+    expect(mesh[0].opacity).toBeCloseTo(0.31, 8)
+    expect(postsAndTopRail).toHaveLength(4)
+    expect(
+      postsAndTopRail.filter((operation) => operation.path.length === 2),
+    ).toHaveLength(4)
+    const firstPost = postsAndTopRail[1]
+    expect(Math.abs(firstPost.path[1].y - firstPost.path[0].y)).toBeGreaterThan(
+      0.5,
+    )
   })
 
   it('extrudes the canonical barrier into a visible 2.5D side face', () => {
@@ -707,7 +810,7 @@ describe('RaceRenderer audited surfaces', () => {
   it('draws a connected pit lane, box markings and repeated garages', () => {
     const track = createStraightTransitionTrack()
     track.pitLane.path = Array.from({ length: 25 }, (_, index) => ({
-      x: index,
+      x: index * (20 / 24),
       y: -11,
     }))
     const { context, operations } = createRecordingContext()
@@ -719,8 +822,16 @@ describe('RaceRenderer audited surfaces', () => {
       operations.filter(
         (operation) =>
           operation.kind === 'stroke' && operation.color === '#29313a',
-      ).length,
-    ).toBe(24)
+      ),
+    ).toHaveLength(24)
+    expect(
+      operations
+        .filter(
+          (operation) =>
+            operation.kind === 'stroke' && operation.color === '#29313a',
+        )
+        .every((operation) => Math.abs(operation.width - 11) < 1e-8),
+    ).toBe(true)
     expect(
       operations.some(
         (operation) =>
@@ -741,6 +852,169 @@ describe('RaceRenderer audited surfaces', () => {
           operation.color === 'rgba(88, 148, 169, 0.56)',
       ),
     ).toBe(true)
+    const firstPitBox = operations.find(
+      (operation) =>
+        operation.kind === 'fill' && operation.color === '#d9dcdf55',
+    )!
+    const boxWidth =
+      Math.max(...firstPitBox.path.map((point) => point.x)) -
+      Math.min(...firstPitBox.path.map((point) => point.x))
+    const boxDepth =
+      Math.max(...firstPitBox.path.map((point) => point.y)) -
+      Math.min(...firstPitBox.path.map((point) => point.y))
+    expect(boxWidth).toBeCloseTo(7, 8)
+    expect(boxDepth).toBeCloseTo(2.4, 8)
+
+    const pitWallBase = operations.find(
+      (operation) =>
+        operation.kind === 'stroke' &&
+        operation.color === '#505a64' &&
+        operation.path.length === 25,
+    )!
+    const pitWallTop = operations.find(
+      (operation) =>
+        operation.kind === 'stroke' &&
+        operation.color === '#8f2933' &&
+        operation.path.length === 25,
+    )!
+    expect(pitWallBase).toBeDefined()
+    expect(pitWallTop).toBeDefined()
+    expect(pitWallBase.path[0].y - pitWallTop.path[0].y).toBeCloseTo(
+      CAMERA_HEIGHT_SCALE,
+      8,
+    )
+  })
+
+  it('draws a cullable visual-only escape road with alternating block rows', () => {
+    const track = createStraightTransitionTrack()
+    track.sceneryLayout.escapeRoads = [
+      {
+        id: 'test-slalom',
+        kind: 'slalom-block-rows',
+        affectsPhysics: false,
+        elevationLayer: 0,
+        widthMeters: 7,
+        path: [
+          { x: -150, y: 0 },
+          { x: 150, y: 0 },
+        ],
+        obstacleRows: [
+          {
+            from: { x: -6, y: -3 },
+            to: { x: -6, y: 1 },
+            blockLengthMeters: 1,
+            palette: 'red-white',
+          },
+          {
+            from: { x: 0, y: -1 },
+            to: { x: 0, y: 3 },
+            blockLengthMeters: 1,
+            palette: 'red-white',
+          },
+          {
+            from: { x: 6, y: -3 },
+            to: { x: 6, y: 1 },
+            blockLengthMeters: 1,
+            palette: 'red-white',
+          },
+        ],
+      },
+    ]
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawEscapeRoadSurfaces(IDENTITY_TRANSFORM, 0)
+    internals(renderer).drawEscapeRoadObstacleRows(IDENTITY_TRANSFORM, 0)
+
+    expect(
+      operations.filter(
+        (operation) =>
+          operation.kind === 'stroke' && operation.color === '#343d49',
+      ),
+    ).toHaveLength(1)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'fill' && operation.color === '#f0f0fa',
+      ),
+    ).toBe(true)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'fill' && operation.color === '#c52c35',
+      ),
+    ).toBe(true)
+
+    const beforeWrongLayer = operations.length
+    internals(renderer).drawEscapeRoadSurfaces(IDENTITY_TRANSFORM, 1)
+    internals(renderer).drawEscapeRoadObstacleRows(IDENTITY_TRANSFORM, 1)
+    expect(operations).toHaveLength(beforeWrongLayer)
+
+    track.sceneryLayout.escapeRoads[0].path = [
+      { x: 300, y: 300 },
+      { x: 360, y: 300 },
+    ]
+    track.sceneryLayout.escapeRoads[0].obstacleRows = [
+      {
+        from: { x: 320, y: 296 },
+        to: { x: 320, y: 300 },
+        blockLengthMeters: 1,
+        palette: 'red-white',
+      },
+      {
+        from: { x: 330, y: 300 },
+        to: { x: 330, y: 304 },
+        blockLengthMeters: 1,
+        palette: 'red-white',
+      },
+      {
+        from: { x: 340, y: 296 },
+        to: { x: 340, y: 300 },
+        blockLengthMeters: 1,
+        palette: 'red-white',
+      },
+    ]
+    const beforeCulled = operations.length
+    internals(renderer).drawEscapeRoadSurfaces(IDENTITY_TRANSFORM, 0)
+    internals(renderer).drawEscapeRoadObstacleRows(IDENTITY_TRANSFORM, 0)
+    expect(operations).toHaveLength(beforeCulled)
+  })
+
+  it('keeps visual escape roads outside the deterministic physics state', () => {
+    const baseTrack = structuredClone(LONG_TRACK)
+    const visualTrack = structuredClone(LONG_TRACK)
+    visualTrack.sceneryLayout.escapeRoads = [
+      {
+        id: 'physics-isolation-slalom',
+        kind: 'slalom-block-rows',
+        affectsPhysics: false,
+        elevationLayer: 0,
+        widthMeters: 7,
+        path: [
+          { x: 0, y: 0 },
+          { x: 30, y: 0 },
+        ],
+        obstacleRows: [
+          { from: { x: 8, y: -3 }, to: { x: 8, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
+          { from: { x: 15, y: -1 }, to: { x: 15, y: 3 }, blockLengthMeters: 1, palette: 'red-white' },
+          { from: { x: 22, y: -3 }, to: { x: 22, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
+        ],
+      },
+    ]
+    const baseEngine = createEngine(baseTrack)
+    const visualEngine = createEngine(visualTrack)
+    for (const engine of [baseEngine, visualEngine]) {
+      engine.setInput('player-1', { throttle: 0.82, brake: 0, steer: 0.18 })
+    }
+    for (let frame = 0; frame < 180; frame += 1) {
+      baseEngine.advanceFrame(1 / 60)
+      visualEngine.advanceFrame(1 / 60)
+    }
+
+    expect(visualEngine.getVehicleState('player-1')).toEqual(
+      baseEngine.getVehicleState('player-1'),
+    )
+    expect(visualEngine.getResults()).toEqual(baseEngine.getResults())
   })
 
   it('draws a visible deck underside and supports for the Suzuka overpass', () => {
@@ -770,6 +1044,28 @@ describe('RaceRenderer audited surfaces', () => {
           operation.kind === 'stroke' && operation.color === '#222a34',
       ),
     ).toBe(true)
+  })
+
+  it('uses authored structure dimensions for footprint scaling and safe culling', () => {
+    const metrics = sceneryVisualMetrics({
+      id: 'metric-race-control',
+      kind: 'race-control-building',
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      scale: 2,
+      dimensions: {
+        lengthMeters: 27,
+        depthMeters: 8.2,
+        heightMeters: 10,
+      },
+    })
+
+    expect(metrics.scale).toBeCloseTo(20, 8)
+    expect(metrics.depthScale).toBeCloseTo(0.5, 8)
+    expect(metrics.cullRadiusMeters).toBeCloseTo(
+      Math.hypot(13.5, 4.1) + 10 * CAMERA_HEIGHT_SCALE,
+      8,
+    )
   })
 
   it('fades only Suzuka upper layers for a lower car approaching the crossover', () => {
@@ -806,6 +1102,48 @@ describe('RaceRenderer audited surfaces', () => {
         crossings,
       ),
     ).toBe(1)
+  })
+
+  it('composites a faded Suzuka layer once so overlapping round segments stay smooth', () => {
+    const track = createStraightTransitionTrack()
+    track.id = 'suzuka'
+    const main = createRecordingContext()
+    const layer = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(main.context), track)
+    const layerCanvas = document.createElement('canvas')
+    Object.defineProperty(layerCanvas, 'getContext', {
+      value: () => layer.context,
+    })
+    const rendererInternals = internals(renderer) as RendererInternals & {
+      opacityLayerCanvas?: HTMLCanvasElement
+      opacityLayerContext?: CanvasRenderingContext2D
+    }
+    rendererInternals.opacityLayerCanvas = layerCanvas
+    rendererInternals.opacityLayerContext = layer.context
+
+    const opacityWhileDrawing: number[] = []
+    rendererInternals.drawIsolatedOpacityLayer(
+      { x: 0, y: 0, width: 120, height: 80 },
+      0.34,
+      () => {
+        opacityWhileDrawing.push(layer.context.globalAlpha)
+        layer.context.beginPath()
+        layer.context.moveTo(0, 0)
+        layer.context.lineTo(60, 0)
+        layer.context.stroke()
+        layer.context.beginPath()
+        layer.context.moveTo(40, 0)
+        layer.context.lineTo(100, 0)
+        layer.context.stroke()
+      },
+    )
+
+    expect(opacityWhileDrawing).toEqual([1])
+    expect(layer.operations).toHaveLength(2)
+    expect(main.operations).toHaveLength(0)
+    expect(main.composites).toEqual([
+      { source: layerCanvas, opacity: 0.34 },
+    ])
   })
 
   it('splits elevation transitions at the same midpoint used by TrackGeometry', () => {

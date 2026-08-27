@@ -1,7 +1,7 @@
 {
   "contractVersion": "2.0.0",
   "trackSchemaVersion": "2.0.0",
-  "catalogVersion": "2026.8",
+  "catalogVersion": "2026.9",
   "seasonReference": 2026,
   "calendarPolicy": "original-24-round-freeze",
   "vehiclePolicy": "single-f1-paint-only",

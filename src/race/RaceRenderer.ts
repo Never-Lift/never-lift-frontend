@@ -3,7 +3,10 @@ import type {
   TrackChunk,
   TrackCurbPalette,
   TrackDefinition,
+  TrackEscapeRoad,
+  TrackFenceVisualStyle,
   TrackPitVisualStyle,
+  TrackSceneryObject,
   TrackSideEnvironment,
   TrackSurfaceMaterial,
 } from '@/lib/api'
@@ -26,6 +29,7 @@ import type { LocalRaceOverlayState } from '@/race/LocalRaceSession'
 import { magnitude } from '@/race/math'
 import type { RaceEngine } from '@/race/RaceEngine'
 import {
+  classifySceneryKind,
   drawSceneryVisual,
   getSceneryRenderLayer,
   getSceneryRotationOffset,
@@ -134,15 +138,16 @@ const BARRIER_STYLES: Record<
   },
 }
 
-const FENCE_STYLE = {
-  color: '#697789',
-  widthMeters: 0.22,
-  dashMeters: [0.8, 0.45],
-}
+const FENCE_WIDTH_METERS = 0.22
 const FENCE_GAP_METERS = 0.18
-const FENCE_HEIGHT_METERS = 2.6
-const FENCE_POST_SPACING_METERS = 3
-const PIT_LANE_WIDTH_METERS = 6
+const DEFAULT_FENCE_VISUAL_STYLE: TrackFenceVisualStyle = {
+  heightMeters: 2.6,
+  postSpacingMeters: 3,
+  postColor: '#748194',
+  meshColor: '#697789',
+  meshOpacity: 0.22,
+  cantileverMeters: 0,
+}
 const BRIDGE_DECK_HEIGHT_METERS = 2.4
 const SUZUKA_REVEAL_START_METERS = 62
 const SUZUKA_REVEAL_FULL_METERS = 18
@@ -169,6 +174,65 @@ const AMBIENT_PARTICLE_COLORS: Record<
   coastal: 'rgba(184, 226, 230, 0.28)',
   classic: 'rgba(196, 215, 159, 0.3)',
   'night-city': 'rgba(118, 192, 255, 0.3)',
+}
+
+type SceneryVisualMetrics = {
+  scale: number
+  depthScale: number
+  cullRadiusMeters: number
+}
+
+/**
+ * Converts authored metric structure dimensions to the legacy visual's local
+ * scale. Keeping the conversion here lets old catalog objects retain their
+ * `scale` fallback while 2026.9 structures use their real footprint for both
+ * drawing and culling.
+ */
+export function sceneryVisualMetrics(
+  object: TrackSceneryObject,
+): SceneryVisualMetrics {
+  const dimensions = object.dimensions
+  if (!dimensions) {
+    return {
+      scale: object.scale,
+      depthScale: 1,
+      cullRadiusMeters: object.scale * 0.9,
+    }
+  }
+
+  const category = classifySceneryKind(object.kind)
+  const widthFactor =
+    category === 'grandstand'
+      ? 1.65
+      : category === 'building'
+        ? object.kind.toLowerCase().includes('stadium')
+          ? 1.65
+          : 1.35
+        : category === 'tower'
+          ? 0.65
+          : 1
+  const depthFactor =
+    category === 'grandstand'
+      ? 0.82
+      : category === 'building'
+        ? object.kind.toLowerCase().includes('wing')
+          ? 0.65
+          : 0.82
+        : category === 'tower'
+          ? 0.65
+          : 1
+  const scale = dimensions.lengthMeters / widthFactor
+  const renderedDepthMeters = Math.max(Number.EPSILON, scale * depthFactor)
+  const footprintRadiusMeters = Math.hypot(
+    dimensions.lengthMeters / 2,
+    dimensions.depthMeters / 2,
+  )
+  return {
+    scale,
+    depthScale: dimensions.depthMeters / renderedDepthMeters,
+    cullRadiusMeters:
+      footprintRadiusMeters + dimensions.heightMeters * CAMERA_HEIGHT_SCALE,
+  }
 }
 
 function deterministicHash(seed: string) {
@@ -305,7 +369,12 @@ function trackCullMarginMeters(
     const sideExtent = (environment: TrackSideEnvironment) =>
       trackSideEnvironmentWidth(environment) +
       BARRIER_STYLES[environment.barrier].widthMeters / 2 +
-      (environment.fence ? FENCE_GAP_METERS + FENCE_STYLE.widthMeters : 0)
+      (environment.fence
+        ? FENCE_GAP_METERS +
+          FENCE_WIDTH_METERS +
+          (environment.fenceVisualStyle?.cantileverMeters ??
+            DEFAULT_FENCE_VISUAL_STYLE.cantileverMeters)
+        : 0)
     return Math.max(
       widest,
       point.halfWidthMeters + sideExtent(leftEnvironment),
@@ -330,7 +399,8 @@ export function sortVehiclesByProjectedDepth(
 }
 
 export class RaceRenderer {
-  private readonly context: CanvasRenderingContext2D
+  private readonly outputContext: CanvasRenderingContext2D
+  private activeContext: CanvasRenderingContext2D
   private readonly canvas: HTMLCanvasElement
   private readonly track: TrackDefinition
   private readonly geometry: TrackGeometry
@@ -341,6 +411,8 @@ export class RaceRenderer {
   private readonly suzukaCrossings: Vector2[]
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
+  private opacityLayerCanvas?: HTMLCanvasElement
+  private opacityLayerContext?: CanvasRenderingContext2D
   private frameCount = 0
   private renderStats: RenderStats
 
@@ -366,7 +438,12 @@ export class RaceRenderer {
     }
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Canvas 2D não está disponível neste navegador.')
-    this.context = context
+    this.outputContext = context
+    this.activeContext = context
+  }
+
+  private get context() {
+    return this.activeContext
   }
 
   render(
@@ -507,6 +584,9 @@ export class RaceRenderer {
         [
           ...visibleTrackSections.map((section) => section.elevationLayer),
           ...vehicles.map((vehicle) => vehicle.trackLayer),
+          ...this.track.sceneryLayout.escapeRoads.map(
+            (road) => road.elevationLayer,
+          ),
         ],
       ),
     ].sort((first, second) => first - second)
@@ -521,44 +601,52 @@ export class RaceRenderer {
         this.track.id === 'suzuka' &&
         elevationLayer > 0 &&
         suzukaUpperLayerOpacity < 1
-      if (isFadedSuzukaUpperLayer) {
-        context.save()
-        context.globalAlpha *= suzukaUpperLayerOpacity
-      }
       const sections = visibleTrackSections.filter(
         (section) => section.elevationLayer === elevationLayer,
       )
-      if (this.track.id === 'suzuka' && elevationLayer > 0) {
+      const drawElevationLayer = () => {
+        if (this.track.id === 'suzuka' && elevationLayer > 0) {
+          for (const { points } of sections) {
+            this.drawBridgeUnderstructure(points, transform)
+          }
+        }
         for (const { points } of sections) {
-          this.drawBridgeUnderstructure(points, transform)
+          this.drawTrackEnvironments(points, transform)
+        }
+        this.drawEscapeRoadSurfaces(transform, elevationLayer)
+        if (elevationLayer === 0) this.drawPitInfrastructure(transform)
+        for (const { points } of sections) {
+          this.drawTrackAsphalt(points, transform)
+        }
+        for (const { points } of sections) {
+          this.drawTrackFences(points, transform)
+        }
+        for (const { points } of sections) {
+          this.drawTrackBarriers(points, transform)
+        }
+        for (const { points } of sections) {
+          this.drawTrackDetails(points, transform)
+        }
+        if (elevationLayer === 0) this.drawStartFinish(transform)
+        this.drawTireMarks(transform, elevationLayer)
+        this.drawEscapeRoadObstacleRows(transform, elevationLayer)
+        const vehiclesAtLayer = sortVehiclesByProjectedDepth(
+          vehicles.filter((vehicle) => vehicle.trackLayer === elevationLayer),
+          transform,
+        )
+        for (const vehicle of vehiclesAtLayer) {
+          this.drawVehicle(vehicle, transform)
         }
       }
-      for (const { points } of sections) {
-        this.drawTrackEnvironments(points, transform)
+      if (isFadedSuzukaUpperLayer) {
+        this.drawIsolatedOpacityLayer(
+          viewport,
+          suzukaUpperLayerOpacity,
+          drawElevationLayer,
+        )
+      } else {
+        drawElevationLayer()
       }
-      if (elevationLayer === 0) this.drawPitInfrastructure(transform)
-      for (const { points } of sections) {
-        this.drawTrackAsphalt(points, transform)
-      }
-      for (const { points } of sections) {
-        this.drawTrackFences(points, transform)
-      }
-      for (const { points } of sections) {
-        this.drawTrackBarriers(points, transform)
-      }
-      for (const { points } of sections) {
-        this.drawTrackDetails(points, transform)
-      }
-      if (elevationLayer === 0) this.drawStartFinish(transform)
-      this.drawTireMarks(transform, elevationLayer)
-      const vehiclesAtLayer = sortVehiclesByProjectedDepth(
-        vehicles.filter((vehicle) => vehicle.trackLayer === elevationLayer),
-        transform,
-      )
-      for (const vehicle of vehiclesAtLayer) {
-        this.drawVehicle(vehicle, transform)
-      }
-      if (isFadedSuzukaUpperLayer) context.restore()
     }
     this.drawScenery(transform, 'overhead')
     const ambientParticleCount = this.drawAmbientParticles(
@@ -578,6 +666,73 @@ export class RaceRenderer {
     this.drawStartProcedure(viewport, focusedVehicle.id, overlayState)
     context.restore()
     return ambientParticleCount
+  }
+
+  private drawIsolatedOpacityLayer(
+    viewport: Viewport,
+    opacity: number,
+    draw: () => void,
+  ) {
+    const layer = this.getOpacityLayer()
+    if (!layer) {
+      // A second 2D context is available in every supported browser. This
+      // fallback keeps the race visible in reduced test/browser shims.
+      this.context.save()
+      this.context.globalAlpha *= opacity
+      draw()
+      this.context.restore()
+      return
+    }
+
+    const { canvas, context } = layer
+    if (canvas.width !== this.canvas.width || canvas.height !== this.canvas.height) {
+      canvas.width = this.canvas.width
+      canvas.height = this.canvas.height
+    }
+    context.clearRect(viewport.x, viewport.y, viewport.width, viewport.height)
+    context.save()
+    context.beginPath()
+    context.rect(viewport.x, viewport.y, viewport.width, viewport.height)
+    context.clip()
+
+    const previousContext = this.activeContext
+    this.activeContext = context
+    try {
+      draw()
+    } finally {
+      this.activeContext = previousContext
+      context.restore()
+    }
+
+    this.outputContext.save()
+    this.outputContext.globalAlpha *= opacity
+    this.outputContext.drawImage(
+      canvas,
+      viewport.x,
+      viewport.y,
+      viewport.width,
+      viewport.height,
+      viewport.x,
+      viewport.y,
+      viewport.width,
+      viewport.height,
+    )
+    this.outputContext.restore()
+  }
+
+  private getOpacityLayer() {
+    if (this.opacityLayerCanvas && this.opacityLayerContext) {
+      return {
+        canvas: this.opacityLayerCanvas,
+        context: this.opacityLayerContext,
+      }
+    }
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    if (!context) return undefined
+    this.opacityLayerCanvas = canvas
+    this.opacityLayerContext = context
+    return { canvas, context }
   }
 
   private getChunkPoints(chunk: TrackChunk) {
@@ -663,6 +818,130 @@ export class RaceRenderer {
     }
   }
 
+  private isProjectedSegmentVisible(
+    from: Vector2,
+    to: Vector2,
+    halfWidthPixels: number,
+    viewport: Viewport,
+  ) {
+    return !(
+      Math.max(from.x, to.x) < viewport.x - halfWidthPixels ||
+      Math.min(from.x, to.x) >
+        viewport.x + viewport.width + halfWidthPixels ||
+      Math.max(from.y, to.y) < viewport.y - halfWidthPixels ||
+      Math.min(from.y, to.y) >
+        viewport.y + viewport.height + halfWidthPixels
+    )
+  }
+
+  private drawEscapeRoadSurfaces(
+    transform: CameraTransform,
+    elevationLayer: number,
+  ) {
+    for (const road of this.track.sceneryLayout.escapeRoads) {
+      if (road.elevationLayer !== elevationLayer) continue
+      for (let index = 0; index < road.path.length - 1; index += 1) {
+        const fromPoint = road.path[index]
+        const toPoint = road.path[index + 1]
+        const from = worldToCamera(fromPoint, transform)
+        const to = worldToCamera(toPoint, transform)
+        const width = projectedTrackWidth(
+          fromPoint,
+          toPoint,
+          road.widthMeters,
+          transform,
+        )
+        if (
+          !this.isProjectedSegmentVisible(
+            from,
+            to,
+            width / 2,
+            transform.viewport,
+          )
+        ) {
+          continue
+        }
+        this.strokeSegment(
+          from,
+          to,
+          width + Math.max(1, transform.pixelsPerMeter * 0.18),
+          '#8d949d',
+        )
+        this.strokeSegment(from, to, width, '#343d49')
+      }
+    }
+  }
+
+  private drawEscapeRoadObstacleRows(
+    transform: CameraTransform,
+    elevationLayer: number,
+  ) {
+    for (const road of this.track.sceneryLayout.escapeRoads) {
+      if (road.elevationLayer !== elevationLayer) continue
+      for (const row of road.obstacleRows) {
+        const projectedFrom = worldToCamera(row.from, transform)
+        const projectedTo = worldToCamera(row.to, transform)
+        const blockDepthMeters = Math.min(0.85, row.blockLengthMeters * 0.8)
+        const projectedDepth = projectedTrackWidth(
+          row.from,
+          row.to,
+          blockDepthMeters,
+          transform,
+        )
+        if (
+          !this.isProjectedSegmentVisible(
+            projectedFrom,
+            projectedTo,
+            projectedDepth / 2,
+            transform.viewport,
+          )
+        ) {
+          continue
+        }
+        this.drawEscapeRoadObstacleRow(row, transform, blockDepthMeters)
+      }
+    }
+  }
+
+  private drawEscapeRoadObstacleRow(
+    row: TrackEscapeRoad['obstacleRows'][number],
+    transform: CameraTransform,
+    blockDepthMeters: number,
+  ) {
+    const delta = { x: row.to.x - row.from.x, y: row.to.y - row.from.y }
+    const lengthMeters = Math.hypot(delta.x, delta.y)
+    if (lengthMeters <= 1e-9) return
+    const tangent = { x: delta.x / lengthMeters, y: delta.y / lengthMeters }
+    const normal = { x: -tangent.y, y: tangent.x }
+    const blockCount = Math.max(
+      1,
+      Math.ceil(lengthMeters / row.blockLengthMeters),
+    )
+    for (let index = 0; index < blockCount; index += 1) {
+      const fromDistance = (lengthMeters * index) / blockCount
+      const toDistance = (lengthMeters * (index + 1)) / blockCount
+      const from = {
+        x: row.from.x + tangent.x * fromDistance,
+        y: row.from.y + tangent.y * fromDistance,
+      }
+      const to = {
+        x: row.from.x + tangent.x * toDistance,
+        y: row.from.y + tangent.y * toDistance,
+      }
+      const halfDepth = blockDepthMeters / 2
+      this.fillWorldPolygon(
+        [
+          { x: from.x - normal.x * halfDepth, y: from.y - normal.y * halfDepth },
+          { x: to.x - normal.x * halfDepth, y: to.y - normal.y * halfDepth },
+          { x: to.x + normal.x * halfDepth, y: to.y + normal.y * halfDepth },
+          { x: from.x + normal.x * halfDepth, y: from.y + normal.y * halfDepth },
+        ],
+        transform,
+        index % 2 === 0 ? '#f0f0fa' : '#c52c35',
+      )
+    }
+  }
+
   private drawTrackDetails(
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
@@ -701,6 +980,41 @@ export class RaceRenderer {
       const overlapFrom = Math.max(visibleFrom, curb.fromDistanceMeters)
       const overlapTo = Math.min(visibleTo, curb.toDistanceMeters)
       if (overlapTo <= overlapFrom) continue
+      const outerColor = curb.outerColor
+      const outerWidthMeters = curb.outerWidthMeters
+      if (outerColor && outerWidthMeters) {
+        const outerPoints = this.trackPointsForRange(
+          points,
+          overlapFrom,
+          overlapTo,
+        ).map((point) =>
+          this.offsetTrackPoint(
+            point,
+            curb.side,
+            point.halfWidthMeters +
+              curb.widthMeters +
+              outerWidthMeters / 2,
+          ),
+        )
+        const first = outerPoints[0]
+        const last = outerPoints.at(-1)
+        if (first && last) {
+          this.strokePolyline(
+            outerPoints.map((point) => worldToCamera(point, transform)),
+            Math.max(
+              1,
+              projectedTrackWidth(
+                first,
+                last,
+                outerWidthMeters,
+                transform,
+              ),
+            ),
+            outerColor,
+            'butt',
+          )
+        }
+      }
       const colors = CURB_PALETTES[curb.palette]
       let stripeIndex = Math.floor(
         (overlapFrom - curb.fromDistanceMeters + 0.0001) /
@@ -1139,6 +1453,8 @@ export class RaceRenderer {
       ) {
         continue
       }
+      const visualStyle =
+        environment.fenceVisualStyle ?? DEFAULT_FENCE_VISUAL_STYLE
       for (let index = 0; index < barrier.path.length - 1; index += 1) {
         const from = barrier.path[index]
         const to = barrier.path[index + 1]
@@ -1160,11 +1476,13 @@ export class RaceRenderer {
         const offset =
           barrier.thicknessMeters +
           FENCE_GAP_METERS +
-          FENCE_STYLE.widthMeters / 2
+          FENCE_WIDTH_METERS / 2
         this.drawFenceSegment(
           { x: from.x + outward.x * offset, y: from.y + outward.y * offset },
           { x: to.x + outward.x * offset, y: to.y + outward.y * offset },
           transform,
+          visualStyle,
+          { x: -outward.x, y: -outward.y },
         )
       }
     }
@@ -1174,33 +1492,58 @@ export class RaceRenderer {
     fromPoint: Vector2,
     toPoint: Vector2,
     transform: CameraTransform,
+    style: TrackFenceVisualStyle,
+    inward: Vector2,
   ) {
     const from = worldToCamera(fromPoint, transform)
     const to = worldToCamera(toPoint, transform)
+    const leanedFrom = worldToCamera(
+      {
+        x: fromPoint.x + inward.x * style.cantileverMeters,
+        y: fromPoint.y + inward.y * style.cantileverMeters,
+      },
+      transform,
+    )
+    const leanedTo = worldToCamera(
+      {
+        x: toPoint.x + inward.x * style.cantileverMeters,
+        y: toPoint.y + inward.y * style.cantileverMeters,
+      },
+      transform,
+    )
     const height =
-      FENCE_HEIGHT_METERS * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
-    const topFrom = { x: from.x, y: from.y - height }
-    const topTo = { x: to.x, y: to.y - height }
+      style.heightMeters * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
+    const topFrom = { x: leanedFrom.x, y: leanedFrom.y - height }
+    const topTo = { x: leanedTo.x, y: leanedTo.y - height }
     this.context.beginPath()
     this.context.moveTo(from.x, from.y)
     this.context.lineTo(to.x, to.y)
     this.context.lineTo(topTo.x, topTo.y)
     this.context.lineTo(topFrom.x, topFrom.y)
     this.context.closePath()
-    this.context.fillStyle = 'rgba(70, 84, 102, 0.22)'
+    this.context.save()
+    this.context.globalAlpha *= style.meshOpacity
+    this.context.fillStyle = style.meshColor
     this.context.fill()
+    this.context.restore()
 
     this.strokeSegment(
       topFrom,
       topTo,
       Math.max(1, transform.pixelsPerMeter * 0.08),
-      FENCE_STYLE.color,
+      style.postColor,
     )
     this.strokeSegment(
-      { x: from.x, y: from.y - height * 0.52 },
-      { x: to.x, y: to.y - height * 0.52 },
+      {
+        x: from.x + (topFrom.x - from.x) * 0.52,
+        y: from.y + (topFrom.y - from.y) * 0.52,
+      },
+      {
+        x: to.x + (topTo.x - to.x) * 0.52,
+        y: to.y + (topTo.y - to.y) * 0.52,
+      },
       Math.max(1, transform.pixelsPerMeter * 0.045),
-      'rgba(137, 150, 168, 0.62)',
+      style.meshColor,
     )
     const lengthMeters = Math.hypot(
       toPoint.x - fromPoint.x,
@@ -1208,7 +1551,7 @@ export class RaceRenderer {
     )
     const postCount = Math.max(
       1,
-      Math.ceil(lengthMeters / FENCE_POST_SPACING_METERS),
+      Math.ceil(lengthMeters / style.postSpacingMeters),
     )
     for (let index = 0; index <= postCount; index += 1) {
       const ratio = index / postCount
@@ -1216,11 +1559,15 @@ export class RaceRenderer {
         x: from.x + (to.x - from.x) * ratio,
         y: from.y + (to.y - from.y) * ratio,
       }
+      const top = {
+        x: topFrom.x + (topTo.x - topFrom.x) * ratio,
+        y: topFrom.y + (topTo.y - topFrom.y) * ratio,
+      }
       this.strokeSegment(
         ground,
-        { x: ground.x, y: ground.y - height },
+        top,
         Math.max(1, transform.pixelsPerMeter * 0.07),
-        '#748194',
+        style.postColor,
       )
     }
   }
@@ -1230,7 +1577,7 @@ export class RaceRenderer {
       trackSideEnvironmentWidth(environment) +
       BARRIER_STYLES[environment.barrier].widthMeters / 2 +
       FENCE_GAP_METERS +
-      FENCE_STYLE.widthMeters / 2
+      FENCE_WIDTH_METERS / 2
     )
   }
 
@@ -1286,13 +1633,14 @@ export class RaceRenderer {
     const path = this.track.pitLane.path
     if (path.length < 2) return
     const style = this.track.pitLane.visualStyle
+    const laneWidthMeters = style.laneWidthMeters
     for (let index = 0; index < path.length - 1; index += 1) {
       const from = path[index]
       const to = path[index + 1]
       this.strokeSegment(
         worldToCamera(from, transform),
         worldToCamera(to, transform),
-        projectedTrackWidth(from, to, PIT_LANE_WIDTH_METERS, transform),
+        projectedTrackWidth(from, to, laneWidthMeters, transform),
         '#29313a',
       )
     }
@@ -1304,8 +1652,8 @@ export class RaceRenderer {
         const delta = { x: next.x - previous.x, y: next.y - previous.y }
         const length = Math.max(Number.EPSILON, Math.hypot(delta.x, delta.y))
         return {
-          x: point.x + (-delta.y / length) * sideDirection * (PIT_LANE_WIDTH_METERS / 2),
-          y: point.y + (delta.x / length) * sideDirection * (PIT_LANE_WIDTH_METERS / 2),
+          x: point.x + (-delta.y / length) * sideDirection * (laneWidthMeters / 2),
+          y: point.y + (delta.x / length) * sideDirection * (laneWidthMeters / 2),
         }
       })
       this.strokePolyline(
@@ -1334,8 +1682,12 @@ export class RaceRenderer {
         Math.hypot(towardTrack.x, towardTrack.y),
       )
       return {
-        x: point.x + (towardTrack.x / length) * (PIT_LANE_WIDTH_METERS / 2 + 0.35),
-        y: point.y + (towardTrack.y / length) * (PIT_LANE_WIDTH_METERS / 2 + 0.35),
+        x:
+          point.x +
+          (towardTrack.x / length) * (style.laneWidthMeters / 2 + 0.35),
+        y:
+          point.y +
+          (towardTrack.y / length) * (style.laneWidthMeters / 2 + 0.35),
       }
     })
     const projected = wallPath.map((point) => worldToCamera(point, transform))
@@ -1345,7 +1697,10 @@ export class RaceRenderer {
       style.secondaryColor,
       'butt',
     )
-    const wallHeight = transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE * 0.72
+    const wallHeight =
+      transform.pixelsPerMeter *
+      CAMERA_HEIGHT_SCALE *
+      style.pitWallHeightMeters
     this.strokePolyline(
       projected.map((point) => ({ x: point.x, y: point.y - wallHeight })),
       Math.max(1, transform.pixelsPerMeter * 0.16),
@@ -1359,25 +1714,58 @@ export class RaceRenderer {
     transform: CameraTransform,
     style: TrackPitVisualStyle,
   ) {
-    const firstIndex = Math.floor(path.length * 0.27)
-    const lastIndex = Math.floor(path.length * 0.73)
-    const span = Math.max(1, lastIndex - firstIndex)
-    for (let garageIndex = 0; garageIndex < style.garageCount; garageIndex += 1) {
-      const fromIndex = Math.min(
-        path.length - 2,
-        firstIndex + Math.floor((span * garageIndex) / style.garageCount),
+    const cumulativeDistances = [0]
+    for (let index = 1; index < path.length; index += 1) {
+      cumulativeDistances.push(
+        cumulativeDistances[index - 1] +
+          Math.hypot(
+            path[index].x - path[index - 1].x,
+            path[index].y - path[index - 1].y,
+          ),
       )
-      const toIndex = Math.min(
-        path.length - 1,
-        firstIndex + Math.ceil((span * (garageIndex + 1)) / style.garageCount),
+    }
+    const totalLengthMeters = cumulativeDistances.at(-1) ?? 0
+    if (totalLengthMeters <= Number.EPSILON) return
+
+    const samplePath = (distanceMeters: number) => {
+      const clampedDistance = Math.max(
+        0,
+        Math.min(totalLengthMeters, distanceMeters),
       )
+      let toIndex = cumulativeDistances.findIndex(
+        (distance) => distance >= clampedDistance,
+      )
+      if (toIndex <= 0) toIndex = 1
+      const fromIndex = toIndex - 1
       const from = path[fromIndex]
       const to = path[toIndex]
-      const delta = { x: to.x - from.x, y: to.y - from.y }
-      const length = Math.hypot(delta.x, delta.y)
-      if (length <= Number.EPSILON) continue
-      const tangent = { x: delta.x / length, y: delta.y / length }
-      const midpoint = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }
+      const segmentLength = Math.max(
+        Number.EPSILON,
+        cumulativeDistances[toIndex] - cumulativeDistances[fromIndex],
+      )
+      const ratio =
+        (clampedDistance - cumulativeDistances[fromIndex]) / segmentLength
+      const tangent = {
+        x: (to.x - from.x) / segmentLength,
+        y: (to.y - from.y) / segmentLength,
+      }
+      return {
+        point: {
+          x: from.x + (to.x - from.x) * ratio,
+          y: from.y + (to.y - from.y) * ratio,
+        },
+        tangent,
+      }
+    }
+
+    const garageFromMeters = totalLengthMeters * style.garageStartRatio
+    const garageToMeters = totalLengthMeters * style.garageEndRatio
+    const garageSpanMeters = garageToMeters - garageFromMeters
+    const slotLengthMeters = garageSpanMeters / style.garageCount
+    for (let garageIndex = 0; garageIndex < style.garageCount; garageIndex += 1) {
+      const centerDistanceMeters =
+        garageFromMeters + slotLengthMeters * (garageIndex + 0.5)
+      const { point: midpoint, tangent } = samplePath(centerDistanceMeters)
       const projection = this.geometry.project(midpoint)
       const away = {
         x: midpoint.x - projection.point.x,
@@ -1388,11 +1776,11 @@ export class RaceRenderer {
         ? { x: away.x / awayLength, y: away.y / awayLength }
         : { x: -tangent.y, y: tangent.x }
       const boxCenter = {
-        x: midpoint.x + outward.x * 1.4,
-        y: midpoint.y + outward.y * 1.4,
+        x: midpoint.x + outward.x * style.pitBoxCenterOffsetMeters,
+        y: midpoint.y + outward.y * style.pitBoxCenterOffsetMeters,
       }
-      const boxHalfLength = Math.min(3.2, length * 0.36)
-      const boxHalfWidth = 1.05
+      const boxHalfLength = style.pitBoxLengthMeters / 2
+      const boxHalfWidth = style.pitBoxDepthMeters / 2
       const boxCorners = this.orientedRectangle(
         boxCenter,
         tangent,
@@ -1424,15 +1812,15 @@ export class RaceRenderer {
       )
 
       const garageCenter = {
-        x: midpoint.x + outward.x * 6.2,
-        y: midpoint.y + outward.y * 6.2,
+        x: midpoint.x + outward.x * style.garageCenterOffsetMeters,
+        y: midpoint.y + outward.y * style.garageCenterOffsetMeters,
       }
       const garageCorners = this.orientedRectangle(
         garageCenter,
         tangent,
         outward,
-        Math.max(3.3, Math.min(5.2, length * 0.48)),
-        2.2,
+        slotLengthMeters * 0.46,
+        style.garageDepthMeters / 2,
       )
       this.drawExtrudedBuilding(garageCorners, transform, style, garageIndex)
     }
@@ -1514,6 +1902,65 @@ export class RaceRenderer {
     this.context.closePath()
     this.context.fillStyle = style.roofColor
     this.context.fill()
+
+    if (style.canopyDepthMeters > Number.EPSILON) {
+      const frontMiddle = {
+        x: (corners[0].x + corners[1].x) / 2,
+        y: (corners[0].y + corners[1].y) / 2,
+      }
+      const rearMiddle = {
+        x: (corners[2].x + corners[3].x) / 2,
+        y: (corners[2].y + corners[3].y) / 2,
+      }
+      const towardLane = {
+        x: frontMiddle.x - rearMiddle.x,
+        y: frontMiddle.y - rearMiddle.y,
+      }
+      const towardLaneLength = Math.max(
+        Number.EPSILON,
+        Math.hypot(towardLane.x, towardLane.y),
+      )
+      const canopyWorld = [
+        {
+          x:
+            corners[0].x +
+            (towardLane.x / towardLaneLength) * style.canopyDepthMeters,
+          y:
+            corners[0].y +
+            (towardLane.y / towardLaneLength) * style.canopyDepthMeters,
+        },
+        {
+          x:
+            corners[1].x +
+            (towardLane.x / towardLaneLength) * style.canopyDepthMeters,
+          y:
+            corners[1].y +
+            (towardLane.y / towardLaneLength) * style.canopyDepthMeters,
+        },
+        corners[1],
+        corners[0],
+      ]
+      const canopyHeight = height * 0.72
+      const canopy = canopyWorld.map((point) => {
+        const projected = worldToCamera(point, transform)
+        return { x: projected.x, y: projected.y - canopyHeight }
+      })
+      this.context.beginPath()
+      this.context.moveTo(canopy[0].x, canopy[0].y)
+      for (const point of canopy.slice(1)) {
+        this.context.lineTo(point.x, point.y)
+      }
+      this.context.closePath()
+      this.context.fillStyle = style.roofColor
+      this.context.fill()
+      this.strokeSegment(
+        canopy[0],
+        canopy[1],
+        Math.max(1, transform.pixelsPerMeter * 0.08),
+        style.accentColor,
+        'butt',
+      )
+    }
 
     const frontTopLeft = {
       x: top[0].x + (top[1].x - top[0].x) * 0.12,
@@ -1782,9 +2229,10 @@ export class RaceRenderer {
     const viewport = transform.viewport
     for (const object of objects) {
       const point = worldToCamera(object.position, transform)
+      const metrics = sceneryVisualMetrics(object)
       const visualRadius = Math.max(
         8,
-        object.scale * transform.pixelsPerMeter * 0.9,
+        metrics.cullRadiusMeters * transform.pixelsPerMeter,
       )
       if (
         point.x < viewport.x - visualRadius ||
@@ -1808,9 +2256,13 @@ export class RaceRenderer {
       this.context.rotate(
         Math.atan2(direction.y - point.y, direction.x - point.x),
       )
+      this.context.scale(1, metrics.depthScale)
       drawSceneryVisual({
         context: this.context,
-        object,
+        object:
+          metrics.scale === object.scale
+            ? object
+            : { ...object, scale: metrics.scale },
         pixelsPerMeter: transform.pixelsPerMeter,
         preset: this.track.sceneryLayout.preset,
       })
@@ -2106,7 +2558,7 @@ export class RaceRenderer {
     const barrierOuterEdge =
       environmentWidth + BARRIER_STYLES[environment.barrier].widthMeters / 2
     const fenceOuterEdge = environment.fence
-      ? this.fenceOffset(environment) + FENCE_STYLE.widthMeters / 2
+      ? this.fenceOffset(environment) + FENCE_WIDTH_METERS / 2
       : barrierOuterEdge
     return point.halfWidthMeters + Math.max(barrierOuterEdge, fenceOuterEdge)
   }
