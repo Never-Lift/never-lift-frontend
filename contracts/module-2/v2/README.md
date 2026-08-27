@@ -7,7 +7,7 @@ face visível de cada barreira a geometria canônica de colisão.
 ## Versões ativas
 
 - contrato físico e schema de pista: `2.0.0`;
-- catálogo: `2026.7`;
+- catálogo: `2026.8`;
 - unidade de mundo: metro; tempo: segundo; ângulo: radiano anti-horário desde `+x`.
 
 `contracts/module-2/v1/` permanece histórico e imutável. Resultados, salas,
@@ -24,9 +24,9 @@ recordes e fantasmas não podem misturar versões físicas.
 - `realtime-race-protocol.schema.json`: envelopes planejados do Módulo 3, já
   sem boost/nitro;
 - `track-catalog.schema.json`, `catalog.json`, `track-definition.schema.json` e
-  `tracks/`: catálogo `2026.7` com faces explícitas e contínuas de barreira,
-  pits visuais detalhados nas 24 pistas, largadas auditadas e camadas de
-  elevação para cruzamentos reais.
+  `tracks/`: catálogo `2026.8` com faces explícitas e contínuas de barreira,
+  perfis visuais de boxes, arquibancadas e edifícios nas 24 pistas, largadas
+  auditadas e camadas de elevação para cruzamentos reais.
 
 ## Fonte e geração
 
@@ -38,11 +38,13 @@ node tools/track-catalog/audit-v2.mjs
 ```
 
 As centerlines, superfícies e ambientes de `2026.5` foram preservados. O
-catálogo `2026.7` posiciona as zebras fora do asfalto, suaviza mudanças de
-largura das proteções, impede que a face invada outro braço da pista no mesmo
-nível, detalha os caminhos de pit e remove os landmarks provisórios. A polilinha
-resultante continua sendo simultaneamente a face visível e física da barreira;
-a espessura cresce para fora.
+catálogo `2026.7` posicionou as zebras fora do asfalto, suavizou proteções,
+detalhou os caminhos de pit e removeu landmarks provisórios. O `2026.8` fecha
+interrupções de zebra somente quando a curvatura é contínua, distribui cercas
+conforme público/circuito de rua e publica arquitetura, paleta e estruturas
+representativas de cada autódromo. A polilinha resultante continua sendo
+simultaneamente a face visível e física da barreira; a espessura cresce para
+fora.
 
 README, decisões, modelo, schemas, constantes, cenários, protocolo e catálogo
 devem ser byte-idênticos no frontend e backend. `tracks/*.json` fica somente no
@@ -52,5 +54,5 @@ cópia das pistas em produção.
 ## Compatibilidade
 
 `GET /api/tracks` e `GET /api/tracks/{id}` publicam esta linha. O cliente deve
-enviar `trackCatalogVersion=2026.7` e `physicsContractVersion=2.0.0` ao persistir
+enviar `trackCatalogVersion=2026.8` e `physicsContractVersion=2.0.0` ao persistir
 resultado ou entrar em sala. Divergência é rejeitada, nunca convertida.

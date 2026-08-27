@@ -3,6 +3,7 @@ import type {
   TrackChunk,
   TrackCurbPalette,
   TrackDefinition,
+  TrackPitVisualStyle,
   TrackSideEnvironment,
   TrackSurfaceMaterial,
 } from '@/lib/api'
@@ -85,16 +86,50 @@ const BACKGROUND_COLORS: Record<TrackDefinition['sceneryLayout']['preset'], stri
   'night-city': '#171c25',
 }
 
+const GLAZED_PIT_ARCHITECTURES = new Set<
+  TrackPitVisualStyle['architecture']
+>([
+  'permanent-modern',
+  'stepped-modern',
+  'wing',
+  'stadium',
+  'exhibition',
+  'marina-canopy',
+])
+
 const BARRIER_STYLES: Record<
   TrackBarrierType,
-  { color: string; widthMeters: number; dashMeters?: number[] }
+  {
+    color: string
+    sideColor: string
+    widthMeters: number
+    heightMeters: number
+    dashMeters?: number[]
+  }
 > = {
-  'concrete-wall': { color: '#d7dce5', widthMeters: 0.48 },
-  guardrail: { color: '#9aa6b8', widthMeters: 0.32 },
-  tecpro: { color: '#5c7da7', widthMeters: 0.62 },
+  'concrete-wall': {
+    color: '#d7dce5',
+    sideColor: '#8f99a6',
+    widthMeters: 0.48,
+    heightMeters: 1.05,
+  },
+  guardrail: {
+    color: '#aeb7c3',
+    sideColor: '#6f7b89',
+    widthMeters: 0.32,
+    heightMeters: 0.78,
+  },
+  tecpro: {
+    color: '#6787ad',
+    sideColor: '#405c7d',
+    widthMeters: 0.62,
+    heightMeters: 1.15,
+  },
   'tyre-barrier': {
     color: '#171b21',
+    sideColor: '#080b0f',
     widthMeters: 0.72,
+    heightMeters: 1,
     dashMeters: [0.9, 0.28],
   },
 }
@@ -108,8 +143,10 @@ const FENCE_GAP_METERS = 0.18
 const FENCE_HEIGHT_METERS = 2.6
 const FENCE_POST_SPACING_METERS = 3
 const PIT_LANE_WIDTH_METERS = 6
-const PIT_BUILDING_HEIGHT_METERS = 3.2
 const BRIDGE_DECK_HEIGHT_METERS = 2.4
+const SUZUKA_REVEAL_START_METERS = 62
+const SUZUKA_REVEAL_FULL_METERS = 18
+const SUZUKA_UPPER_LAYER_MINIMUM_OPACITY = 0.34
 
 const CURB_PALETTES: Record<TrackCurbPalette, string[]> = {
   'red-white': ['#d9283b', '#f0f0fa'],
@@ -141,6 +178,115 @@ function deterministicHash(seed: string) {
     hash = Math.imul(hash, 16777619)
   }
   return hash >>> 0
+}
+
+function segmentIntersection(
+  firstFrom: Vector2,
+  firstTo: Vector2,
+  secondFrom: Vector2,
+  secondTo: Vector2,
+) {
+  const first = {
+    x: firstTo.x - firstFrom.x,
+    y: firstTo.y - firstFrom.y,
+  }
+  const second = {
+    x: secondTo.x - secondFrom.x,
+    y: secondTo.y - secondFrom.y,
+  }
+  const denominator = first.x * second.y - first.y * second.x
+  if (Math.abs(denominator) <= 1e-8) return null
+  const delta = {
+    x: secondFrom.x - firstFrom.x,
+    y: secondFrom.y - firstFrom.y,
+  }
+  const firstRatio = (delta.x * second.y - delta.y * second.x) / denominator
+  const secondRatio = (delta.x * first.y - delta.y * first.x) / denominator
+  if (
+    firstRatio < 0 ||
+    firstRatio > 1 ||
+    secondRatio < 0 ||
+    secondRatio > 1
+  ) {
+    return null
+  }
+  return {
+    x: firstFrom.x + first.x * firstRatio,
+    y: firstFrom.y + first.y * firstRatio,
+  }
+}
+
+export function findSuzukaCrossingPoints(track: TrackDefinition) {
+  if (track.id !== 'suzuka') return []
+  type TrackSegment = {
+    from: TrackDefinition['centerline'][number]
+    to: TrackDefinition['centerline'][number]
+  }
+  const lowerSegments: TrackSegment[] = []
+  const upperSegments: TrackSegment[] = []
+  for (let index = 0; index < track.centerline.length - 1; index += 1) {
+    const from = track.centerline[index]
+    const to = track.centerline[index + 1]
+    if (from.elevationLayer !== to.elevationLayer) continue
+    const target = from.elevationLayer > 0 ? upperSegments : lowerSegments
+    target.push({ from, to })
+  }
+  const crossings: Vector2[] = []
+  for (const lower of lowerSegments) {
+    for (const upper of upperSegments) {
+      const crossing = segmentIntersection(
+        lower.from,
+        lower.to,
+        upper.from,
+        upper.to,
+      )
+      if (
+        crossing &&
+        crossings.every(
+          (existing) =>
+            Math.hypot(existing.x - crossing.x, existing.y - crossing.y) > 12,
+        )
+      ) {
+        crossings.push(crossing)
+      }
+    }
+  }
+  return crossings
+}
+
+export function calculateSuzukaUpperLayerOpacity(
+  trackId: string,
+  focusedVehicle: Pick<
+    InterpolatedVehicleState,
+    'renderPosition' | 'trackLayer'
+  >,
+  crossings: Vector2[],
+) {
+  if (
+    trackId !== 'suzuka' ||
+    focusedVehicle.trackLayer > 0 ||
+    crossings.length === 0
+  ) {
+    return 1
+  }
+  const distance = Math.min(
+    ...crossings.map((crossing) =>
+      Math.hypot(
+        focusedVehicle.renderPosition.x - crossing.x,
+        focusedVehicle.renderPosition.y - crossing.y,
+      ),
+    ),
+  )
+  const linearProgress = Math.max(
+    0,
+    Math.min(
+      1,
+      (SUZUKA_REVEAL_START_METERS - distance) /
+        (SUZUKA_REVEAL_START_METERS - SUZUKA_REVEAL_FULL_METERS),
+    ),
+  )
+  const easedProgress = linearProgress ** 2 * (3 - 2 * linearProgress)
+  return 1 - (1 - SUZUKA_UPPER_LAYER_MINIMUM_OPACITY) * easedProgress
 }
 
 function trackCullMarginMeters(
@@ -192,6 +338,7 @@ export class RaceRenderer {
   private readonly quality: GraphicsQuality
   private readonly splitScreenAspectRatio: () => number
   private readonly trackCullMarginMeters: number
+  private readonly suzukaCrossings: Vector2[]
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
   private frameCount = 0
@@ -211,6 +358,7 @@ export class RaceRenderer {
       options.splitScreenAspectRatio ??
       (() => this.canvas.width / this.canvas.height)
     this.trackCullMarginMeters = trackCullMarginMeters(track, this.geometry)
+    this.suzukaCrossings = findSuzukaCrossingPoints(track)
     this.renderStats = {
       totalChunks: track.chunks.length,
       visibleChunksByViewport: [],
@@ -363,7 +511,20 @@ export class RaceRenderer {
       ),
     ].sort((first, second) => first - second)
     this.drawScenery(transform, 'ground')
+    const suzukaUpperLayerOpacity = calculateSuzukaUpperLayerOpacity(
+      this.track.id,
+      focusedVehicle,
+      this.suzukaCrossings,
+    )
     for (const elevationLayer of elevationLayers) {
+      const isFadedSuzukaUpperLayer =
+        this.track.id === 'suzuka' &&
+        elevationLayer > 0 &&
+        suzukaUpperLayerOpacity < 1
+      if (isFadedSuzukaUpperLayer) {
+        context.save()
+        context.globalAlpha *= suzukaUpperLayerOpacity
+      }
       const sections = visibleTrackSections.filter(
         (section) => section.elevationLayer === elevationLayer,
       )
@@ -397,6 +558,7 @@ export class RaceRenderer {
       for (const vehicle of vehiclesAtLayer) {
         this.drawVehicle(vehicle, transform)
       }
+      if (isFadedSuzukaUpperLayer) context.restore()
     }
     this.drawScenery(transform, 'overhead')
     const ambientParticleCount = this.drawAmbientParticles(
@@ -409,6 +571,7 @@ export class RaceRenderer {
       visibleChunks,
       visibleTrackSections,
       vehicles,
+      suzukaUpperLayerOpacity,
     )
     this.drawMinimap(viewport, vehicles, focusedVehicle)
     this.drawDriverLabel(viewport, focusedVehicle.name)
@@ -835,6 +998,8 @@ export class RaceRenderer {
           barrier.thicknessMeters,
           style,
           transform,
+          index === 0,
+          index === barrier.path.length - 2,
         )
       }
     }
@@ -845,8 +1010,16 @@ export class RaceRenderer {
     toPoint: TrackDefinition['barrierGeometry']['segments'][number]['path'][number],
     side: 'left' | 'right',
     thicknessMeters: number,
-    style: { color: string; widthMeters: number; dashMeters?: number[] },
+    style: {
+      color: string
+      sideColor: string
+      widthMeters: number
+      heightMeters: number
+      dashMeters?: number[]
+    },
     transform: CameraTransform,
+    drawStartCap: boolean,
+    drawEndCap: boolean,
   ) {
     const deltaX = toPoint.x - fromPoint.x
     const deltaY = toPoint.y - fromPoint.y
@@ -869,27 +1042,83 @@ export class RaceRenderer {
       worldToCamera(point, transform),
     )
 
+    const height =
+      style.heightMeters * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
+    const top = polygon.map((point) => ({ x: point.x, y: point.y - height }))
+    const fillFace = (
+      firstIndex: number,
+      secondIndex: number,
+      color: string,
+    ) => {
+      this.context.beginPath()
+      this.context.moveTo(polygon[firstIndex].x, polygon[firstIndex].y)
+      this.context.lineTo(polygon[secondIndex].x, polygon[secondIndex].y)
+      this.context.lineTo(top[secondIndex].x, top[secondIndex].y)
+      this.context.lineTo(top[firstIndex].x, top[firstIndex].y)
+      this.context.closePath()
+      this.context.fillStyle = color
+      this.context.fill()
+    }
+    const innerDepth = (polygon[0].y + polygon[1].y) / 2
+    const outerDepth = (polygon[2].y + polygon[3].y) / 2
+    if (innerDepth >= outerDepth) fillFace(0, 1, style.sideColor)
+    else fillFace(3, 2, style.sideColor)
+    if (drawEndCap) fillFace(1, 2, 'rgba(64, 73, 84, 0.92)')
+    if (drawStartCap) fillFace(3, 0, 'rgba(86, 96, 108, 0.86)')
+
     this.context.beginPath()
-    this.context.moveTo(polygon[0].x, polygon[0].y)
-    for (const point of polygon.slice(1)) this.context.lineTo(point.x, point.y)
+    this.context.moveTo(top[0].x, top[0].y)
+    for (const point of top.slice(1)) this.context.lineTo(point.x, point.y)
     this.context.closePath()
     this.context.fillStyle = style.color
     this.context.fill()
 
-    const middleFrom = {
-      x: (fromPoint.x + outerFrom.x) / 2,
-      y: (fromPoint.y + outerFrom.y) / 2,
+    // Consecutive canonical faces turn at every sampled centerline point. A
+    // small top joint masks the mathematical wedge between their normals; end
+    // caps remain exclusive to the real start/end of a protection segment.
+    if (!drawEndCap) {
+      const joint = {
+        x: (top[1].x + top[2].x) / 2,
+        y: (top[1].y + top[2].y) / 2,
+      }
+      this.context.beginPath()
+      this.context.arc(
+        joint.x,
+        joint.y,
+        Math.max(1, thicknessMeters * transform.pixelsPerMeter * 0.58),
+        0,
+        Math.PI * 2,
+      )
+      this.context.fillStyle = style.color
+      this.context.fill()
     }
-    const middleTo = {
-      x: (toPoint.x + outerTo.x) / 2,
-      y: (toPoint.y + outerTo.y) / 2,
+
+    const topMiddleFrom = {
+      x: (top[0].x + top[3].x) / 2,
+      y: (top[0].y + top[3].y) / 2,
     }
-    this.drawStyledBoundary(
-      middleFrom,
-      middleTo,
-      { ...style, widthMeters: thicknessMeters },
-      transform,
+    const topMiddleTo = {
+      x: (top[1].x + top[2].x) / 2,
+      y: (top[1].y + top[2].y) / 2,
+    }
+    this.context.save()
+    if (style.dashMeters) {
+      const tangentScale = projectedSegmentPixelsPerMeter(
+        fromPoint,
+        toPoint,
+        transform,
+      )
+      this.context.setLineDash(
+        style.dashMeters.map((dash) => dash * tangentScale),
+      )
+    }
+    this.strokeSegment(
+      topMiddleFrom,
+      topMiddleTo,
+      Math.max(1, thicknessMeters * transform.pixelsPerMeter * 0.42),
+      style.color,
     )
+    this.context.restore()
   }
 
   private drawTrackFences(
@@ -1005,40 +1234,6 @@ export class RaceRenderer {
     )
   }
 
-  private drawStyledBoundary(
-    fromPoint: Vector2,
-    toPoint: Vector2,
-    style: { color: string; widthMeters: number; dashMeters?: number[] },
-    transform: CameraTransform,
-  ) {
-    this.context.save()
-    if (style.dashMeters) {
-      const tangentScale = projectedSegmentPixelsPerMeter(
-        fromPoint,
-        toPoint,
-        transform,
-      )
-      this.context.setLineDash(
-        style.dashMeters.map((length) => length * tangentScale),
-      )
-    }
-    this.strokeSegment(
-      worldToCamera(fromPoint, transform),
-      worldToCamera(toPoint, transform),
-      Math.max(
-        1.5,
-        projectedTrackWidth(
-          fromPoint,
-          toPoint,
-          style.widthMeters,
-          transform,
-        ),
-      ),
-      style.color,
-    )
-    this.context.restore()
-  }
-
   private offsetTrackPoint(
     point: TrackDefinition['centerline'][number],
     side: 'left' | 'right',
@@ -1090,6 +1285,7 @@ export class RaceRenderer {
   private drawPitInfrastructure(transform: CameraTransform) {
     const path = this.track.pitLane.path
     if (path.length < 2) return
+    const style = this.track.pitLane.visualStyle
     for (let index = 0; index < path.length - 1; index += 1) {
       const from = path[index]
       const to = path[index + 1]
@@ -1097,7 +1293,7 @@ export class RaceRenderer {
         worldToCamera(from, transform),
         worldToCamera(to, transform),
         projectedTrackWidth(from, to, PIT_LANE_WIDTH_METERS, transform),
-        '#2d3540',
+        '#29313a',
       )
     }
 
@@ -1115,19 +1311,68 @@ export class RaceRenderer {
       this.strokePolyline(
         edge.map((point) => worldToCamera(point, transform)),
         Math.max(1, transform.pixelsPerMeter * 0.12),
-        'rgba(229, 233, 239, 0.82)',
+        style.roofColor,
       )
     }
-    this.drawPitGarages(path, transform)
+    this.drawPitWall(path, transform, style)
+    this.drawPitGarages(path, transform, style)
   }
 
-  private drawPitGarages(path: Vector2[], transform: CameraTransform) {
+  private drawPitWall(
+    path: Vector2[],
+    transform: CameraTransform,
+    style: TrackPitVisualStyle,
+  ) {
+    const wallPath = path.map((point) => {
+      const projection = this.geometry.project(point)
+      const towardTrack = {
+        x: projection.point.x - point.x,
+        y: projection.point.y - point.y,
+      }
+      const length = Math.max(
+        Number.EPSILON,
+        Math.hypot(towardTrack.x, towardTrack.y),
+      )
+      return {
+        x: point.x + (towardTrack.x / length) * (PIT_LANE_WIDTH_METERS / 2 + 0.35),
+        y: point.y + (towardTrack.y / length) * (PIT_LANE_WIDTH_METERS / 2 + 0.35),
+      }
+    })
+    const projected = wallPath.map((point) => worldToCamera(point, transform))
+    this.strokePolyline(
+      projected,
+      Math.max(1, transform.pixelsPerMeter * 0.38),
+      style.secondaryColor,
+      'butt',
+    )
+    const wallHeight = transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE * 0.72
+    this.strokePolyline(
+      projected.map((point) => ({ x: point.x, y: point.y - wallHeight })),
+      Math.max(1, transform.pixelsPerMeter * 0.16),
+      style.accentColor,
+      'butt',
+    )
+  }
+
+  private drawPitGarages(
+    path: Vector2[],
+    transform: CameraTransform,
+    style: TrackPitVisualStyle,
+  ) {
     const firstIndex = Math.floor(path.length * 0.27)
     const lastIndex = Math.floor(path.length * 0.73)
-    const step = Math.max(1, Math.floor((lastIndex - firstIndex) / 10))
-    for (let index = firstIndex; index < lastIndex; index += step) {
-      const from = path[index]
-      const to = path[Math.min(path.length - 1, index + step)]
+    const span = Math.max(1, lastIndex - firstIndex)
+    for (let garageIndex = 0; garageIndex < style.garageCount; garageIndex += 1) {
+      const fromIndex = Math.min(
+        path.length - 2,
+        firstIndex + Math.floor((span * garageIndex) / style.garageCount),
+      )
+      const toIndex = Math.min(
+        path.length - 1,
+        firstIndex + Math.ceil((span * (garageIndex + 1)) / style.garageCount),
+      )
+      const from = path[fromIndex]
+      const to = path[toIndex]
       const delta = { x: to.x - from.x, y: to.y - from.y }
       const length = Math.hypot(delta.x, delta.y)
       if (length <= Number.EPSILON) continue
@@ -1155,7 +1400,28 @@ export class RaceRenderer {
         boxHalfLength,
         boxHalfWidth,
       )
-      this.fillWorldPolygon(boxCorners, transform, 'rgba(218, 224, 233, 0.28)')
+      this.fillWorldPolygon(
+        boxCorners,
+        transform,
+        garageIndex % 2 === 0
+          ? `${style.primaryColor}55`
+          : `${style.accentColor}42`,
+      )
+      const boxLineFrom = {
+        x: boxCenter.x - tangent.x * boxHalfLength,
+        y: boxCenter.y - tangent.y * boxHalfLength,
+      }
+      const boxLineTo = {
+        x: boxCenter.x + tangent.x * boxHalfLength,
+        y: boxCenter.y + tangent.y * boxHalfLength,
+      }
+      this.strokeSegment(
+        worldToCamera(boxLineFrom, transform),
+        worldToCamera(boxLineTo, transform),
+        Math.max(1, transform.pixelsPerMeter * 0.1),
+        style.roofColor,
+        'butt',
+      )
 
       const garageCenter = {
         x: midpoint.x + outward.x * 6.2,
@@ -1168,7 +1434,7 @@ export class RaceRenderer {
         Math.max(3.3, Math.min(5.2, length * 0.48)),
         2.2,
       )
-      this.drawExtrudedBuilding(garageCorners, transform)
+      this.drawExtrudedBuilding(garageCorners, transform, style, garageIndex)
     }
   }
 
@@ -1204,18 +1470,35 @@ export class RaceRenderer {
   private drawExtrudedBuilding(
     corners: Vector2[],
     transform: CameraTransform,
+    style: TrackPitVisualStyle,
+    garageIndex: number,
   ) {
     const base = corners.map((point) => worldToCamera(point, transform))
+    const steppedHeightMultiplier =
+      style.architecture === 'stepped-modern'
+        ? 0.9 + (garageIndex % 4) * 0.055
+        : 1
     const height =
-      PIT_BUILDING_HEIGHT_METERS * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
+      style.buildingHeightMeters *
+      steppedHeightMultiplier *
+      transform.pixelsPerMeter *
+      CAMERA_HEIGHT_SCALE
     const top = base.map((point) => ({ x: point.x, y: point.y - height }))
+    this.context.beginPath()
+    this.context.moveTo(base[0].x, base[0].y)
+    this.context.lineTo(base[1].x, base[1].y)
+    this.context.lineTo(top[1].x, top[1].y)
+    this.context.lineTo(top[0].x, top[0].y)
+    this.context.closePath()
+    this.context.fillStyle = style.primaryColor
+    this.context.fill()
     this.context.beginPath()
     this.context.moveTo(base[1].x, base[1].y)
     this.context.lineTo(base[2].x, base[2].y)
     this.context.lineTo(top[2].x, top[2].y)
     this.context.lineTo(top[1].x, top[1].y)
     this.context.closePath()
-    this.context.fillStyle = '#313a46'
+    this.context.fillStyle = style.secondaryColor
     this.context.fill()
     this.context.beginPath()
     this.context.moveTo(base[2].x, base[2].y)
@@ -1223,14 +1506,205 @@ export class RaceRenderer {
     this.context.lineTo(top[3].x, top[3].y)
     this.context.lineTo(top[2].x, top[2].y)
     this.context.closePath()
-    this.context.fillStyle = '#252d37'
+    this.context.fillStyle = style.secondaryColor
     this.context.fill()
     this.context.beginPath()
     this.context.moveTo(top[0].x, top[0].y)
     for (const point of top.slice(1)) this.context.lineTo(point.x, point.y)
     this.context.closePath()
-    this.context.fillStyle = '#596575'
+    this.context.fillStyle = style.roofColor
     this.context.fill()
+
+    const frontTopLeft = {
+      x: top[0].x + (top[1].x - top[0].x) * 0.12,
+      y: top[0].y + (top[1].y - top[0].y) * 0.12 + height * 0.24,
+    }
+    const frontTopRight = {
+      x: top[0].x + (top[1].x - top[0].x) * 0.88,
+      y: top[0].y + (top[1].y - top[0].y) * 0.88 + height * 0.24,
+    }
+    const frontBottomRight = {
+      x: base[0].x + (base[1].x - base[0].x) * 0.88,
+      y: base[0].y + (base[1].y - base[0].y) * 0.88 - height * 0.05,
+    }
+    const frontBottomLeft = {
+      x: base[0].x + (base[1].x - base[0].x) * 0.12,
+      y: base[0].y + (base[1].y - base[0].y) * 0.12 - height * 0.05,
+    }
+    this.context.beginPath()
+    this.context.moveTo(frontTopLeft.x, frontTopLeft.y)
+    this.context.lineTo(frontTopRight.x, frontTopRight.y)
+    this.context.lineTo(frontBottomRight.x, frontBottomRight.y)
+    this.context.lineTo(frontBottomLeft.x, frontBottomLeft.y)
+    this.context.closePath()
+    this.context.fillStyle = garageIndex % 2 === 0 ? '#27313a' : '#313b45'
+    this.context.fill()
+    this.strokeSegment(
+      {
+        x: top[0].x,
+        y: top[0].y + height * 0.17,
+      },
+      {
+        x: top[1].x,
+        y: top[1].y + height * 0.17,
+      },
+      Math.max(1, transform.pixelsPerMeter * 0.22),
+      style.accentColor,
+      'butt',
+    )
+    this.drawPitBuildingDetails(
+      base,
+      top,
+      height,
+      transform,
+      style,
+      garageIndex,
+    )
+  }
+
+  private drawPitBuildingDetails(
+    base: Vector2[],
+    top: Vector2[],
+    height: number,
+    transform: CameraTransform,
+    style: TrackPitVisualStyle,
+    garageIndex: number,
+  ) {
+    const interpolate = (from: Vector2, to: Vector2, ratio: number) => ({
+      x: from.x + (to.x - from.x) * ratio,
+      y: from.y + (to.y - from.y) * ratio,
+    })
+    const facadeAt = (ratio: number, verticalRatio: number) => {
+      const ground = interpolate(base[0], base[1], ratio)
+      return { x: ground.x, y: ground.y - height * verticalRatio }
+    }
+
+    // Garage-door mullions and a number plate keep each team bay legible at
+    // race zoom instead of reading as one uninterrupted rectangle.
+    this.context.strokeStyle = 'rgba(211, 219, 226, 0.34)'
+    this.context.lineWidth = Math.max(1, transform.pixelsPerMeter * 0.055)
+    for (const ratio of [0.31, 0.5, 0.69]) {
+      const from = facadeAt(ratio, 0.08)
+      const to = facadeAt(ratio, 0.67)
+      this.context.beginPath()
+      this.context.moveTo(from.x, from.y)
+      this.context.lineTo(to.x, to.y)
+      this.context.stroke()
+    }
+    const plate = facadeAt(0.18, 0.76)
+    this.context.fillStyle = style.accentColor
+    this.context.fillRect(
+      plate.x - transform.pixelsPerMeter * 0.32,
+      plate.y - transform.pixelsPerMeter * 0.2,
+      transform.pixelsPerMeter * 0.64,
+      transform.pixelsPerMeter * 0.4,
+    )
+
+    if (GLAZED_PIT_ARCHITECTURES.has(style.architecture)) {
+      const bandTopLeft = facadeAt(0.04, 0.92)
+      const bandTopRight = facadeAt(0.96, 0.92)
+      const bandBottomRight = facadeAt(0.96, 0.72)
+      const bandBottomLeft = facadeAt(0.04, 0.72)
+      this.context.beginPath()
+      this.context.moveTo(bandTopLeft.x, bandTopLeft.y)
+      this.context.lineTo(bandTopRight.x, bandTopRight.y)
+      this.context.lineTo(bandBottomRight.x, bandBottomRight.y)
+      this.context.lineTo(bandBottomLeft.x, bandBottomLeft.y)
+      this.context.closePath()
+      this.context.fillStyle = 'rgba(88, 148, 169, 0.56)'
+      this.context.fill()
+      for (const ratio of [0.25, 0.5, 0.75]) {
+        this.strokeSegment(
+          facadeAt(ratio, 0.72),
+          facadeAt(ratio, 0.92),
+          Math.max(1, transform.pixelsPerMeter * 0.04),
+          'rgba(222, 230, 235, 0.5)',
+          'butt',
+        )
+      }
+    }
+
+    if (
+      style.architecture === 'desert-canopy' ||
+      style.architecture === 'marina-canopy'
+    ) {
+      const canopyFrom = facadeAt(-0.08, 0.72)
+      const canopyTo = facadeAt(1.08, 0.72)
+      this.strokeSegment(
+        canopyFrom,
+        canopyTo,
+        Math.max(2, transform.pixelsPerMeter * 0.34),
+        style.roofColor,
+        'square',
+      )
+      for (const ratio of [0.08, 0.92]) {
+        this.strokeSegment(
+          facadeAt(ratio, 0.14),
+          facadeAt(ratio, 0.72),
+          Math.max(1, transform.pixelsPerMeter * 0.07),
+          style.secondaryColor,
+          'butt',
+        )
+      }
+    }
+
+    if (style.architecture === 'heritage') {
+      const roofMiddle = interpolate(top[0], top[1], 0.5)
+      this.context.beginPath()
+      this.context.moveTo(top[0].x, top[0].y)
+      this.context.lineTo(roofMiddle.x, roofMiddle.y - height * 0.13)
+      this.context.lineTo(top[1].x, top[1].y)
+      this.context.closePath()
+      this.context.fillStyle = style.roofColor
+      this.context.fill()
+    }
+
+    if (style.architecture === 'wing') {
+      this.context.strokeStyle = style.accentColor
+      this.context.lineWidth = Math.max(1, transform.pixelsPerMeter * 0.1)
+      this.context.beginPath()
+      this.context.moveTo(top[0].x, top[0].y)
+      for (let index = 1; index <= 6; index += 1) {
+        const point = interpolate(top[0], top[1], index / 6)
+        this.context.lineTo(
+          point.x,
+          point.y - (index % 2 === 0 ? 0 : height * 0.1),
+        )
+      }
+      this.context.stroke()
+    }
+
+    if (style.architecture === 'temporary-modular') {
+      this.strokeSegment(
+        facadeAt(0.02, 0.51),
+        facadeAt(0.98, 0.51),
+        Math.max(1, transform.pixelsPerMeter * 0.045),
+        'rgba(66, 76, 87, 0.5)',
+        'butt',
+      )
+    }
+
+    if (garageIndex === 0 || garageIndex === style.garageCount - 1) {
+      const mastBase = facadeAt(garageIndex === 0 ? 0.1 : 0.9, 1)
+      const mastTop = { x: mastBase.x, y: mastBase.y - height * 0.42 }
+      this.strokeSegment(
+        mastBase,
+        mastTop,
+        Math.max(1, transform.pixelsPerMeter * 0.07),
+        style.secondaryColor,
+        'butt',
+      )
+      this.context.fillStyle = style.accentColor
+      this.context.beginPath()
+      this.context.arc(
+        mastTop.x,
+        mastTop.y,
+        Math.max(1.5, transform.pixelsPerMeter * 0.16),
+        0,
+        Math.PI * 2,
+      )
+      this.context.fill()
+    }
   }
 
   private drawBridgeUnderstructure(
@@ -1409,6 +1883,7 @@ export class RaceRenderer {
     visibleChunks: TrackChunk[],
     visibleTrackSections: ElevationTrackSection[],
     vehicles: InterpolatedVehicleState[],
+    suzukaUpperLayerOpacity = 1,
   ) {
     if (this.timeOfDay === 'day') return
 
@@ -1437,12 +1912,21 @@ export class RaceRenderer {
               visibleTrackSections,
               beamDistanceMeters,
             )
+          const fadeUpperSuzukaVehicle =
+            this.track.id === 'suzuka' &&
+            vehicle.trackLayer > 0 &&
+            suzukaUpperLayerOpacity < 1
+          if (fadeUpperSuzukaVehicle) {
+            this.context.save()
+            this.context.globalAlpha *= suzukaUpperLayerOpacity
+          }
           this.drawHeadlightCone(
             vehicle,
             transform,
             visibleTrackSections,
             visibleBeamDistanceMeters,
           )
+          if (fadeUpperSuzukaVehicle) this.context.restore()
         }
       }
     }

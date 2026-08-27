@@ -8,7 +8,7 @@ import { createTrackFixture } from '@/test/track-fixtures'
 import { createVehicleWorldCollider } from '@/race/vehicle-geometry'
 
 /*
- * Test-only extract from the executable Monaco v2 definition, catalog 2026.7:
+ * Test-only extract from the executable Monaco v2 definition, catalog 2026.8:
  * contracts/module-2/v2/tracks/monaco.json, 1588.572 m..1613.549 m.
  *
  * The 24 complete definitions intentionally live only in the backend. Keeping

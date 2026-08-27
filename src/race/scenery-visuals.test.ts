@@ -29,6 +29,9 @@ describe('scenery visual registry', () => {
     ['urban-park', 'vegetation'],
     ['bull-sculpture', 'tower'],
     ['chalet', 'building'],
+    ['stadium-building', 'building'],
+    ['silverstone-wing-building', 'building'],
+    ['main-grandstand-covered', 'grandstand'],
   ] as const)('maps %s to a %s drawing', (kind, category) => {
     expect(classifySceneryKind(kind)).toBe(category)
   })
@@ -76,5 +79,42 @@ describe('scenery visual registry', () => {
 
     expect(rectangles).toHaveLength(1)
     expect(rectangles[0].width / rectangles[0].height).toBeGreaterThan(6)
+  })
+
+  it('uses the authored circuit palette and roof for covered grandstands', () => {
+    const assignedFillStyles: string[] = []
+    const context = new Proxy(
+      {},
+      {
+        get: () => () => undefined,
+        set: (_target, property, value) => {
+          if (property === 'fillStyle') assignedFillStyles.push(String(value))
+          return true
+        },
+      },
+    ) as CanvasRenderingContext2D
+    const grandstand: TrackSceneryObject = {
+      id: 'main-grandstand',
+      kind: 'main-grandstand-covered',
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      scale: 18,
+      visualStyle: {
+        primaryColor: '#d8dadd',
+        secondaryColor: '#444d57',
+        accentColor: '#b51e2a',
+        roofColor: '#eef0f2',
+      },
+    }
+
+    drawSceneryVisual({
+      context,
+      object: grandstand,
+      pixelsPerMeter: 2,
+      preset: 'street',
+    })
+
+    expect(assignedFillStyles).toContain('#444d57')
+    expect(assignedFillStyles).toContain('#eef0f2')
   })
 })

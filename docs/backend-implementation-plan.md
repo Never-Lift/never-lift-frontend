@@ -112,7 +112,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
-**Contrato de entrada atual:** `contracts/module-2/v2/` contém o schema de pista `2.0.0`, catálogo `2026.7`, contrato físico `2.0.0`, faces canônicas de barreira e as 24 definições métricas geradas de forma reproduzível. `contracts/module-2/v1/` permanece histórico e imutável.
+**Contrato de entrada atual:** `contracts/module-2/v2/` contém o schema de pista `2.0.0`, catálogo `2026.8`, contrato físico `2.0.0`, faces canônicas de barreira, perfis visuais de infraestrutura e as 24 definições métricas geradas de forma reproduzível. `contracts/module-2/v1/` permanece histórico e imutável.
 **Estado da Parte 2d:** implementação automatizada concluída; validação manual pendente. O backend publica/importa o catálogo v2, empacota os artefatos comuns byte a byte e persiste `physicsContractVersion`, mas o Módulo 2 não está pronto até fechar os critérios manuais integrados com o frontend.
 **Simplificação implementada em 24/08/2026 (backend #72 / frontend #90):** o produto tem somente o F1 e uma configuração fixa de condução baseada nos valores do antigo perfil Normal. `carModel`, `handlingMode`/`driftMode`, os perfis Supercarro/Drift e as dimensões de recorde associadas foram removidos do contrato físico `1.3.0`, publicado de forma sincronizada nos dois repositórios.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
