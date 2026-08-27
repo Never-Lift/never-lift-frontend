@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { raceApi } from '@/lib/api'
+import { raceApi, type TrackEscapeRoad } from '@/lib/api'
 import { jsonResponse } from '@/test/render-app'
 import { SHORT_TRACK } from '@/test/track-fixtures'
 
@@ -10,7 +10,23 @@ type MutableTrackDefinitionPayload = {
   curbs: Array<{
     palette: string
     widthMeters: number
+    outerColor?: string
+    outerWidthMeters?: number
   }>
+  pitLane: {
+    visualStyle: {
+      laneWidthMeters: number
+      garageStartRatio: number
+      garageEndRatio: number
+      pitBoxLengthMeters: number
+      pitBoxDepthMeters: number
+      pitBoxCenterOffsetMeters: number
+      garageDepthMeters: number
+      garageCenterOffsetMeters: number
+      pitWallHeightMeters: number
+      canopyDepthMeters: number
+    }
+  }
   centerline: Array<{
     halfWidthMeters: number
     elevationLayer?: number
@@ -21,7 +37,50 @@ type MutableTrackDefinitionPayload = {
         zones: Array<{ surface: string; widthMeters: number }>
         barrier?: string
         fence?: string
+        fenceVisualStyle?: {
+          heightMeters: number
+          postSpacingMeters: number
+          postColor: string
+          meshColor: string
+          meshOpacity: number
+          cantileverMeters: number
+        }
       }
+    }>
+  }
+  sceneryLayout: {
+    landmarks: Array<{
+      id: string
+      kind: string
+      position: { x: number; y: number }
+      rotation: number
+      scale: number
+      dimensions?: {
+        lengthMeters: number
+        depthMeters: number
+        heightMeters: number
+      }
+    }>
+    staticObjects: Array<{
+      id: string
+      kind: string
+      position: { x: number; y: number }
+      rotation: number
+      scale: number
+    }>
+    escapeRoads: Array<{
+      id: string
+      kind: string
+      affectsPhysics: boolean
+      elevationLayer: number
+      widthMeters: number
+      path: Array<{ x: number; y: number }>
+      obstacleRows: Array<{
+        from: { x: number; y: number }
+        to: { x: number; y: number }
+        blockLengthMeters: number
+        palette: string
+      }>
     }>
   }
   barrierGeometry: {
@@ -37,6 +96,25 @@ type MutableTrackDefinitionPayload = {
   }
   source: {
     environmentReferences: Array<unknown>
+  }
+}
+
+function validEscapeRoad(): TrackEscapeRoad {
+  return {
+    id: 'rettifilo-slalom',
+    kind: 'slalom-block-rows',
+    affectsPhysics: false,
+    elevationLayer: 0,
+    widthMeters: 7,
+    path: [
+      { x: 0, y: 0 },
+      { x: 30, y: 4 },
+    ],
+    obstacleRows: [
+      { from: { x: 8, y: -3 }, to: { x: 8, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
+      { from: { x: 15, y: -1 }, to: { x: 15, y: 3 }, blockLengthMeters: 1, palette: 'red-white' },
+      { from: { x: 22, y: -3 }, to: { x: 22, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
+    ],
   }
 }
 
@@ -56,12 +134,40 @@ describe('track API compatibility guard', () => {
       zones: [],
       barrier: 'tecpro',
       fence: 'debris-fence',
+      fenceVisualStyle: {
+        heightMeters: 3.5,
+        postSpacingMeters: 2.8,
+        postColor: '#77838e',
+        meshColor: '#65727e',
+        meshOpacity: 0.23,
+        cantileverMeters: 0.25,
+      },
     }
+    definition.sceneryLayout.landmarks.push({
+      id: 'main-grandstand',
+      kind: 'main-grandstand-covered',
+      position: { x: 30, y: 40 },
+      rotation: 0,
+      scale: 12,
+      dimensions: {
+        lengthMeters: 28,
+        depthMeters: 14,
+        heightMeters: 8,
+      },
+    })
     definition.barrierGeometry.segments[0].material = 'tecpro'
     definition.barrierGeometry.segments[0].thicknessMeters = 0.62
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
 
     await expect(raceApi.getTrack('monaco')).resolves.toEqual(definition)
+  })
+
+  it('accepts a visual-only slalom escape road without changing the physics contract', async () => {
+    const definition = structuredClone(SHORT_TRACK)
+    definition.sceneryLayout.escapeRoads = [validEscapeRoad()]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
+
+    await expect(raceApi.getTrack('monza')).resolves.toEqual(definition)
   })
 
   it('accepts contiguous barrier pieces split at an elevation boundary', async () => {
@@ -128,6 +234,34 @@ describe('track API compatibility guard', () => {
       },
     },
     {
+      label: 'invalid curb outer paint',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.curbs[0].outerColor = 'green'
+      },
+    },
+    {
+      label: 'impossible curb outer width',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.curbs[0].outerWidthMeters = 4
+      },
+    },
+    {
+      label: 'impossible pit lane width',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.pitLane.visualStyle.laneWidthMeters = 30
+      },
+    },
+    {
+      label: 'missing pit garage depth',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        delete (
+          definition.pitLane.visualStyle as Partial<
+            MutableTrackDefinitionPayload['pitLane']['visualStyle']
+          >
+        ).garageDepthMeters
+      },
+    },
+    {
       label: 'obsolete catalog version',
       mutate: (definition: MutableTrackDefinitionPayload) => {
         definition.catalogVersion = '2026.2'
@@ -189,6 +323,81 @@ describe('track API compatibility guard', () => {
       label: 'unknown fence type',
       mutate: (definition: MutableTrackDefinitionPayload) => {
         definition.trackLimits.segments[0].left.fence = 'spectator-fence'
+      },
+    },
+    {
+      label: 'invalid fence visual height',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.trackLimits.segments[0].left.fenceVisualStyle = {
+          heightMeters: 9,
+          postSpacingMeters: 2.8,
+          postColor: '#77838e',
+          meshColor: '#65727e',
+          meshOpacity: 0.23,
+          cantileverMeters: 0.25,
+        }
+      },
+    },
+    {
+      label: 'invalid scenery footprint',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.sceneryLayout.landmarks.push({
+          id: 'main-grandstand',
+          kind: 'main-grandstand-covered',
+          position: { x: 30, y: 40 },
+          rotation: 0,
+          scale: 12,
+          dimensions: {
+            lengthMeters: 401,
+            depthMeters: 14,
+            heightMeters: 8,
+          },
+        })
+      },
+    },
+    {
+      label: 'missing escape road collection',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        delete (
+          definition.sceneryLayout as Partial<
+            MutableTrackDefinitionPayload['sceneryLayout']
+          >
+        ).escapeRoads
+      },
+    },
+    {
+      label: 'escape road affecting physics',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.sceneryLayout.escapeRoads = [validEscapeRoad()]
+        definition.sceneryLayout.escapeRoads[0].affectsPhysics = true
+      },
+    },
+    {
+      label: 'escape road with invalid palette',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.sceneryLayout.escapeRoads = [validEscapeRoad()]
+        definition.sceneryLayout.escapeRoads[0].obstacleRows[0].palette =
+          'yellow-black'
+      },
+    },
+    {
+      label: 'escape road with too short path',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.sceneryLayout.escapeRoads = [validEscapeRoad()]
+        definition.sceneryLayout.escapeRoads[0].path = [{ x: 0, y: 0 }]
+      },
+    },
+    {
+      label: 'duplicate escape road and scenery id',
+      mutate: (definition: MutableTrackDefinitionPayload) => {
+        definition.sceneryLayout.staticObjects.push({
+          id: 'rettifilo-slalom',
+          kind: 'start-gantry',
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          scale: 1,
+        })
+        definition.sceneryLayout.escapeRoads = [validEscapeRoad()]
       },
     },
     {
@@ -272,6 +481,36 @@ describe('track API compatibility guard', () => {
           physicsContractVersion: '2.0.0',
           seasonReference: 2026,
           tracks: Array.from({ length: 24 }, () => ({})),
+        }),
+      ),
+    )
+
+    await expect(raceApi.getTracks()).rejects.toThrow(
+      'lista de circuitos não é compatível',
+    )
+  })
+
+  it('rejects a 2026.9 catalog with a malformed track entry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          schemaVersion: '2.0.0',
+          catalogVersion: '2026.9',
+          physicsContractVersion: '2.0.0',
+          seasonReference: 2026,
+          calendarPolicy: 'original-24-round-freeze',
+          tracks: Array.from({ length: 24 }, (_, index) => ({
+            round: index + 1,
+            id: `track-${index + 1}`,
+            name: `Track ${index + 1}`,
+            countryCode: 'TS',
+            countryName: 'Test',
+            locality: `Test ${index + 1}`,
+            lengthMeters: 4000 + index,
+            definitionPath:
+              index === 0 ? '../outside.json' : `tracks/track-${index + 1}.json`,
+          })),
         }),
       ),
     )

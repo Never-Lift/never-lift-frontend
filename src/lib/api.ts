@@ -141,6 +141,23 @@ export type TrackVector = {
   y: number
 }
 
+export type TrackEscapeObstacleRow = {
+  from: TrackVector
+  to: TrackVector
+  blockLengthMeters: number
+  palette: 'red-white'
+}
+
+export type TrackEscapeRoad = {
+  id: string
+  kind: 'slalom-block-rows'
+  affectsPhysics: false
+  elevationLayer: number
+  widthMeters: number
+  path: TrackVector[]
+  obstacleRows: TrackEscapeObstacleRow[]
+}
+
 export type TrackBounds = {
   minX: number
   minY: number
@@ -161,10 +178,10 @@ export type TrackCatalogEntry = {
 
 export type TrackCatalog = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.8'
+  catalogVersion: '2026.9'
   physicsContractVersion: '2.0.0'
   seasonReference: 2026
-  calendarPolicy?: 'original-24-round-freeze'
+  calendarPolicy: 'original-24-round-freeze'
   tracks: TrackCatalogEntry[]
 }
 
@@ -206,6 +223,7 @@ export type TrackSceneryObject = {
   rotation: number
   scale: number
   visualStyle?: TrackInfrastructurePalette
+  dimensions?: TrackInfrastructureDimensions
 }
 
 export type TrackInfrastructurePalette = {
@@ -213,6 +231,12 @@ export type TrackInfrastructurePalette = {
   secondaryColor: string
   accentColor: string
   roofColor: string
+}
+
+export type TrackInfrastructureDimensions = {
+  lengthMeters: number
+  depthMeters: number
+  heightMeters: number
 }
 
 export type TrackPitVisualStyle = TrackInfrastructurePalette & {
@@ -229,6 +253,16 @@ export type TrackPitVisualStyle = TrackInfrastructurePalette & {
     | 'marina-canopy'
   garageCount: number
   buildingHeightMeters: number
+  laneWidthMeters: number
+  garageStartRatio: number
+  garageEndRatio: number
+  pitBoxLengthMeters: number
+  pitBoxDepthMeters: number
+  pitBoxCenterOffsetMeters: number
+  garageDepthMeters: number
+  garageCenterOffsetMeters: number
+  pitWallHeightMeters: number
+  canopyDepthMeters: number
 }
 
 export type TrackSurfaceMaterial = 'asphalt' | 'grass' | 'gravel'
@@ -240,6 +274,15 @@ export type TrackBarrierType =
   | 'tyre-barrier'
 
 export type TrackFenceType = 'debris-fence'
+
+export type TrackFenceVisualStyle = {
+  heightMeters: number
+  postSpacingMeters: number
+  postColor: string
+  meshColor: string
+  meshOpacity: number
+  cantileverMeters: number
+}
 
 export type TrackCurbPalette =
   | 'red-white'
@@ -259,6 +302,8 @@ export type TrackCurbSegment = {
   widthMeters: number
   stripeLengthMeters: number
   palette: TrackCurbPalette
+  outerColor?: string
+  outerWidthMeters?: number
 }
 
 export type TrackSideEnvironment = {
@@ -268,6 +313,7 @@ export type TrackSideEnvironment = {
   }>
   barrier: TrackBarrierType
   fence?: TrackFenceType
+  fenceVisualStyle?: TrackFenceVisualStyle
 }
 
 export type TrackLimitSegment = {
@@ -298,7 +344,7 @@ export type TrackBarrierGeometrySegment = {
 
 export type TrackDefinition = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.8'
+  catalogVersion: '2026.9'
   physicsContractVersion: '2.0.0'
   id: string
   name: string
@@ -342,6 +388,7 @@ export type TrackDefinition = {
     preset: 'park' | 'street' | 'desert' | 'coastal' | 'classic' | 'night-city'
     landmarks: TrackSceneryObject[]
     staticObjects: TrackSceneryObject[]
+    escapeRoads: TrackEscapeRoad[]
   }
   source: {
     dataset: string
@@ -356,6 +403,43 @@ export type TrackDefinition = {
   }
 }
 
+function isCompatibleTrackCatalogEntry(
+  value: unknown,
+): value is TrackCatalogEntry {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'round' in value &&
+    typeof value.round === 'number' &&
+    Number.isInteger(value.round) &&
+    value.round >= 1 &&
+    value.round <= 24 &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value.id) &&
+    'name' in value &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    'countryCode' in value &&
+    typeof value.countryCode === 'string' &&
+    /^[A-Z]{2}$/.test(value.countryCode) &&
+    'countryName' in value &&
+    typeof value.countryName === 'string' &&
+    value.countryName.length > 0 &&
+    'locality' in value &&
+    typeof value.locality === 'string' &&
+    value.locality.length > 0 &&
+    'lengthMeters' in value &&
+    typeof value.lengthMeters === 'number' &&
+    Number.isInteger(value.lengthMeters) &&
+    value.lengthMeters >= 2500 &&
+    value.lengthMeters <= 8000 &&
+    'definitionPath' in value &&
+    typeof value.definitionPath === 'string' &&
+    /^tracks\/[a-z0-9-]+\.json$/.test(value.definitionPath)
+  )
+}
+
 function compatibleTrackCatalog(payload: unknown): TrackCatalog {
   if (
     typeof payload !== 'object' ||
@@ -363,14 +447,17 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.8' ||
+    payload.catalogVersion !== '2026.9' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('seasonReference' in payload) ||
     payload.seasonReference !== 2026 ||
+    !('calendarPolicy' in payload) ||
+    payload.calendarPolicy !== 'original-24-round-freeze' ||
     !('tracks' in payload) ||
     !Array.isArray(payload.tracks) ||
-    payload.tracks.length !== 24
+    payload.tracks.length !== 24 ||
+    payload.tracks.some((entry) => !isCompatibleTrackCatalogEntry(entry))
   ) {
     throw new Error(
       'A lista de circuitos não é compatível com esta versão do jogo.',
@@ -401,6 +488,9 @@ const TRACK_CURB_PALETTES = new Set<TrackCurbPalette>([
   'maroon-white',
   'blue-white',
 ])
+const TRACK_SCENERY_PRESETS = new Set<
+  TrackDefinition['sceneryLayout']['preset']
+>(['park', 'street', 'desert', 'coastal', 'classic', 'night-city'])
 
 const TRACK_PIT_ARCHITECTURES = new Set<
   TrackPitVisualStyle['architecture']
@@ -421,6 +511,172 @@ function isHexColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 }
 
+function isFiniteNumberInRange(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+) {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= minimum &&
+    value <= maximum
+  )
+}
+
+function isCompatibleInfrastructurePalette(
+  value: unknown,
+): value is TrackInfrastructurePalette {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'primaryColor' in value &&
+    isHexColor(value.primaryColor) &&
+    'secondaryColor' in value &&
+    isHexColor(value.secondaryColor) &&
+    'accentColor' in value &&
+    isHexColor(value.accentColor) &&
+    'roofColor' in value &&
+    isHexColor(value.roofColor)
+  )
+}
+
+function isCompatibleInfrastructureDimensions(
+  value: unknown,
+): value is TrackInfrastructureDimensions {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'lengthMeters' in value &&
+    isFiniteNumberInRange(value.lengthMeters, Number.MIN_VALUE, 400) &&
+    'depthMeters' in value &&
+    isFiniteNumberInRange(value.depthMeters, Number.MIN_VALUE, 120) &&
+    'heightMeters' in value &&
+    isFiniteNumberInRange(value.heightMeters, Number.MIN_VALUE, 80)
+  )
+}
+
+function isCompatibleSceneryObject(value: unknown): value is TrackSceneryObject {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    'kind' in value &&
+    typeof value.kind === 'string' &&
+    value.kind.length > 0 &&
+    'position' in value &&
+    typeof value.position === 'object' &&
+    value.position !== null &&
+    'x' in value.position &&
+    typeof value.position.x === 'number' &&
+    Number.isFinite(value.position.x) &&
+    'y' in value.position &&
+    typeof value.position.y === 'number' &&
+    Number.isFinite(value.position.y) &&
+    'rotation' in value &&
+    typeof value.rotation === 'number' &&
+    Number.isFinite(value.rotation) &&
+    'scale' in value &&
+    typeof value.scale === 'number' &&
+    Number.isFinite(value.scale) &&
+    value.scale > 0 &&
+    (!('visualStyle' in value) ||
+      isCompatibleInfrastructurePalette(value.visualStyle)) &&
+    (!('dimensions' in value) ||
+      isCompatibleInfrastructureDimensions(value.dimensions))
+  )
+}
+
+function isCompatibleTrackVector(value: unknown): value is TrackVector {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'x' in value &&
+    typeof value.x === 'number' &&
+    Number.isFinite(value.x) &&
+    'y' in value &&
+    typeof value.y === 'number' &&
+    Number.isFinite(value.y)
+  )
+}
+
+function isCompatibleEscapeRoad(value: unknown): value is TrackEscapeRoad {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    'kind' in value &&
+    value.kind === 'slalom-block-rows' &&
+    'affectsPhysics' in value &&
+    value.affectsPhysics === false &&
+    'elevationLayer' in value &&
+    typeof value.elevationLayer === 'number' &&
+    Number.isInteger(value.elevationLayer) &&
+    value.elevationLayer >= 0 &&
+    value.elevationLayer <= 3 &&
+    'widthMeters' in value &&
+    isFiniteNumberInRange(value.widthMeters, 4, 16) &&
+    'path' in value &&
+    Array.isArray(value.path) &&
+    value.path.length >= 2 &&
+    value.path.every(isCompatibleTrackVector) &&
+    'obstacleRows' in value &&
+    Array.isArray(value.obstacleRows) &&
+    value.obstacleRows.length >= 3 &&
+    value.obstacleRows.every(
+      (row) =>
+        typeof row === 'object' &&
+        row !== null &&
+        'from' in row &&
+        isCompatibleTrackVector(row.from) &&
+        'to' in row &&
+        isCompatibleTrackVector(row.to) &&
+        'blockLengthMeters' in row &&
+        isFiniteNumberInRange(row.blockLengthMeters, 0.4, 4) &&
+        'palette' in row &&
+        row.palette === 'red-white',
+    )
+  )
+}
+
+function hasUniqueSceneryIds(value: {
+  landmarks: TrackSceneryObject[]
+  staticObjects: TrackSceneryObject[]
+  escapeRoads: TrackEscapeRoad[]
+}) {
+  const ids = [
+    ...value.landmarks.map((object) => object.id),
+    ...value.staticObjects.map((object) => object.id),
+    ...value.escapeRoads.map((road) => road.id),
+  ]
+  return new Set(ids).size === ids.length
+}
+
+function isCompatibleFenceVisualStyle(
+  value: unknown,
+): value is TrackFenceVisualStyle {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'heightMeters' in value &&
+    isFiniteNumberInRange(value.heightMeters, 2, 6) &&
+    'postSpacingMeters' in value &&
+    isFiniteNumberInRange(value.postSpacingMeters, 1.5, 5) &&
+    'postColor' in value &&
+    isHexColor(value.postColor) &&
+    'meshColor' in value &&
+    isHexColor(value.meshColor) &&
+    'meshOpacity' in value &&
+    isFiniteNumberInRange(value.meshOpacity, 0.05, 0.5) &&
+    'cantileverMeters' in value &&
+    isFiniteNumberInRange(value.cantileverMeters, 0, 1.2)
+  )
+}
+
 function isCompatiblePitVisualStyle(
   value: unknown,
 ): value is TrackPitVisualStyle {
@@ -439,15 +695,29 @@ function isCompatiblePitVisualStyle(
     'buildingHeightMeters' in value &&
     typeof value.buildingHeightMeters === 'number' &&
     value.buildingHeightMeters >= 3 &&
-    value.buildingHeightMeters <= 8 &&
-    'primaryColor' in value &&
-    isHexColor(value.primaryColor) &&
-    'secondaryColor' in value &&
-    isHexColor(value.secondaryColor) &&
-    'accentColor' in value &&
-    isHexColor(value.accentColor) &&
-    'roofColor' in value &&
-    isHexColor(value.roofColor)
+    value.buildingHeightMeters <= 24 &&
+    'laneWidthMeters' in value &&
+    isFiniteNumberInRange(value.laneWidthMeters, 6, 16) &&
+    'garageStartRatio' in value &&
+    isFiniteNumberInRange(value.garageStartRatio, 0.05, 0.8) &&
+    'garageEndRatio' in value &&
+    isFiniteNumberInRange(value.garageEndRatio, 0.2, 0.95) &&
+    Number(value.garageStartRatio) < Number(value.garageEndRatio) &&
+    'pitBoxLengthMeters' in value &&
+    isFiniteNumberInRange(value.pitBoxLengthMeters, 3, 12) &&
+    'pitBoxDepthMeters' in value &&
+    isFiniteNumberInRange(value.pitBoxDepthMeters, 1.5, 4) &&
+    'pitBoxCenterOffsetMeters' in value &&
+    isFiniteNumberInRange(value.pitBoxCenterOffsetMeters, 1, 5) &&
+    'garageDepthMeters' in value &&
+    isFiniteNumberInRange(value.garageDepthMeters, 3, 16) &&
+    'garageCenterOffsetMeters' in value &&
+    isFiniteNumberInRange(value.garageCenterOffsetMeters, 6, 24) &&
+    'pitWallHeightMeters' in value &&
+    isFiniteNumberInRange(value.pitWallHeightMeters, 0.6, 1.5) &&
+    'canopyDepthMeters' in value &&
+    isFiniteNumberInRange(value.canopyDepthMeters, 0, 5) &&
+    isCompatibleInfrastructurePalette(value)
   )
 }
 
@@ -484,7 +754,10 @@ function isCompatibleTrackCurb(
     value.stripeLengthMeters <= 8 &&
     'palette' in value &&
     typeof value.palette === 'string' &&
-    TRACK_CURB_PALETTES.has(value.palette as TrackCurbPalette)
+    TRACK_CURB_PALETTES.has(value.palette as TrackCurbPalette) &&
+    (!('outerColor' in value) || isHexColor(value.outerColor)) &&
+    (!('outerWidthMeters' in value) ||
+      isFiniteNumberInRange(value.outerWidthMeters, 0.1, 1.5))
   )
 }
 
@@ -500,7 +773,9 @@ function isCompatibleTrackSide(value: unknown): value is TrackSideEnvironment {
     !TRACK_BARRIER_TYPES.has(value.barrier as TrackBarrierType) ||
     ('fence' in value &&
       (typeof value.fence !== 'string' ||
-        !TRACK_FENCE_TYPES.has(value.fence as TrackFenceType)))
+        !TRACK_FENCE_TYPES.has(value.fence as TrackFenceType))) ||
+    ('fenceVisualStyle' in value &&
+      !isCompatibleFenceVisualStyle(value.fenceVisualStyle))
   ) {
     return false
   }
@@ -647,7 +922,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.8' ||
+    payload.catalogVersion !== '2026.9' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('centerline' in payload) ||
@@ -725,6 +1000,32 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !hasCompleteBarrierCoverage(
       payload.barrierGeometry.segments as TrackBarrierGeometrySegment[],
       payload.trackLimits.segments as TrackLimitSegment[],
+    ) ||
+    !('sceneryLayout' in payload) ||
+    typeof payload.sceneryLayout !== 'object' ||
+    payload.sceneryLayout === null ||
+    !('preset' in payload.sceneryLayout) ||
+    typeof payload.sceneryLayout.preset !== 'string' ||
+    !TRACK_SCENERY_PRESETS.has(
+      payload.sceneryLayout.preset as TrackDefinition['sceneryLayout']['preset'],
+    ) ||
+    !('landmarks' in payload.sceneryLayout) ||
+    !Array.isArray(payload.sceneryLayout.landmarks) ||
+    payload.sceneryLayout.landmarks.some(
+      (object) => !isCompatibleSceneryObject(object),
+    ) ||
+    !('staticObjects' in payload.sceneryLayout) ||
+    !Array.isArray(payload.sceneryLayout.staticObjects) ||
+    payload.sceneryLayout.staticObjects.some(
+      (object) => !isCompatibleSceneryObject(object),
+    ) ||
+    !('escapeRoads' in payload.sceneryLayout) ||
+    !Array.isArray(payload.sceneryLayout.escapeRoads) ||
+    payload.sceneryLayout.escapeRoads.some(
+      (road) => !isCompatibleEscapeRoad(road),
+    ) ||
+    !hasUniqueSceneryIds(
+      payload.sceneryLayout as TrackDefinition['sceneryLayout'],
     ) ||
     !('source' in payload) ||
     typeof payload.source !== 'object' ||

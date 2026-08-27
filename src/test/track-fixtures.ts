@@ -146,7 +146,7 @@ export function createTrackFixture(
   const start = pointOnCircle(radius, 0)
   return {
     schemaVersion: '2.0.0',
-    catalogVersion: '2026.8',
+    catalogVersion: '2026.9',
     physicsContractVersion: '2.0.0',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
@@ -201,6 +201,16 @@ export function createTrackFixture(
         roofColor: '#eceeef',
         garageCount: 10,
         buildingHeightMeters: 4.8,
+        laneWidthMeters: 11,
+        garageStartRatio: 0.2,
+        garageEndRatio: 0.8,
+        pitBoxLengthMeters: 7,
+        pitBoxDepthMeters: 2.4,
+        pitBoxCenterOffsetMeters: 2.8,
+        garageDepthMeters: 9,
+        garageCenterOffsetMeters: 12,
+        pitWallHeightMeters: 1,
+        canopyDepthMeters: 1.5,
       },
     },
     surfaceModel: {
@@ -216,6 +226,8 @@ export function createTrackFixture(
         widthMeters: 1,
         stripeLengthMeters: 2.5,
         palette: 'red-white',
+        outerColor: '#2f8548',
+        outerWidthMeters: 0.35,
       },
       {
         index: 1,
@@ -225,6 +237,8 @@ export function createTrackFixture(
         widthMeters: 1,
         stripeLengthMeters: 2.5,
         palette: id === 'monaco' ? 'red-white' : 'red-yellow',
+        outerColor: id === 'monaco' ? '#2f8548' : '#1f4f37',
+        outerWidthMeters: 0.35,
       },
     ],
     trackLimits: {
@@ -236,6 +250,7 @@ export function createTrackFixture(
       preset: id === 'monaco' ? 'coastal' : 'classic',
       landmarks: [],
       staticObjects: [],
+      escapeRoads: [],
     },
     source: {
       dataset: 'deterministic test fixture',
