@@ -161,7 +161,7 @@ export type TrackCatalogEntry = {
 
 export type TrackCatalog = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.7'
+  catalogVersion: '2026.8'
   physicsContractVersion: '2.0.0'
   seasonReference: 2026
   calendarPolicy?: 'original-24-round-freeze'
@@ -205,6 +205,30 @@ export type TrackSceneryObject = {
   position: TrackVector
   rotation: number
   scale: number
+  visualStyle?: TrackInfrastructurePalette
+}
+
+export type TrackInfrastructurePalette = {
+  primaryColor: string
+  secondaryColor: string
+  accentColor: string
+  roofColor: string
+}
+
+export type TrackPitVisualStyle = TrackInfrastructurePalette & {
+  architecture:
+    | 'temporary-modular'
+    | 'permanent-modern'
+    | 'desert-canopy'
+    | 'stepped-modern'
+    | 'urban-compact'
+    | 'wing'
+    | 'heritage'
+    | 'exhibition'
+    | 'stadium'
+    | 'marina-canopy'
+  garageCount: number
+  buildingHeightMeters: number
 }
 
 export type TrackSurfaceMaterial = 'asphalt' | 'grass' | 'gravel'
@@ -274,7 +298,7 @@ export type TrackBarrierGeometrySegment = {
 
 export type TrackDefinition = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.7'
+  catalogVersion: '2026.8'
   physicsContractVersion: '2.0.0'
   id: string
   name: string
@@ -300,6 +324,7 @@ export type TrackDefinition = {
     exitDistanceMeters: number
     speedLimitMetersPerSecond: number
     path: TrackVector[]
+    visualStyle: TrackPitVisualStyle
   }
   surfaceModel: {
     onTrack: 'asphalt'
@@ -338,7 +363,7 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.7' ||
+    payload.catalogVersion !== '2026.8' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('seasonReference' in payload) ||
@@ -376,6 +401,55 @@ const TRACK_CURB_PALETTES = new Set<TrackCurbPalette>([
   'maroon-white',
   'blue-white',
 ])
+
+const TRACK_PIT_ARCHITECTURES = new Set<
+  TrackPitVisualStyle['architecture']
+>([
+  'temporary-modular',
+  'permanent-modern',
+  'desert-canopy',
+  'stepped-modern',
+  'urban-compact',
+  'wing',
+  'heritage',
+  'exhibition',
+  'stadium',
+  'marina-canopy',
+])
+
+function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+}
+
+function isCompatiblePitVisualStyle(
+  value: unknown,
+): value is TrackPitVisualStyle {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'architecture' in value &&
+    TRACK_PIT_ARCHITECTURES.has(
+      value.architecture as TrackPitVisualStyle['architecture'],
+    ) &&
+    'garageCount' in value &&
+    typeof value.garageCount === 'number' &&
+    Number.isInteger(value.garageCount) &&
+    value.garageCount >= 8 &&
+    value.garageCount <= 16 &&
+    'buildingHeightMeters' in value &&
+    typeof value.buildingHeightMeters === 'number' &&
+    value.buildingHeightMeters >= 3 &&
+    value.buildingHeightMeters <= 8 &&
+    'primaryColor' in value &&
+    isHexColor(value.primaryColor) &&
+    'secondaryColor' in value &&
+    isHexColor(value.secondaryColor) &&
+    'accentColor' in value &&
+    isHexColor(value.accentColor) &&
+    'roofColor' in value &&
+    isHexColor(value.roofColor)
+  )
+}
 
 function isCompatibleTrackCurb(
   value: unknown,
@@ -573,7 +647,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.7' ||
+    payload.catalogVersion !== '2026.8' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('centerline' in payload) ||
@@ -597,6 +671,11 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('lengthMeters' in payload) ||
     typeof payload.lengthMeters !== 'number' ||
     !Number.isFinite(payload.lengthMeters) ||
+    !('pitLane' in payload) ||
+    typeof payload.pitLane !== 'object' ||
+    payload.pitLane === null ||
+    !('visualStyle' in payload.pitLane) ||
+    !isCompatiblePitVisualStyle(payload.pitLane.visualStyle) ||
     !('curbs' in payload) ||
     !Array.isArray(payload.curbs) ||
     payload.curbs.length === 0 ||

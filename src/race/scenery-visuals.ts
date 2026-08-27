@@ -73,7 +73,7 @@ export function classifySceneryKind(kind: string): SceneryVisualCategory {
   }
   if (
     normalized.includes('grandstand') ||
-    normalized.includes('stadium') ||
+    (normalized.includes('stadium') && !normalized.includes('building')) ||
     normalized.includes('amphitheater')
   ) {
     return 'grandstand'
@@ -147,6 +147,13 @@ export function drawSceneryVisual({
   const category = classifySceneryKind(object.kind)
   const size = Math.max(4, object.scale * pixelsPerMeter)
   const accent = PRESET_ACCENTS[preset]
+  const palette = object.visualStyle ?? {
+    primaryColor: '#596575',
+    secondaryColor: '#343e49',
+    accentColor: accent,
+    roofColor: '#c9cfd6',
+  }
+  const normalizedKind = object.kind.toLowerCase()
 
   context.save()
   context.lineCap = 'round'
@@ -193,27 +200,189 @@ export function drawSceneryVisual({
       break
     }
     case 'grandstand': {
-      drawRoundedPanel(context, size * 1.4, size * 0.72, '#596575')
-      context.strokeStyle = 'rgba(240, 240, 250, 0.48)'
-      context.lineWidth = Math.max(1, size * 0.045)
-      for (const offset of [-0.2, 0, 0.2]) {
+      const width = size * 1.65
+      const depth = size * 0.82
+      context.fillStyle = 'rgba(3, 7, 12, 0.3)'
+      context.beginPath()
+      context.moveTo(-width * 0.48, depth * 0.56)
+      context.lineTo(width * 0.56, depth * 0.56)
+      context.lineTo(width * 0.47, -depth * 0.26)
+      context.lineTo(-width * 0.43, -depth * 0.26)
+      context.closePath()
+      context.fill()
+
+      // Front fascia gives the stand height in the 2.5D projection.
+      context.fillStyle = palette.primaryColor
+      context.beginPath()
+      context.moveTo(-width / 2, depth * 0.42)
+      context.lineTo(width / 2, depth * 0.42)
+      context.lineTo(width * 0.48, depth * 0.58)
+      context.lineTo(-width * 0.48, depth * 0.58)
+      context.closePath()
+      context.fill()
+      context.fillStyle = palette.secondaryColor
+      context.beginPath()
+      context.moveTo(-width / 2, depth * 0.42)
+      context.lineTo(width / 2, depth * 0.42)
+      context.lineTo(width * 0.43, -depth * 0.4)
+      context.lineTo(-width * 0.43, -depth * 0.4)
+      context.closePath()
+      context.fill()
+
+      const rows = 6
+      for (let row = 0; row < rows; row += 1) {
+        const progress = row / rows
+        const y = depth * 0.32 - progress * depth * 0.65
+        const inset = width * (0.04 + progress * 0.035)
+        context.strokeStyle =
+          row % 2 === 0 ? palette.primaryColor : palette.accentColor
+        context.lineWidth = Math.max(1, size * 0.055)
         context.beginPath()
-        context.moveTo(-size * 0.56, size * offset)
-        context.lineTo(size * 0.56, size * offset)
+        context.moveTo(-width / 2 + inset, y)
+        context.lineTo(width / 2 - inset, y)
         context.stroke()
+        const seatCount = 13
+        for (let seat = 0; seat < seatCount; seat += 1) {
+          const ratio = seat / (seatCount - 1)
+          const x = -width / 2 + inset + (width - inset * 2) * ratio
+          context.fillStyle =
+            (row + seat) % 3 === 0
+              ? palette.accentColor
+              : 'rgba(224, 229, 232, 0.58)'
+          context.beginPath()
+          context.arc(x, y - size * 0.018, Math.max(0.7, size * 0.014), 0, Math.PI * 2)
+          context.fill()
+        }
+      }
+      context.strokeStyle = 'rgba(13, 18, 25, 0.58)'
+      context.lineWidth = Math.max(1, size * 0.025)
+      for (const offset of [-0.34, -0.17, 0, 0.17, 0.34]) {
+        context.beginPath()
+        context.moveTo(width * offset, depth * 0.35)
+        context.lineTo(width * offset * 0.83, -depth * 0.34)
+        context.stroke()
+      }
+      if (
+        normalizedKind.includes('covered') ||
+        normalizedKind.includes('canopy') ||
+        normalizedKind.includes('main-grandstand')
+      ) {
+        context.fillStyle = palette.roofColor
+        context.beginPath()
+        context.moveTo(-width * 0.52, -depth * 0.34)
+        context.lineTo(width * 0.52, -depth * 0.34)
+        context.lineTo(width * 0.43, -depth * 0.56)
+        context.lineTo(-width * 0.43, -depth * 0.56)
+        context.closePath()
+        context.fill()
+        context.strokeStyle = palette.secondaryColor
+        context.lineWidth = Math.max(1, size * 0.025)
+        context.beginPath()
+        context.moveTo(-width * 0.5, -depth * 0.4)
+        context.lineTo(width * 0.5, -depth * 0.4)
+        context.stroke()
+        context.strokeStyle = palette.secondaryColor
+        context.lineWidth = Math.max(1, size * 0.04)
+        for (const x of [-0.42, 0.42]) {
+          context.beginPath()
+          context.moveTo(width * x, -depth * 0.34)
+          context.lineTo(width * x, depth * 0.36)
+          context.stroke()
+        }
+        context.fillStyle = 'rgba(241, 245, 246, 0.72)'
+        for (let light = 0; light < 9; light += 1) {
+          const ratio = light / 8
+          context.beginPath()
+          context.arc(
+            -width * 0.42 + width * 0.84 * ratio,
+            -depth * 0.39,
+            Math.max(0.7, size * 0.012),
+            0,
+            Math.PI * 2,
+          )
+          context.fill()
+        }
       }
       break
     }
     case 'building': {
-      drawRoundedPanel(context, size * 1.15, size * 0.78, '#4d596a')
-      context.fillStyle = 'rgba(49, 199, 255, 0.28)'
-      for (const x of [-0.3, 0, 0.3]) {
-        context.fillRect(size * (x - 0.06), -size * 0.22, size * 0.12, size * 0.44)
+      const width = size * (normalizedKind.includes('stadium') ? 1.65 : 1.35)
+      const depth = size * (normalizedKind.includes('wing') ? 0.65 : 0.82)
+      context.fillStyle = 'rgba(3, 7, 12, 0.32)'
+      context.fillRect(-width * 0.48, -depth * 0.18, width * 1.04, depth * 0.78)
+      if (normalizedKind.includes('stadium')) {
+        context.fillStyle = palette.secondaryColor
+        context.beginPath()
+        context.ellipse(0, 0, width / 2, depth / 2, 0, 0, Math.PI * 2)
+        context.fill()
+        context.fillStyle = palette.roofColor
+        context.beginPath()
+        context.ellipse(0, -depth * 0.05, width * 0.39, depth * 0.31, 0, 0, Math.PI * 2)
+        context.fill()
+        context.fillStyle = palette.accentColor
+        context.beginPath()
+        context.ellipse(0, 0, width * 0.25, depth * 0.16, 0, 0, Math.PI * 2)
+        context.fill()
+        context.strokeStyle = palette.accentColor
+        context.lineWidth = Math.max(1, size * 0.035)
+        for (const ratio of [0.38, 0.49, 0.6]) {
+          context.beginPath()
+          context.ellipse(0, 0, width * ratio, depth * ratio, 0, 0, Math.PI * 2)
+          context.stroke()
+        }
+        break
       }
+      context.fillStyle = palette.secondaryColor
+      context.fillRect(-width / 2, -depth * 0.28, width, depth * 0.66)
+      context.fillStyle = palette.primaryColor
+      context.fillRect(-width / 2, -depth * 0.37, width, depth * 0.25)
+      context.fillStyle = palette.accentColor
+      context.fillRect(-width / 2, depth * 0.12, width, depth * 0.08)
+      context.fillStyle = 'rgba(94, 154, 177, 0.58)'
+      const windowCount = normalizedKind.includes('wing') ? 7 : 5
+      const floorCount = normalizedKind.includes('exhibition') ? 3 : 2
+      for (let floor = 0; floor < floorCount; floor += 1) {
+        for (let index = 0; index < windowCount; index += 1) {
+          const x = -width * 0.4 + (width * 0.8 * index) / (windowCount - 1)
+          const y = -depth * 0.21 + floor * depth * 0.17
+          context.fillRect(
+            x - width * 0.035,
+            y,
+            width * 0.07,
+            depth * 0.11,
+          )
+        }
+      }
+      context.fillStyle = palette.roofColor
+      if (normalizedKind.includes('wing')) {
+        context.beginPath()
+        context.moveTo(-width * 0.54, -depth * 0.36)
+        for (let index = 0; index <= 6; index += 1) {
+          const x = -width * 0.54 + (width * 1.08 * index) / 6
+          const y = -depth * (index % 2 === 0 ? 0.52 : 0.38)
+          context.lineTo(x, y)
+        }
+        context.lineTo(width * 0.54, -depth * 0.28)
+        context.closePath()
+        context.fill()
+      } else {
+        context.fillRect(-width * 0.53, -depth * 0.47, width * 1.06, depth * 0.14)
+      }
+      context.fillStyle = palette.secondaryColor
+      for (const x of [-0.42, 0.42]) {
+        context.fillRect(
+          width * x - size * 0.025,
+          -depth * 0.46,
+          size * 0.05,
+          depth * 0.84,
+        )
+      }
+      context.fillStyle = palette.accentColor
+      context.fillRect(-width * 0.48, depth * 0.24, width * 0.96, depth * 0.07)
       break
     }
     case 'tower': {
-      context.fillStyle = '#59677a'
+      context.fillStyle = palette.secondaryColor
       context.beginPath()
       context.moveTo(-size * 0.18, size * 0.48)
       context.lineTo(-size * 0.08, -size * 0.4)
@@ -221,7 +390,7 @@ export function drawSceneryVisual({
       context.lineTo(size * 0.18, size * 0.48)
       context.closePath()
       context.fill()
-      context.fillStyle = accent
+      context.fillStyle = palette.accentColor
       context.beginPath()
       context.arc(0, -size * 0.42, size * 0.2, 0, Math.PI * 2)
       context.fill()

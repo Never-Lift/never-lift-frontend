@@ -8,7 +8,9 @@ import {
 } from '@/race/camera'
 import { RaceEngine } from '@/race/RaceEngine'
 import {
+  calculateSuzukaUpperLayerOpacity,
   calculateTrackCullMarginMeters,
+  findSuzukaCrossingPoints,
   RaceRenderer,
   sortVehiclesByProjectedDepth,
 } from '@/race/RaceRenderer'
@@ -464,7 +466,7 @@ describe('RaceRenderer audited surfaces', () => {
     ])
     const asphaltIndices = indicesFor('stroke', ['#29303b'])
     const fenceIndices = indicesFor('stroke', ['#697789'])
-    const barrierIndices = indicesFor('stroke', ['#9aa6b8', '#5c7da7'])
+    const barrierIndices = indicesFor('stroke', ['#aeb7c3', '#6787ad'])
     const detailIndices = indicesFor('stroke', [
       'rgba(240, 240, 250, 0.78)',
       'rgba(240, 240, 250, 0.17)',
@@ -532,7 +534,7 @@ describe('RaceRenderer audited surfaces', () => {
     )
     const barrierStrokes = operations.filter(
       (operation) =>
-        operation.kind === 'stroke' && operation.color === '#9aa6b8',
+          operation.kind === 'stroke' && operation.color === '#aeb7c3',
     )
     expect(fenceStrokes).toHaveLength(4)
     expect(barrierStrokes).toHaveLength(4)
@@ -639,6 +641,69 @@ describe('RaceRenderer audited surfaces', () => {
     ).toBe(true)
   })
 
+  it('extrudes the canonical barrier into a visible 2.5D side face', () => {
+    const track = createStraightTransitionTrack()
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawTrackBarriers(track.centerline, IDENTITY_TRANSFORM)
+
+    const sideFaces = operations.filter(
+      (operation) =>
+        operation.kind === 'fill' && operation.color === '#6f7b89',
+    )
+    const topFaces = operations.filter(
+      (operation) =>
+        operation.kind === 'fill' && operation.color === '#aeb7c3',
+    )
+    expect(sideFaces.length).toBeGreaterThan(0)
+    expect(topFaces.length).toBeGreaterThan(0)
+    expect(
+      sideFaces.some((face) => {
+        const verticalExtent = Math.max(...face.path.map((point) => point.y)) -
+          Math.min(...face.path.map((point) => point.y))
+        return verticalExtent > 0.7
+      }),
+    ).toBe(true)
+  })
+
+  it('draws end caps only at real protection ends, not at every sampled joint', () => {
+    const track = createStraightTransitionTrack()
+    const barrier = structuredClone(track.barrierGeometry.segments[0])
+    const from = barrier.path[0]
+    const to = barrier.path[1]
+    barrier.path = [
+      from,
+      {
+        x: (from.x + to.x) / 2,
+        y: (from.y + to.y) / 2 + 1.5,
+        distanceMeters: (from.distanceMeters + to.distanceMeters) / 2,
+        elevationLayer: from.elevationLayer,
+      },
+      to,
+    ]
+    track.barrierGeometry.segments = [barrier]
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawTrackBarriers(track.centerline, IDENTITY_TRANSFORM)
+
+    expect(
+      operations.filter(
+        (operation) =>
+          operation.kind === 'fill' &&
+          operation.color === 'rgba(86, 96, 108, 0.86)',
+      ),
+    ).toHaveLength(1)
+    expect(
+      operations.filter(
+        (operation) =>
+          operation.kind === 'fill' &&
+          operation.color === 'rgba(64, 73, 84, 0.92)',
+      ),
+    ).toHaveLength(1)
+  })
+
   it('draws a connected pit lane, box markings and repeated garages', () => {
     const track = createStraightTransitionTrack()
     track.pitLane.path = Array.from({ length: 25 }, (_, index) => ({
@@ -653,20 +718,27 @@ describe('RaceRenderer audited surfaces', () => {
     expect(
       operations.filter(
         (operation) =>
-          operation.kind === 'stroke' && operation.color === '#2d3540',
+          operation.kind === 'stroke' && operation.color === '#29313a',
       ).length,
     ).toBe(24)
     expect(
       operations.some(
         (operation) =>
-          operation.kind === 'fill' && operation.color === '#596575',
+          operation.kind === 'fill' && operation.color === '#eceeef',
       ),
     ).toBe(true)
     expect(
       operations.some(
         (operation) =>
           operation.kind === 'fill' &&
-          operation.color === 'rgba(218, 224, 233, 0.28)',
+          operation.color === '#d9dcdf55',
+      ),
+    ).toBe(true)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'fill' &&
+          operation.color === 'rgba(88, 148, 169, 0.56)',
       ),
     ).toBe(true)
   })
@@ -698,6 +770,42 @@ describe('RaceRenderer audited surfaces', () => {
           operation.kind === 'stroke' && operation.color === '#222a34',
       ),
     ).toBe(true)
+  })
+
+  it('fades only Suzuka upper layers for a lower car approaching the crossover', () => {
+    const track = createStraightTransitionTrack()
+    track.id = 'suzuka'
+    track.centerline = [
+      { x: -80, y: 0, distanceMeters: 0, halfWidthMeters: 6, elevationLayer: 0 },
+      { x: 80, y: 0, distanceMeters: 160, halfWidthMeters: 6, elevationLayer: 0 },
+      { x: 80, y: -80, distanceMeters: 240, halfWidthMeters: 6, elevationLayer: 1 },
+      { x: 0, y: -80, distanceMeters: 320, halfWidthMeters: 6, elevationLayer: 1 },
+      { x: 0, y: 80, distanceMeters: 480, halfWidthMeters: 6, elevationLayer: 1 },
+      { x: -80, y: 80, distanceMeters: 560, halfWidthMeters: 6, elevationLayer: 0 },
+    ]
+    const crossings = findSuzukaCrossingPoints(track)
+    expect(crossings).toEqual([{ x: 0, y: 0 }])
+    expect(
+      calculateSuzukaUpperLayerOpacity(
+        track.id,
+        { renderPosition: { x: 0, y: 0 }, trackLayer: 0 },
+        crossings,
+      ),
+    ).toBeCloseTo(0.34, 8)
+    expect(
+      calculateSuzukaUpperLayerOpacity(
+        track.id,
+        { renderPosition: { x: -80, y: 0 }, trackLayer: 0 },
+        crossings,
+      ),
+    ).toBe(1)
+    expect(
+      calculateSuzukaUpperLayerOpacity(
+        track.id,
+        { renderPosition: { x: 0, y: 0 }, trackLayer: 1 },
+        crossings,
+      ),
+    ).toBe(1)
   })
 
   it('splits elevation transitions at the same midpoint used by TrackGeometry', () => {

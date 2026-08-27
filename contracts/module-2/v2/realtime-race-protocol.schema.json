@@ -36,7 +36,7 @@
           "required": ["roomCode", "trackCatalogVersion", "physicsContractVersion"],
           "properties": {
             "roomCode": { "type": "string", "pattern": "^[A-Z0-9]{4,12}$" },
-            "trackCatalogVersion": { "const": "2026.7" },
+            "trackCatalogVersion": { "const": "2026.8" },
             "physicsContractVersion": { "const": "2.0.0" }
           }
         }
@@ -108,7 +108,7 @@
       "required": ["trackId", "trackCatalogVersion", "physicsContractVersion"],
       "properties": {
         "trackId": { "type": "string", "minLength": 1 },
-        "trackCatalogVersion": { "const": "2026.7" },
+        "trackCatalogVersion": { "const": "2026.8" },
         "physicsContractVersion": { "const": "2.0.0" }
       }
     },
