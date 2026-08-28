@@ -111,9 +111,9 @@ function validEscapeRoad(): TrackEscapeRoad {
       { x: 30, y: 4 },
     ],
     obstacleRows: [
-      { from: { x: 8, y: -3 }, to: { x: 8, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
-      { from: { x: 15, y: -1 }, to: { x: 15, y: 3 }, blockLengthMeters: 1, palette: 'red-white' },
-      { from: { x: 22, y: -3 }, to: { x: 22, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
+      { from: { x: 8, y: -3 }, to: { x: 8, y: 1 }, blockLengthMeters: 1, palette: 'white-red-chevron' },
+      { from: { x: 15, y: -1 }, to: { x: 15, y: 3 }, blockLengthMeters: 1, palette: 'white-red-chevron' },
+      { from: { x: 22, y: -3 }, to: { x: 22, y: 1 }, blockLengthMeters: 1, palette: 'white-red-chevron' },
     ],
   }
 }
@@ -239,14 +239,15 @@ describe('track API compatibility guard', () => {
     await expect(raceApi.getTrack('monza')).resolves.toEqual(definition)
   })
 
-  it('accepts a physical stone escape road with concrete collision material', async () => {
+  it('accepts a physical chevron escape road with its authored external edge', async () => {
     const definition = structuredClone(SHORT_TRACK)
     const road = validEscapeRoad()
     road.affectsPhysics = true
     road.edgeMaterial = 'concrete-wall'
+    road.edgeSides = ['left']
     road.obstacleRows = road.obstacleRows.map((row) => ({
       ...row,
-      palette: 'stone',
+      palette: 'white-red-chevron',
       collisionMaterial: 'concrete-wall',
     }))
     definition.sceneryLayout.escapeRoads = [road]

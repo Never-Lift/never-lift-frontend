@@ -145,7 +145,7 @@ export type TrackEscapeObstacleRow = {
   from: TrackVector
   to: TrackVector
   blockLengthMeters: number
-  palette: 'red-white' | 'stone'
+  palette: 'white-red-chevron'
   collisionMaterial?: 'concrete-wall'
 }
 
@@ -158,6 +158,7 @@ export type TrackEscapeRoad = {
   path: TrackVector[]
   obstacleRows: TrackEscapeObstacleRow[]
   edgeMaterial?: 'concrete-wall'
+  edgeSides?: Array<'left' | 'right'>
 }
 
 export type TrackBrakingMarker = {
@@ -661,17 +662,25 @@ function isCompatibleEscapeRoad(value: unknown): value is TrackEscapeRoad {
         'blockLengthMeters' in row &&
         isFiniteNumberInRange(row.blockLengthMeters, 0.4, 4) &&
         'palette' in row &&
-        (row.palette === 'red-white' || row.palette === 'stone') &&
+        row.palette === 'white-red-chevron' &&
         (!('collisionMaterial' in row) ||
           row.collisionMaterial === 'concrete-wall'),
     ) &&
     (!('edgeMaterial' in value) || value.edgeMaterial === 'concrete-wall') &&
+    (!('edgeSides' in value) ||
+      (Array.isArray(value.edgeSides) &&
+        value.edgeSides.length >= 1 &&
+        value.edgeSides.length <= 2 &&
+        new Set(value.edgeSides).size === value.edgeSides.length &&
+        value.edgeSides.every((side) => side === 'left' || side === 'right'))) &&
     (!value.affectsPhysics ||
       ('edgeMaterial' in value &&
         value.edgeMaterial === 'concrete-wall' &&
+        'edgeSides' in value &&
+        Array.isArray(value.edgeSides) &&
+        value.edgeSides.length >= 1 &&
         value.obstacleRows.every(
           (row) =>
-            row.palette === 'stone' &&
             'collisionMaterial' in row &&
             row.collisionMaterial === 'concrete-wall',
         )))

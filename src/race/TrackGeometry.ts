@@ -264,7 +264,7 @@ function buildEscapeRoadColliderRecords(
       const tangent = normalize(subtract(to, from))
       if (tangent.x === 0 && tangent.y === 0) continue
       const normal = perpendicularLeft(tangent)
-      for (const side of ['left', 'right'] as const) {
+      for (const side of road.edgeSides ?? (['left', 'right'] as const)) {
         const direction = side === 'left' ? 1 : -1
         const offset = road.widthMeters / 2
         const edgeFrom = {
@@ -685,6 +685,13 @@ export class TrackGeometry {
     ) {
       return this.definition.surfaceModel.pitLane
     }
+    const physicalEscapeRoad = this.definition.sceneryLayout.escapeRoads.find(
+      (road) =>
+        road.affectsPhysics &&
+        road.path.length >= 2 &&
+        distanceToPath(point, road.path) <= road.widthMeters / 2,
+    )
+    if (physicalEscapeRoad) return this.definition.surfaceModel.onTrack
     const projection = this.project(point, preferredDistanceMeters)
     const environment = this.environmentForProjection(point, projection)
     const curb = this.definition.curbs.find(

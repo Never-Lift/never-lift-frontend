@@ -128,6 +128,7 @@ describe('TrackGeometry', () => {
         kind: 'slalom-block-rows',
         affectsPhysics: true,
         edgeMaterial: 'concrete-wall',
+        edgeSides: ['left'],
         elevationLayer: 0,
         widthMeters: 7,
         path: [
@@ -139,21 +140,21 @@ describe('TrackGeometry', () => {
             from: { x: 104, y: -2 },
             to: { x: 104, y: 2 },
             blockLengthMeters: 0.9,
-            palette: 'stone',
+            palette: 'white-red-chevron',
             collisionMaterial: 'concrete-wall',
           },
           {
             from: { x: 110, y: -2 },
             to: { x: 110, y: 2 },
             blockLengthMeters: 0.9,
-            palette: 'stone',
+            palette: 'white-red-chevron',
             collisionMaterial: 'concrete-wall',
           },
           {
             from: { x: 116, y: -2 },
             to: { x: 116, y: 2 },
             blockLengthMeters: 0.9,
-            palette: 'stone',
+            palette: 'white-red-chevron',
             collisionMaterial: 'concrete-wall',
           },
         ],
@@ -181,6 +182,12 @@ describe('TrackGeometry', () => {
         (collider) => collider.id === 'escape-physical-escape-edge-left-0',
       ),
     ).toBe(true)
+    expect(
+      geometry.getBarrierColliders(0).some(
+        (collider) => collider.id === 'escape-physical-escape-edge-right-0',
+      ),
+    ).toBe(false)
+    expect(geometry.getSurfaceAt({ x: 108, y: 0 })).toBe('asphalt')
     expect(
       geometry.getBarrierCollisionManifolds(
         [rectangle('clear-escape-probe', 108, 0, 0.2, 0.2)],
