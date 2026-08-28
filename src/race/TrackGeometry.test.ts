@@ -120,6 +120,75 @@ describe('TrackGeometry', () => {
     expect(manifold.penetrationMeters).toBeCloseTo(0.01, 8)
   })
 
+  it('adds physical escape-road blocks and edge walls to the same collision broadphase', () => {
+    const definition = structuredClone(SHORT_TRACK)
+    definition.sceneryLayout.escapeRoads = [
+      {
+        id: 'physical-escape',
+        kind: 'slalom-block-rows',
+        affectsPhysics: true,
+        edgeMaterial: 'concrete-wall',
+        elevationLayer: 0,
+        widthMeters: 7,
+        path: [
+          { x: 100, y: 0 },
+          { x: 120, y: 0 },
+        ],
+        obstacleRows: [
+          {
+            from: { x: 104, y: -2 },
+            to: { x: 104, y: 2 },
+            blockLengthMeters: 0.9,
+            palette: 'stone',
+            collisionMaterial: 'concrete-wall',
+          },
+          {
+            from: { x: 110, y: -2 },
+            to: { x: 110, y: 2 },
+            blockLengthMeters: 0.9,
+            palette: 'stone',
+            collisionMaterial: 'concrete-wall',
+          },
+          {
+            from: { x: 116, y: -2 },
+            to: { x: 116, y: 2 },
+            blockLengthMeters: 0.9,
+            palette: 'stone',
+            collisionMaterial: 'concrete-wall',
+          },
+        ],
+      },
+    ]
+    const geometry = new TrackGeometry(definition)
+
+    const obstacleManifold = geometry.getBarrierCollisionManifolds(
+      [rectangle('escape-obstacle-probe', 104, 0, 0.5, 0.5)],
+      0,
+    )[0]
+    expect(obstacleManifold?.secondColliderId).toMatch(
+      /^escape-physical-escape-row-0-block-/,
+    )
+    expect(obstacleManifold?.secondCollisionMaterial).toBe('concrete-wall')
+
+    const edgeColliders = geometry.getBarrierColliders(0, {
+      minX: 99,
+      minY: 3,
+      maxX: 121,
+      maxY: 4,
+    })
+    expect(
+      edgeColliders.some(
+        (collider) => collider.id === 'escape-physical-escape-edge-left-0',
+      ),
+    ).toBe(true)
+    expect(
+      geometry.getBarrierCollisionManifolds(
+        [rectangle('clear-escape-probe', 108, 0, 0.2, 0.2)],
+        0,
+      ),
+    ).toHaveLength(0)
+  })
+
   it('reports curb and gravel as their own v2 physics surfaces', () => {
     const definition = structuredClone(LONG_TRACK)
     definition.curbs = [

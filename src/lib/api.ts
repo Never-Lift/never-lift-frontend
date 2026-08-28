@@ -145,17 +145,19 @@ export type TrackEscapeObstacleRow = {
   from: TrackVector
   to: TrackVector
   blockLengthMeters: number
-  palette: 'red-white'
+  palette: 'red-white' | 'stone'
+  collisionMaterial?: 'concrete-wall'
 }
 
 export type TrackEscapeRoad = {
   id: string
   kind: 'slalom-block-rows'
-  affectsPhysics: false
+  affectsPhysics: boolean
   elevationLayer: number
   widthMeters: number
   path: TrackVector[]
   obstacleRows: TrackEscapeObstacleRow[]
+  edgeMaterial?: 'concrete-wall'
 }
 
 export type TrackBrakingMarker = {
@@ -633,7 +635,7 @@ function isCompatibleEscapeRoad(value: unknown): value is TrackEscapeRoad {
     'kind' in value &&
     value.kind === 'slalom-block-rows' &&
     'affectsPhysics' in value &&
-    value.affectsPhysics === false &&
+    typeof value.affectsPhysics === 'boolean' &&
     'elevationLayer' in value &&
     typeof value.elevationLayer === 'number' &&
     Number.isInteger(value.elevationLayer) &&
@@ -659,8 +661,20 @@ function isCompatibleEscapeRoad(value: unknown): value is TrackEscapeRoad {
         'blockLengthMeters' in row &&
         isFiniteNumberInRange(row.blockLengthMeters, 0.4, 4) &&
         'palette' in row &&
-        row.palette === 'red-white',
-    )
+        (row.palette === 'red-white' || row.palette === 'stone') &&
+        (!('collisionMaterial' in row) ||
+          row.collisionMaterial === 'concrete-wall'),
+    ) &&
+    (!('edgeMaterial' in value) || value.edgeMaterial === 'concrete-wall') &&
+    (!value.affectsPhysics ||
+      ('edgeMaterial' in value &&
+        value.edgeMaterial === 'concrete-wall' &&
+        value.obstacleRows.every(
+          (row) =>
+            row.palette === 'stone' &&
+            'collisionMaterial' in row &&
+            row.collisionMaterial === 'concrete-wall',
+        )))
   )
 }
 

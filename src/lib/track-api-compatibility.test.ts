@@ -239,6 +239,22 @@ describe('track API compatibility guard', () => {
     await expect(raceApi.getTrack('monza')).resolves.toEqual(definition)
   })
 
+  it('accepts a physical stone escape road with concrete collision material', async () => {
+    const definition = structuredClone(SHORT_TRACK)
+    const road = validEscapeRoad()
+    road.affectsPhysics = true
+    road.edgeMaterial = 'concrete-wall'
+    road.obstacleRows = road.obstacleRows.map((row) => ({
+      ...row,
+      palette: 'stone',
+      collisionMaterial: 'concrete-wall',
+    }))
+    definition.sceneryLayout.escapeRoads = [road]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
+
+    await expect(raceApi.getTrack('monza')).resolves.toEqual(definition)
+  })
+
   it('rejects a gap between split barrier pieces', async () => {
     const definition = structuredClone(SHORT_TRACK)
     const original = definition.barrierGeometry.segments[0]

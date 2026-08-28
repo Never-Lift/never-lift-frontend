@@ -843,35 +843,60 @@ export class RaceRenderer {
   ) {
     for (const road of this.track.sceneryLayout.escapeRoads) {
       if (road.elevationLayer !== elevationLayer) continue
-      for (let index = 0; index < road.path.length - 1; index += 1) {
-        const fromPoint = road.path[index]
-        const toPoint = road.path[index + 1]
-        const from = worldToCamera(fromPoint, transform)
-        const to = worldToCamera(toPoint, transform)
-        const width = projectedTrackWidth(
-          fromPoint,
-          toPoint,
+      const projectedPath = road.path.map((point) =>
+        worldToCamera(point, transform),
+      )
+      const segmentWidths = road.path.slice(0, -1).map((_, index) =>
+        projectedTrackWidth(
+          road.path[index],
+          road.path[index + 1],
           road.widthMeters,
           transform,
-        )
-        if (
-          !this.isProjectedSegmentVisible(
-            from,
-            to,
-            width / 2,
-            transform.viewport,
-          )
-        ) {
-          continue
-        }
-        this.strokeSegment(
-          from,
-          to,
-          width + Math.max(1, transform.pixelsPerMeter * 0.18),
-          '#8d949d',
-        )
-        this.strokeSegment(from, to, width, '#343d49')
+        ),
+      )
+      const width = Math.max(...segmentWidths, 0)
+      const visible = road.path.slice(0, -1).some((_, index) =>
+        this.isProjectedSegmentVisible(
+          projectedPath[index],
+          projectedPath[index + 1],
+          width / 2,
+          transform.viewport,
+        ),
+      )
+      if (!visible) continue
+      this.strokePolyline(
+        projectedPath,
+        width + Math.max(1, transform.pixelsPerMeter * 0.18),
+        '#8d949d',
+        'butt',
+      )
+      this.strokePolyline(projectedPath, width, '#343d49', 'butt')
+      if (road.edgeMaterial === 'concrete-wall') {
+        this.drawEscapeRoadEdges(road, transform)
       }
+    }
+  }
+
+  private drawEscapeRoadEdges(
+    road: TrackEscapeRoad,
+    transform: CameraTransform,
+  ) {
+    const edgeHeight = transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE * 0.55
+    for (const side of ['left', 'right'] as const) {
+      const edge = this.offsetPolyline(road.path, side, road.widthMeters / 2)
+      const projected = edge.map((point) => worldToCamera(point, transform))
+      this.strokePolyline(
+        projected,
+        Math.max(1, transform.pixelsPerMeter * 0.42),
+        '#242b32',
+        'butt',
+      )
+      this.strokePolyline(
+        projected.map((point) => ({ x: point.x, y: point.y - edgeHeight })),
+        Math.max(1, transform.pixelsPerMeter * 0.16),
+        '#89939d',
+        'butt',
+      )
     }
   }
 
@@ -932,16 +957,30 @@ export class RaceRenderer {
         y: row.from.y + tangent.y * toDistance,
       }
       const halfDepth = blockDepthMeters / 2
-      this.fillWorldPolygon(
-        [
+      const block = [
           { x: from.x - normal.x * halfDepth, y: from.y - normal.y * halfDepth },
           { x: to.x - normal.x * halfDepth, y: to.y - normal.y * halfDepth },
           { x: to.x + normal.x * halfDepth, y: to.y + normal.y * halfDepth },
           { x: from.x + normal.x * halfDepth, y: from.y + normal.y * halfDepth },
-        ],
-        transform,
-        index % 2 === 0 ? '#f0f0fa' : '#c52c35',
-      )
+        ]
+      if (row.palette === 'stone') {
+        const shadow = block.map((point) => ({
+          x: point.x + normal.x * 0.12,
+          y: point.y + normal.y * 0.12,
+        }))
+        this.fillWorldPolygon(shadow, transform, '#353b40')
+        this.fillWorldPolygon(
+          block,
+          transform,
+          index % 2 === 0 ? '#858b8e' : '#697176',
+        )
+      } else {
+        this.fillWorldPolygon(
+          block,
+          transform,
+          index % 2 === 0 ? '#f0f0fa' : '#c52c35',
+        )
+      }
     }
   }
 
@@ -1347,7 +1386,7 @@ export class RaceRenderer {
       y: Math.sin(marker.rotation),
     }
     const lateral = { x: -tangent.y, y: tangent.x }
-    const halfWidthMeters = 0.72
+    const halfWidthMeters = 1.05
     const leftWorld = {
       x: marker.position.x - lateral.x * halfWidthMeters,
       y: marker.position.y - lateral.y * halfWidthMeters,
@@ -1372,8 +1411,8 @@ export class RaceRenderer {
 
     const pixelsPerHeightMeter =
       transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
-    const boardBottomOffset = pixelsPerHeightMeter * 0.9
-    const boardTopOffset = pixelsPerHeightMeter * 2.05
+    const boardBottomOffset = pixelsPerHeightMeter * 1.05
+    const boardTopOffset = pixelsPerHeightMeter * 2.5
     const leftBottom = { x: leftGround.x, y: leftGround.y - boardBottomOffset }
     const rightBottom = { x: rightGround.x, y: rightGround.y - boardBottomOffset }
     const leftTop = { x: leftGround.x, y: leftGround.y - boardTopOffset }
@@ -1413,7 +1452,7 @@ export class RaceRenderer {
     this.context.translate(center.x, center.y)
     this.context.rotate(screenAngle)
     this.context.fillStyle = '#17191d'
-    this.context.font = `800 ${Math.max(8, transform.pixelsPerMeter * 0.58)}px Barlow, sans-serif`
+    this.context.font = `800 ${Math.max(10, transform.pixelsPerMeter * 0.82)}px Barlow, sans-serif`
     this.context.textAlign = 'center'
     this.context.textBaseline = 'middle'
     this.context.fillText(String(marker.distanceToCornerMeters), 0, 0)
@@ -1421,7 +1460,7 @@ export class RaceRenderer {
   }
 
   private offsetPolyline(
-    path: TrackBarrierPathPoint[],
+    path: Vector2[],
     side: 'left' | 'right',
     offsetMeters: number,
   ): Vector2[] {
