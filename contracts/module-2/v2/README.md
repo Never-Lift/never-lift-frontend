@@ -7,7 +7,7 @@ face visível de cada barreira a geometria canônica de colisão.
 ## Versões ativas
 
 - contrato físico e schema de pista: `2.0.0`;
-- catálogo: `2026.9`;
+- catálogo: `2026.10`;
 - unidade de mundo: metro; tempo: segundo; ângulo: radiano anti-horário desde `+x`.
 
 `contracts/module-2/v1/` permanece histórico e imutável. Resultados, salas,
@@ -24,7 +24,7 @@ recordes e fantasmas não podem misturar versões físicas.
 - `realtime-race-protocol.schema.json`: envelopes planejados do Módulo 3, já
   sem boost/nitro;
 - `track-catalog.schema.json`, `catalog.json`, `track-definition.schema.json` e
-  `tracks/`: catálogo `2026.9` com faces explícitas e contínuas de barreira,
+  `tracks/`: catálogo `2026.10` com faces explícitas e contínuas de barreira,
   perfis visuais de boxes, arquibancadas e edifícios nas 24 pistas, largadas
   auditadas, camadas de elevação para cruzamentos reais e vias especiais de
   escape explicitamente separadas da física.
@@ -50,7 +50,11 @@ barreiras ou outras estruturas. O Rettifilo de Monza substitui círculos
 provisórios por um corredor asfaltado e fileiras alternadas de blocos puramente
 visuais. A polilinha resultante continua sendo
 simultaneamente a face visível e física da barreira; a espessura cresce para
-fora.
+fora. O `2026.10` limita a curvatura das faces internas para impedir laços e
+quinas em muros grossos, declara a abertura canônica do escape do Rettifilo e
+publica placas regressivas de frenagem somente nas aproximações relevantes de
+cada circuito. As placas ficam junto da proteção externa, sem participar da
+física.
 
 README, decisões, modelo, schemas, constantes, cenários, protocolo e catálogo
 devem ser byte-idênticos no frontend e backend. `tracks/*.json` fica somente no
@@ -60,5 +64,5 @@ cópia das pistas em produção.
 ## Compatibilidade
 
 `GET /api/tracks` e `GET /api/tracks/{id}` publicam esta linha. O cliente deve
-enviar `trackCatalogVersion=2026.9` e `physicsContractVersion=2.0.0` ao persistir
+enviar `trackCatalogVersion=2026.10` e `physicsContractVersion=2.0.0` ao persistir
 resultado ou entrar em sala. Divergência é rejeitada, nunca convertida.

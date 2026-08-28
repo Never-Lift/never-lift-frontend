@@ -60,7 +60,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único/condução fixa concluída; revisão de câmera 2.5D/F1 aguardando validação manual final; Parte 2d (dinâmica F1, colisões precisas, contrato físico v2 e remoção de boost): implementação automatizada concluída; revisão de fidelidade das 24 pistas no catálogo `2026.9` concluída por automação, com zebras autorais por curva, medidas de pits/estruturas/cercas, prevenção geométrica de sobreposições, composição lisa do cruzamento de Suzuka e via visual de escape em slalom no Rettifilo aguardando validação manual; Parte 2d e Módulo 2 ainda não estão prontos |
+| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único/condução fixa concluída; revisão de câmera 2.5D/F1 aguardando validação manual final; Parte 2d (dinâmica F1, colisões precisas, contrato físico v2 e remoção de boost): implementação automatizada concluída; catálogo `2026.10` com zebras autorais preservadas, muros/grades contínuos, placas métricas de frenagem, pontas retas no cruzamento de Suzuka e abertura canônica do escape de Monza concluído por automação e aguardando validação manual; Parte 2d e Módulo 2 ainda não estão prontos |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/vácuo/pits/HUD) | não iniciado |
