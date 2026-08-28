@@ -9,6 +9,7 @@ import type {
   TrackRacingPoint,
   TrackSideEnvironment,
   TrackSurfaceMaterial,
+  TrackEscapeRoad,
 } from '@/lib/api'
 import {
   add,
@@ -152,6 +153,159 @@ function buildBarrierFaceSegments(
     }
   }
   return segments
+}
+
+function orientedSegmentCollider(
+  id: string,
+  from: Vector2,
+  to: Vector2,
+  halfDepthMeters: number,
+  collisionMaterial: WorldConvexCollider['collisionMaterial'],
+): WorldConvexCollider {
+  const tangent = normalize(subtract(to, from))
+  const normal = perpendicularLeft(tangent)
+  const halfLength = Math.max(Number.EPSILON, Math.hypot(to.x - from.x, to.y - from.y) / 2)
+  const center = {
+    x: (from.x + to.x) / 2,
+    y: (from.y + to.y) / 2,
+  }
+  const extendedFrom = {
+    x: center.x - tangent.x * halfLength,
+    y: center.y - tangent.y * halfLength,
+  }
+  const extendedTo = {
+    x: center.x + tangent.x * halfLength,
+    y: center.y + tangent.y * halfLength,
+  }
+  return {
+    id,
+    collisionMaterial,
+    vertices: [
+      {
+        x: extendedFrom.x - normal.x * halfDepthMeters,
+        y: extendedFrom.y - normal.y * halfDepthMeters,
+      },
+      {
+        x: extendedTo.x - normal.x * halfDepthMeters,
+        y: extendedTo.y - normal.y * halfDepthMeters,
+      },
+      {
+        x: extendedTo.x + normal.x * halfDepthMeters,
+        y: extendedTo.y + normal.y * halfDepthMeters,
+      },
+      {
+        x: extendedFrom.x + normal.x * halfDepthMeters,
+        y: extendedFrom.y + normal.y * halfDepthMeters,
+      },
+    ],
+  }
+}
+
+function buildEscapeRoadColliderRecords(
+  roads: readonly TrackEscapeRoad[],
+  chunks: readonly TrackChunk[],
+): BarrierColliderRecord[] {
+  const records: BarrierColliderRecord[] = []
+  const chunkIndexes = chunks.map((chunk) => chunk.index)
+  for (const road of roads) {
+    if (!road.affectsPhysics || road.path.length < 2) continue
+    for (let rowIndex = 0; rowIndex < road.obstacleRows.length; rowIndex += 1) {
+      const row = road.obstacleRows[rowIndex]
+      const delta = subtract(row.to, row.from)
+      const lengthMeters = Math.hypot(delta.x, delta.y)
+      if (lengthMeters <= Number.EPSILON) continue
+      const blockCount = Math.max(1, Math.ceil(lengthMeters / row.blockLengthMeters))
+      const blockDepthMeters = Math.min(0.85, row.blockLengthMeters * 0.8)
+      for (let blockIndex = 0; blockIndex < blockCount; blockIndex += 1) {
+        const fromDistance = (lengthMeters * blockIndex) / blockCount
+        const toDistance = (lengthMeters * (blockIndex + 1)) / blockCount
+        const from = {
+          x: row.from.x + (delta.x / lengthMeters) * fromDistance,
+          y: row.from.y + (delta.y / lengthMeters) * fromDistance,
+        }
+        const to = {
+          x: row.from.x + (delta.x / lengthMeters) * toDistance,
+          y: row.from.y + (delta.y / lengthMeters) * toDistance,
+        }
+        const id = `escape-${road.id}-row-${rowIndex}-block-${blockIndex}`
+        const collider = orientedSegmentCollider(
+          id,
+          from,
+          to,
+          blockDepthMeters / 2,
+          row.collisionMaterial ?? 'concrete-wall',
+        )
+        records.push({
+          face: {
+            id,
+            barrierIndex: -1,
+            side: 'left',
+            material: row.collisionMaterial ?? 'concrete-wall',
+            collisionLayer: 'track-barrier',
+            chunkIndexes,
+            elevationLayer: road.elevationLayer,
+            fromDistanceMeters: 0,
+            toDistanceMeters: 0,
+            thicknessMeters: blockDepthMeters,
+            from,
+            to,
+            inwardNormal: normalize(perpendicularLeft(subtract(to, from))),
+          },
+          collider,
+          bounds: colliderBounds(collider),
+        })
+      }
+    }
+    if (road.edgeMaterial !== 'concrete-wall') continue
+    const edgeThicknessMeters = 0.35
+    for (let pathIndex = 0; pathIndex < road.path.length - 1; pathIndex += 1) {
+      const from = road.path[pathIndex]
+      const to = road.path[pathIndex + 1]
+      const tangent = normalize(subtract(to, from))
+      if (tangent.x === 0 && tangent.y === 0) continue
+      const normal = perpendicularLeft(tangent)
+      for (const side of ['left', 'right'] as const) {
+        const direction = side === 'left' ? 1 : -1
+        const offset = road.widthMeters / 2
+        const edgeFrom = {
+          x: from.x + normal.x * direction * offset,
+          y: from.y + normal.y * direction * offset,
+        }
+        const edgeTo = {
+          x: to.x + normal.x * direction * offset,
+          y: to.y + normal.y * direction * offset,
+        }
+        const id = `escape-${road.id}-edge-${side}-${pathIndex}`
+        const collider = orientedSegmentCollider(
+          id,
+          edgeFrom,
+          edgeTo,
+          edgeThicknessMeters / 2,
+          road.edgeMaterial,
+        )
+        records.push({
+          face: {
+            id,
+            barrierIndex: -1,
+            side,
+            material: road.edgeMaterial,
+            collisionLayer: 'track-barrier',
+            chunkIndexes,
+            elevationLayer: road.elevationLayer,
+            fromDistanceMeters: 0,
+            toDistanceMeters: 0,
+            thicknessMeters: edgeThicknessMeters,
+            from: edgeFrom,
+            to: edgeTo,
+            inwardNormal: scale(normal, -direction),
+          },
+          collider,
+          bounds: colliderBounds(collider),
+        })
+      }
+    }
+  }
+  return records
 }
 
 function projectOntoSegment(
@@ -339,12 +493,18 @@ export class TrackGeometry {
       this.barrierFaces,
       definition.chunks,
     )
-    this.barrierColliderRecords = this.explicitBarrierFaceSegments.map(
+    this.barrierColliderRecords = [
+      ...this.explicitBarrierFaceSegments.map(
       (face) => {
         const collider = barrierFaceSegmentCollider(face)
         return { face, collider, bounds: colliderBounds(collider) }
       },
-    )
+      ),
+      ...buildEscapeRoadColliderRecords(
+        definition.sceneryLayout.escapeRoads,
+        definition.chunks,
+      ),
+    ]
     for (const chunk of definition.chunks) {
       this.expandedChunkBounds.set(chunk.index, { ...chunk.bounds })
     }

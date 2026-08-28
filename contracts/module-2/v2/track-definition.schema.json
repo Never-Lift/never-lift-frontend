@@ -849,7 +849,13 @@
           "maximum": 4
         },
         "palette": {
-          "const": "red-white"
+          "enum": [
+            "red-white",
+            "stone"
+          ]
+        },
+        "collisionMaterial": {
+          "const": "concrete-wall"
         }
       }
     },
@@ -874,7 +880,7 @@
           "const": "slalom-block-rows"
         },
         "affectsPhysics": {
-          "const": false
+          "type": "boolean"
         },
         "elevationLayer": {
           "type": "integer",
@@ -899,6 +905,9 @@
           "items": {
             "$ref": "#/$defs/escapeObstacleRow"
           }
+        },
+        "edgeMaterial": {
+          "const": "concrete-wall"
         }
       }
     },
