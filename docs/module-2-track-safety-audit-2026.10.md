@@ -41,8 +41,9 @@ circuito construído.
 ## Rettifilo, Monza
 
 A via asfaltada usa a mesma cor e superfície física do circuito, sai tangente à
-reta de aproximação do Rettifilo, permanece predominantemente reta enquanto o
-circuito contorna a primeira chicane e reconecta depois dela. O acesso publica
+borda externa esquerda da reta de aproximação do Rettifilo, permanece
+predominantemente reta enquanto o circuito contorna a primeira chicane e
+reconecta pela borda externa depois dela. O acesso publica
 `barrierOpenings` entre `440 m` e `590 m` no lado esquerdo. O mesmo intervalo é
 removido da colisão e do desenho do traçado principal, portanto o muro não corta
 a via. Cinco fileiras alternadas de blocos brancos com chevrons vermelhos
