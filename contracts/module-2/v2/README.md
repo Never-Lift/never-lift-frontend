@@ -28,8 +28,10 @@ recordes e fantasmas não podem misturar versões físicas.
   perfis visuais de boxes, arquibancadas e edifícios nas 24 pistas, largadas
   auditadas, camadas de elevação para cruzamentos reais e vias especiais de
   escape explicitamente separadas da física. O Rettifilo de Monza é a exceção:
-  seu corredor externo publica pavimento, blocos de pedra rígidos e bordas de
-  concreto que participam da colisão pela mesma geometria usada no renderer.
+  seu corredor reto publica o mesmo asfalto da pista, fileiras alternadas de
+  blocos brancos com chevrons vermelhos e muro de concreto somente na borda
+  externa. Todos os obstáculos participam da colisão pela mesma geometria usada
+  no renderer.
 
 ## Fonte e geração
 
@@ -49,8 +51,9 @@ representativas de cada autódromo. O `2026.9` substitui as zebras genéricas po
 perfis autorais por curva, publica faixa externa pintada, medidas de pits,
 edifícios e cercas e impede, por auditoria geométrica, estruturas sobre asfalto,
 barreiras ou outras estruturas. O Rettifilo de Monza substitui círculos
-provisórios por um corredor asfaltado e fileiras alternadas de blocos de pedra
-rígidos, com bordas de concreto físicas. A polilinha resultante continua sendo
+provisórios por um corredor asfaltado predominantemente reto, ligado à reta e
+à saída da chicane, com fileiras alternadas de blocos brancos com chevrons
+vermelhos e muro físico somente no lado externo. A polilinha resultante continua sendo
 simultaneamente a face visível e física da barreira; a espessura cresce para
 fora. O `2026.10` limita a curvatura das faces internas para impedir laços e
 quinas em muros grossos, declara a abertura canônica do escape do Rettifilo e

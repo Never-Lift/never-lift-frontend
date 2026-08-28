@@ -166,6 +166,8 @@ const CURB_PALETTES: Record<TrackCurbPalette, string[]> = {
   'blue-white': ['#277bd8', '#f0f0fa'],
 }
 
+const TRACK_ASPHALT_COLOR = '#29303b'
+
 const AMBIENT_PARTICLE_COLORS: Record<
   TrackDefinition['sceneryLayout']['preset'],
   string
@@ -815,7 +817,7 @@ export class RaceRenderer {
           averageHalfWidthMeters * 2,
           transform,
         ),
-        '#29303b',
+        TRACK_ASPHALT_COLOR,
         index === 0 || index === points.length - 2 ? 'butt' : 'round',
       )
     }
@@ -870,7 +872,7 @@ export class RaceRenderer {
         '#8d949d',
         'butt',
       )
-      this.strokePolyline(projectedPath, width, '#343d49', 'butt')
+      this.strokePolyline(projectedPath, width, TRACK_ASPHALT_COLOR, 'butt')
       if (road.edgeMaterial === 'concrete-wall') {
         this.drawEscapeRoadEdges(road, transform)
       }
@@ -882,7 +884,7 @@ export class RaceRenderer {
     transform: CameraTransform,
   ) {
     const edgeHeight = transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE * 0.55
-    for (const side of ['left', 'right'] as const) {
+    for (const side of road.edgeSides ?? (['left', 'right'] as const)) {
       const edge = this.offsetPolyline(road.path, side, road.widthMeters / 2)
       const projected = edge.map((point) => worldToCamera(point, transform))
       this.strokePolyline(
@@ -958,29 +960,49 @@ export class RaceRenderer {
       }
       const halfDepth = blockDepthMeters / 2
       const block = [
-          { x: from.x - normal.x * halfDepth, y: from.y - normal.y * halfDepth },
-          { x: to.x - normal.x * halfDepth, y: to.y - normal.y * halfDepth },
-          { x: to.x + normal.x * halfDepth, y: to.y + normal.y * halfDepth },
-          { x: from.x + normal.x * halfDepth, y: from.y + normal.y * halfDepth },
-        ]
-      if (row.palette === 'stone') {
-        const shadow = block.map((point) => ({
-          x: point.x + normal.x * 0.12,
-          y: point.y + normal.y * 0.12,
-        }))
-        this.fillWorldPolygon(shadow, transform, '#353b40')
-        this.fillWorldPolygon(
-          block,
-          transform,
-          index % 2 === 0 ? '#858b8e' : '#697176',
-        )
-      } else {
-        this.fillWorldPolygon(
-          block,
-          transform,
-          index % 2 === 0 ? '#f0f0fa' : '#c52c35',
-        )
-      }
+        { x: from.x - normal.x * halfDepth, y: from.y - normal.y * halfDepth },
+        { x: to.x - normal.x * halfDepth, y: to.y - normal.y * halfDepth },
+        { x: to.x + normal.x * halfDepth, y: to.y + normal.y * halfDepth },
+        { x: from.x + normal.x * halfDepth, y: from.y + normal.y * halfDepth },
+      ]
+      const shadow = block.map((point) => ({
+        x: point.x + normal.x * 0.12,
+        y: point.y + normal.y * 0.12,
+      }))
+      this.fillWorldPolygon(shadow, transform, '#353b40')
+      this.fillWorldPolygon(block, transform, '#f0f0fa')
+
+      const blockLength = toDistance - fromDistance
+      const blockPoint = (longitudinalRatio: number, lateralRatio: number) => ({
+        x:
+          from.x +
+          tangent.x * blockLength * longitudinalRatio +
+          normal.x * halfDepth * lateralRatio,
+        y:
+          from.y +
+          tangent.y * blockLength * longitudinalRatio +
+          normal.y * halfDepth * lateralRatio,
+      })
+      this.fillWorldPolygon(
+        [
+          blockPoint(0.16, -0.72),
+          blockPoint(0.34, -0.72),
+          blockPoint(0.75, -0.08),
+          blockPoint(0.62, 0.1),
+        ],
+        transform,
+        '#d9283b',
+      )
+      this.fillWorldPolygon(
+        [
+          blockPoint(0.16, 0.72),
+          blockPoint(0.34, 0.72),
+          blockPoint(0.75, 0.08),
+          blockPoint(0.62, -0.1),
+        ],
+        transform,
+        '#d9283b',
+      )
     }
   }
 
@@ -1386,7 +1408,7 @@ export class RaceRenderer {
       y: Math.sin(marker.rotation),
     }
     const lateral = { x: -tangent.y, y: tangent.x }
-    const halfWidthMeters = 1.05
+    const halfWidthMeters = 1.5
     const leftWorld = {
       x: marker.position.x - lateral.x * halfWidthMeters,
       y: marker.position.y - lateral.y * halfWidthMeters,
@@ -1411,8 +1433,8 @@ export class RaceRenderer {
 
     const pixelsPerHeightMeter =
       transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
-    const boardBottomOffset = pixelsPerHeightMeter * 1.05
-    const boardTopOffset = pixelsPerHeightMeter * 2.5
+    const boardBottomOffset = pixelsPerHeightMeter * 0.9
+    const boardTopOffset = pixelsPerHeightMeter * 3
     const leftBottom = { x: leftGround.x, y: leftGround.y - boardBottomOffset }
     const rightBottom = { x: rightGround.x, y: rightGround.y - boardBottomOffset }
     const leftTop = { x: leftGround.x, y: leftGround.y - boardTopOffset }
@@ -1452,7 +1474,7 @@ export class RaceRenderer {
     this.context.translate(center.x, center.y)
     this.context.rotate(screenAngle)
     this.context.fillStyle = '#17191d'
-    this.context.font = `800 ${Math.max(10, transform.pixelsPerMeter * 0.82)}px Barlow, sans-serif`
+    this.context.font = `800 ${Math.max(12, transform.pixelsPerMeter * 1.15)}px Barlow, sans-serif`
     this.context.textAlign = 'center'
     this.context.textBaseline = 'middle'
     this.context.fillText(String(marker.distanceToCornerMeters), 0, 0)

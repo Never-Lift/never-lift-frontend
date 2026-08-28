@@ -844,6 +844,17 @@ describe('RaceRenderer audited surfaces', () => {
           operation.kind === 'fill' && operation.color === '#f5f4ef',
       ),
     ).toHaveLength(1)
+    const board = operations.find(
+      (operation) =>
+        operation.kind === 'fill' && operation.color === '#f5f4ef',
+    )
+    expect(board?.path).toHaveLength(4)
+    expect(
+      Math.hypot(
+        (board?.path[1].x ?? 0) - (board?.path[0].x ?? 0),
+        (board?.path[1].y ?? 0) - (board?.path[0].y ?? 0),
+      ),
+    ).toBeCloseTo(3, 6)
     expect(
       operations.some(
         (operation) =>
@@ -948,19 +959,19 @@ describe('RaceRenderer audited surfaces', () => {
             from: { x: -6, y: -3 },
             to: { x: -6, y: 1 },
             blockLengthMeters: 1,
-            palette: 'red-white',
+            palette: 'white-red-chevron',
           },
           {
             from: { x: 0, y: -1 },
             to: { x: 0, y: 3 },
             blockLengthMeters: 1,
-            palette: 'red-white',
+            palette: 'white-red-chevron',
           },
           {
             from: { x: 6, y: -3 },
             to: { x: 6, y: 1 },
             blockLengthMeters: 1,
-            palette: 'red-white',
+            palette: 'white-red-chevron',
           },
         ],
       },
@@ -974,7 +985,7 @@ describe('RaceRenderer audited surfaces', () => {
     expect(
       operations.filter(
         (operation) =>
-          operation.kind === 'stroke' && operation.color === '#343d49',
+          operation.kind === 'stroke' && operation.color === '#29303b',
       ),
     ).toHaveLength(1)
     expect(
@@ -986,7 +997,7 @@ describe('RaceRenderer audited surfaces', () => {
     expect(
       operations.some(
         (operation) =>
-          operation.kind === 'fill' && operation.color === '#c52c35',
+          operation.kind === 'fill' && operation.color === '#d9283b',
       ),
     ).toBe(true)
 
@@ -1004,25 +1015,78 @@ describe('RaceRenderer audited surfaces', () => {
         from: { x: 320, y: 296 },
         to: { x: 320, y: 300 },
         blockLengthMeters: 1,
-        palette: 'red-white',
+        palette: 'white-red-chevron',
       },
       {
         from: { x: 330, y: 300 },
         to: { x: 330, y: 304 },
         blockLengthMeters: 1,
-        palette: 'red-white',
+        palette: 'white-red-chevron',
       },
       {
         from: { x: 340, y: 296 },
         to: { x: 340, y: 300 },
         blockLengthMeters: 1,
-        palette: 'red-white',
+        palette: 'white-red-chevron',
       },
     ]
     const beforeCulled = operations.length
     internals(renderer).drawEscapeRoadSurfaces(IDENTITY_TRANSFORM, 0)
     internals(renderer).drawEscapeRoadObstacleRows(IDENTITY_TRANSFORM, 0)
     expect(operations).toHaveLength(beforeCulled)
+  })
+
+  it('renders only the authored external edge of a physical escape road', () => {
+    const track = createStraightTransitionTrack()
+    track.sceneryLayout.escapeRoads = [
+      {
+        id: 'external-edge-only',
+        kind: 'slalom-block-rows',
+        affectsPhysics: true,
+        elevationLayer: 0,
+        widthMeters: 10.5,
+        edgeMaterial: 'concrete-wall',
+        edgeSides: ['left'],
+        path: [
+          { x: -20, y: 0 },
+          { x: 20, y: 0 },
+        ],
+        obstacleRows: [
+          {
+            from: { x: -8, y: -4 },
+            to: { x: -8, y: 2 },
+            blockLengthMeters: 1,
+            palette: 'white-red-chevron',
+            collisionMaterial: 'concrete-wall',
+          },
+          {
+            from: { x: 0, y: -2 },
+            to: { x: 0, y: 4 },
+            blockLengthMeters: 1,
+            palette: 'white-red-chevron',
+            collisionMaterial: 'concrete-wall',
+          },
+          {
+            from: { x: 8, y: -4 },
+            to: { x: 8, y: 2 },
+            blockLengthMeters: 1,
+            palette: 'white-red-chevron',
+            collisionMaterial: 'concrete-wall',
+          },
+        ],
+      },
+    ]
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawEscapeRoadSurfaces(IDENTITY_TRANSFORM, 0)
+
+    expect(
+      operations.filter(
+        (operation) =>
+          operation.kind === 'stroke' && operation.color === '#242b32',
+      ),
+    ).toHaveLength(1)
   })
 
   it('keeps visual escape roads outside the deterministic physics state', () => {
@@ -1040,9 +1104,9 @@ describe('RaceRenderer audited surfaces', () => {
           { x: 30, y: 0 },
         ],
         obstacleRows: [
-          { from: { x: 8, y: -3 }, to: { x: 8, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
-          { from: { x: 15, y: -1 }, to: { x: 15, y: 3 }, blockLengthMeters: 1, palette: 'red-white' },
-          { from: { x: 22, y: -3 }, to: { x: 22, y: 1 }, blockLengthMeters: 1, palette: 'red-white' },
+          { from: { x: 8, y: -3 }, to: { x: 8, y: 1 }, blockLengthMeters: 1, palette: 'white-red-chevron' },
+          { from: { x: 15, y: -1 }, to: { x: 15, y: 3 }, blockLengthMeters: 1, palette: 'white-red-chevron' },
+          { from: { x: 22, y: -3 }, to: { x: 22, y: 1 }, blockLengthMeters: 1, palette: 'white-red-chevron' },
         ],
       },
     ]
