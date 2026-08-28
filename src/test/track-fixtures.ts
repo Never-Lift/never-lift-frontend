@@ -146,7 +146,7 @@ export function createTrackFixture(
   const start = pointOnCircle(radius, 0)
   return {
     schemaVersion: '2.0.0',
-    catalogVersion: '2026.9',
+    catalogVersion: '2026.10',
     physicsContractVersion: '2.0.0',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
@@ -244,6 +244,7 @@ export function createTrackFixture(
     trackLimits: {
       segments: trackLimitSegments,
     },
+    barrierOpenings: [],
     barrierGeometry,
     chunks,
     sceneryLayout: {
@@ -251,6 +252,7 @@ export function createTrackFixture(
       landmarks: [],
       staticObjects: [],
       escapeRoads: [],
+      brakingMarkers: [],
     },
     source: {
       dataset: 'deterministic test fixture',

@@ -195,6 +195,50 @@ describe('track API compatibility guard', () => {
     await expect(raceApi.getTrack('suzuka')).resolves.toEqual(definition)
   })
 
+  it('accepts authored braking boards and a matching physical/visual barrier opening', async () => {
+    const definition = structuredClone(SHORT_TRACK)
+    definition.sceneryLayout.brakingMarkers = [
+      {
+        id: 'turn-1-150m',
+        cornerIndex: 1,
+        distanceToCornerMeters: 150,
+        trackDistanceMeters: 10,
+        side: 'left',
+        position: { x: 30, y: 12 },
+        rotation: 0,
+        elevationLayer: 0,
+      },
+    ]
+    const original = definition.barrierGeometry.segments[0]
+    const openingFrom = original.path[1]
+    const openingTo = original.path[2]
+    definition.barrierOpenings = [
+      {
+        id: 'test-escape-access',
+        side: original.side,
+        fromDistanceMeters: openingFrom.distanceMeters,
+        toDistanceMeters: openingTo.distanceMeters,
+        reason: 'escape-road-access',
+      },
+    ]
+    definition.barrierGeometry.segments = [
+      {
+        ...original,
+        toDistanceMeters: openingFrom.distanceMeters,
+        path: original.path.slice(0, 2),
+      },
+      {
+        ...original,
+        fromDistanceMeters: openingTo.distanceMeters,
+        path: original.path.slice(2),
+      },
+      ...definition.barrierGeometry.segments.slice(1),
+    ].map((segment, index) => ({ ...segment, index }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(definition)))
+
+    await expect(raceApi.getTrack('monza')).resolves.toEqual(definition)
+  })
+
   it('rejects a gap between split barrier pieces', async () => {
     const definition = structuredClone(SHORT_TRACK)
     const original = definition.barrierGeometry.segments[0]
@@ -490,13 +534,13 @@ describe('track API compatibility guard', () => {
     )
   })
 
-  it('rejects a 2026.9 catalog with a malformed track entry', async () => {
+  it('rejects a 2026.10 catalog with a malformed track entry', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         jsonResponse({
           schemaVersion: '2.0.0',
-          catalogVersion: '2026.9',
+          catalogVersion: '2026.10',
           physicsContractVersion: '2.0.0',
           seasonReference: 2026,
           calendarPolicy: 'original-24-round-freeze',

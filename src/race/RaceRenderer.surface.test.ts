@@ -68,6 +68,10 @@ type RendererInternals = {
     transform: CameraTransform,
     elevationLayer: number,
   ) => void
+  drawBrakingMarkers: (
+    transform: CameraTransform,
+    elevationLayer: number,
+  ) => void
   drawScenery: (
     transform: CameraTransform,
     layer: 'ground' | 'overhead',
@@ -805,6 +809,47 @@ describe('RaceRenderer audited surfaces', () => {
           operation.color === 'rgba(64, 73, 84, 0.92)',
       ),
     ).toHaveLength(1)
+    const continuousTop = operations.filter(
+      (operation) =>
+        operation.kind === 'fill' && operation.color === '#aeb7c3',
+    )
+    expect(continuousTop).toHaveLength(1)
+    expect(continuousTop[0].path).toHaveLength(6)
+  })
+
+  it('draws proportional braking boards only on their authored elevation layer', () => {
+    const track = createStraightTransitionTrack()
+    track.sceneryLayout.brakingMarkers = [
+      {
+        id: 'turn-1-150m',
+        cornerIndex: 1,
+        distanceToCornerMeters: 150,
+        trackDistanceMeters: 5,
+        side: 'right',
+        position: { x: 5, y: -9 },
+        rotation: 0,
+        elevationLayer: 0,
+      },
+    ]
+    const { context, operations } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), track)
+
+    internals(renderer).drawBrakingMarkers(IDENTITY_TRANSFORM, 1)
+    expect(operations).toHaveLength(0)
+
+    internals(renderer).drawBrakingMarkers(IDENTITY_TRANSFORM, 0)
+    expect(
+      operations.filter(
+        (operation) =>
+          operation.kind === 'fill' && operation.color === '#f5f4ef',
+      ),
+    ).toHaveLength(1)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'stroke' && operation.color === '#34383f',
+      ),
+    ).toBe(true)
   })
 
   it('draws a connected pit lane, box markings and repeated garages', () => {
@@ -1038,6 +1083,14 @@ describe('RaceRenderer audited surfaces', () => {
           operation.kind === 'stroke' && operation.color === '#111720',
       ).length,
     ).toBe(elevated.length - 1)
+    expect(
+      operations
+        .filter(
+          (operation) =>
+            operation.kind === 'stroke' && operation.color === '#111720',
+        )
+        .every((operation) => operation.lineCap === 'butt'),
+    ).toBe(true)
     expect(
       operations.some(
         (operation) =>

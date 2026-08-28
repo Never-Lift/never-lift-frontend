@@ -158,6 +158,25 @@ export type TrackEscapeRoad = {
   obstacleRows: TrackEscapeObstacleRow[]
 }
 
+export type TrackBrakingMarker = {
+  id: string
+  cornerIndex: number
+  distanceToCornerMeters: 50 | 100 | 150 | 200 | 250 | 300
+  trackDistanceMeters: number
+  side: 'left' | 'right'
+  position: TrackVector
+  rotation: number
+  elevationLayer: number
+}
+
+export type TrackBarrierOpening = {
+  id: string
+  side: 'left' | 'right'
+  fromDistanceMeters: number
+  toDistanceMeters: number
+  reason: 'escape-road-access'
+}
+
 export type TrackBounds = {
   minX: number
   minY: number
@@ -178,7 +197,7 @@ export type TrackCatalogEntry = {
 
 export type TrackCatalog = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.9'
+  catalogVersion: '2026.10'
   physicsContractVersion: '2.0.0'
   seasonReference: 2026
   calendarPolicy: 'original-24-round-freeze'
@@ -344,7 +363,7 @@ export type TrackBarrierGeometrySegment = {
 
 export type TrackDefinition = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.9'
+  catalogVersion: '2026.10'
   physicsContractVersion: '2.0.0'
   id: string
   name: string
@@ -380,6 +399,7 @@ export type TrackDefinition = {
   trackLimits: {
     segments: TrackLimitSegment[]
   }
+  barrierOpenings: TrackBarrierOpening[]
   barrierGeometry: {
     segments: TrackBarrierGeometrySegment[]
   }
@@ -389,6 +409,7 @@ export type TrackDefinition = {
     landmarks: TrackSceneryObject[]
     staticObjects: TrackSceneryObject[]
     escapeRoads: TrackEscapeRoad[]
+    brakingMarkers: TrackBrakingMarker[]
   }
   source: {
     dataset: string
@@ -447,7 +468,7 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.9' ||
+    payload.catalogVersion !== '2026.10' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('seasonReference' in payload) ||
@@ -643,15 +664,73 @@ function isCompatibleEscapeRoad(value: unknown): value is TrackEscapeRoad {
   )
 }
 
+function isCompatibleBrakingMarker(
+  value: unknown,
+): value is TrackBrakingMarker {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    'cornerIndex' in value &&
+    Number.isInteger(value.cornerIndex) &&
+    Number(value.cornerIndex) >= 1 &&
+    'distanceToCornerMeters' in value &&
+    [50, 100, 150, 200, 250, 300].includes(
+      Number(value.distanceToCornerMeters),
+    ) &&
+    'trackDistanceMeters' in value &&
+    Number.isFinite(value.trackDistanceMeters) &&
+    Number(value.trackDistanceMeters) >= 0 &&
+    'side' in value &&
+    (value.side === 'left' || value.side === 'right') &&
+    'position' in value &&
+    isCompatibleTrackVector(value.position) &&
+    'rotation' in value &&
+    Number.isFinite(value.rotation) &&
+    'elevationLayer' in value &&
+    Number.isInteger(value.elevationLayer) &&
+    Number(value.elevationLayer) >= 0 &&
+    Number(value.elevationLayer) <= 3
+  )
+}
+
+function isCompatibleBarrierOpening(
+  value: unknown,
+  trackLengthMeters: number,
+): value is TrackBarrierOpening {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    'side' in value &&
+    (value.side === 'left' || value.side === 'right') &&
+    'fromDistanceMeters' in value &&
+    Number.isFinite(value.fromDistanceMeters) &&
+    Number(value.fromDistanceMeters) >= 0 &&
+    'toDistanceMeters' in value &&
+    Number.isFinite(value.toDistanceMeters) &&
+    Number(value.toDistanceMeters) > Number(value.fromDistanceMeters) &&
+    Number(value.toDistanceMeters) <= trackLengthMeters &&
+    'reason' in value &&
+    value.reason === 'escape-road-access'
+  )
+}
+
 function hasUniqueSceneryIds(value: {
   landmarks: TrackSceneryObject[]
   staticObjects: TrackSceneryObject[]
   escapeRoads: TrackEscapeRoad[]
+  brakingMarkers: TrackBrakingMarker[]
 }) {
   const ids = [
     ...value.landmarks.map((object) => object.id),
     ...value.staticObjects.map((object) => object.id),
     ...value.escapeRoads.map((road) => road.id),
+    ...value.brakingMarkers.map((marker) => marker.id),
   ]
   return new Set(ids).size === ids.length
 }
@@ -877,16 +956,40 @@ function isCompatibleBarrierGeometrySegment(
 function hasCompleteBarrierCoverage(
   barriers: readonly TrackBarrierGeometrySegment[],
   limits: readonly TrackLimitSegment[],
+  openings: readonly TrackBarrierOpening[],
 ) {
   const toleranceMeters = 1e-6
   return limits.every((limit) =>
     (['left', 'right'] as const).every((side) => {
-      const coverage = barriers
-        .filter(
+      const coverage = [
+        ...barriers.filter(
           (barrier) =>
             barrier.trackLimitSegmentIndex === limit.index &&
             barrier.side === side,
-        )
+        ),
+        ...openings
+          .filter(
+            (opening) =>
+              opening.side === side &&
+              opening.fromDistanceMeters < limit.toDistanceMeters - toleranceMeters &&
+              opening.toDistanceMeters > limit.fromDistanceMeters + toleranceMeters,
+          )
+          .map((opening) => ({
+            fromDistanceMeters: Math.max(
+              opening.fromDistanceMeters,
+              limit.fromDistanceMeters,
+            ),
+            toDistanceMeters: Math.min(
+              opening.toDistanceMeters,
+              limit.toDistanceMeters,
+            ),
+            material: limit[side].barrier,
+            path: [
+              { distanceMeters: Math.max(opening.fromDistanceMeters, limit.fromDistanceMeters) },
+              { distanceMeters: Math.min(opening.toDistanceMeters, limit.toDistanceMeters) },
+            ],
+          })),
+      ]
         .sort(
           (first, second) =>
             first.fromDistanceMeters - second.fromDistanceMeters,
@@ -922,7 +1025,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.9' ||
+    payload.catalogVersion !== '2026.10' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('centerline' in payload) ||
@@ -980,6 +1083,15 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('chunks' in payload) ||
     !Array.isArray(payload.chunks) ||
     payload.chunks.length === 0 ||
+    !('barrierOpenings' in payload) ||
+    !Array.isArray(payload.barrierOpenings) ||
+    payload.barrierOpenings.some(
+      (opening) =>
+        !isCompatibleBarrierOpening(
+          opening,
+          payload.lengthMeters as number,
+        ),
+    ) ||
     !('barrierGeometry' in payload) ||
     typeof payload.barrierGeometry !== 'object' ||
     payload.barrierGeometry === null ||
@@ -1000,6 +1112,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !hasCompleteBarrierCoverage(
       payload.barrierGeometry.segments as TrackBarrierGeometrySegment[],
       payload.trackLimits.segments as TrackLimitSegment[],
+      payload.barrierOpenings as TrackBarrierOpening[],
     ) ||
     !('sceneryLayout' in payload) ||
     typeof payload.sceneryLayout !== 'object' ||
@@ -1023,6 +1136,11 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !Array.isArray(payload.sceneryLayout.escapeRoads) ||
     payload.sceneryLayout.escapeRoads.some(
       (road) => !isCompatibleEscapeRoad(road),
+    ) ||
+    !('brakingMarkers' in payload.sceneryLayout) ||
+    !Array.isArray(payload.sceneryLayout.brakingMarkers) ||
+    payload.sceneryLayout.brakingMarkers.some(
+      (marker) => !isCompatibleBrakingMarker(marker),
     ) ||
     !hasUniqueSceneryIds(
       payload.sceneryLayout as TrackDefinition['sceneryLayout'],

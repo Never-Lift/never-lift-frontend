@@ -1,5 +1,7 @@
 import type {
   TrackBarrierType,
+  TrackBarrierPathPoint,
+  TrackBrakingMarker,
   TrackChunk,
   TrackCurbPalette,
   TrackDefinition,
@@ -185,7 +187,7 @@ type SceneryVisualMetrics = {
 /**
  * Converts authored metric structure dimensions to the legacy visual's local
  * scale. Keeping the conversion here lets old catalog objects retain their
- * `scale` fallback while 2026.9 structures use their real footprint for both
+ * `scale` fallback while 2026.10 structures use their real footprint for both
  * drawing and culling.
  */
 export function sceneryVisualMetrics(
@@ -627,6 +629,7 @@ export class RaceRenderer {
         for (const { points } of sections) {
           this.drawTrackDetails(points, transform)
         }
+        this.drawBrakingMarkers(transform, elevationLayer)
         if (elevationLayer === 0) this.drawStartFinish(transform)
         this.drawTireMarks(transform, elevationLayer)
         this.drawEscapeRoadObstacleRows(transform, elevationLayer)
@@ -1295,33 +1298,179 @@ export class RaceRenderer {
         continue
       }
       const style = BARRIER_STYLES[barrier.material]
-      for (let index = 0; index < barrier.path.length - 1; index += 1) {
-        const from = barrier.path[index]
-        const to = barrier.path[index + 1]
-        if (
-          from.elevationLayer !== visibleElevationLayer ||
-          to.distanceMeters < visibleFromDistance ||
-          from.distanceMeters > visibleToDistance
-        ) {
-          continue
-        }
-        this.drawCanonicalBarrierSegment(
-          from,
-          to,
-          barrier.side,
-          barrier.thicknessMeters,
-          style,
-          transform,
-          index === 0,
-          index === barrier.path.length - 2,
-        )
+      const firstVisibleSegment = barrier.path.findIndex(
+        (point, index) =>
+          index < barrier.path.length - 1 &&
+          point.elevationLayer === visibleElevationLayer &&
+          barrier.path[index + 1].distanceMeters >= visibleFromDistance,
+      )
+      if (firstVisibleSegment < 0) continue
+      let lastVisibleSegment = firstVisibleSegment
+      while (
+        lastVisibleSegment < barrier.path.length - 1 &&
+        barrier.path[lastVisibleSegment].distanceMeters <= visibleToDistance
+      ) {
+        lastVisibleSegment += 1
       }
+      const path = barrier.path.slice(
+        firstVisibleSegment,
+        Math.min(barrier.path.length, lastVisibleSegment + 1),
+      )
+      this.drawCanonicalBarrierPath(
+        path,
+        barrier.side,
+        barrier.thicknessMeters,
+        style,
+        transform,
+        firstVisibleSegment === 0,
+        lastVisibleSegment >= barrier.path.length - 1,
+      )
     }
   }
 
-  private drawCanonicalBarrierSegment(
-    fromPoint: TrackDefinition['barrierGeometry']['segments'][number]['path'][number],
-    toPoint: TrackDefinition['barrierGeometry']['segments'][number]['path'][number],
+  private drawBrakingMarkers(
+    transform: CameraTransform,
+    elevationLayer: number,
+  ) {
+    for (const marker of this.track.sceneryLayout.brakingMarkers) {
+      if (marker.elevationLayer !== elevationLayer) continue
+      this.drawBrakingMarker(marker, transform)
+    }
+  }
+
+  private drawBrakingMarker(
+    marker: TrackBrakingMarker,
+    transform: CameraTransform,
+  ) {
+    const tangent = {
+      x: Math.cos(marker.rotation),
+      y: Math.sin(marker.rotation),
+    }
+    const lateral = { x: -tangent.y, y: tangent.x }
+    const halfWidthMeters = 0.72
+    const leftWorld = {
+      x: marker.position.x - lateral.x * halfWidthMeters,
+      y: marker.position.y - lateral.y * halfWidthMeters,
+    }
+    const rightWorld = {
+      x: marker.position.x + lateral.x * halfWidthMeters,
+      y: marker.position.y + lateral.y * halfWidthMeters,
+    }
+    const leftGround = worldToCamera(leftWorld, transform)
+    const rightGround = worldToCamera(rightWorld, transform)
+    const centerGround = worldToCamera(marker.position, transform)
+    const viewport = transform.viewport
+    const cullMargin = transform.pixelsPerMeter * 3
+    if (
+      centerGround.x < viewport.x - cullMargin ||
+      centerGround.x > viewport.x + viewport.width + cullMargin ||
+      centerGround.y < viewport.y - cullMargin ||
+      centerGround.y > viewport.y + viewport.height + cullMargin
+    ) {
+      return
+    }
+
+    const pixelsPerHeightMeter =
+      transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
+    const boardBottomOffset = pixelsPerHeightMeter * 0.9
+    const boardTopOffset = pixelsPerHeightMeter * 2.05
+    const leftBottom = { x: leftGround.x, y: leftGround.y - boardBottomOffset }
+    const rightBottom = { x: rightGround.x, y: rightGround.y - boardBottomOffset }
+    const leftTop = { x: leftGround.x, y: leftGround.y - boardTopOffset }
+    const rightTop = { x: rightGround.x, y: rightGround.y - boardTopOffset }
+
+    this.strokeSegment(
+      centerGround,
+      {
+        x: centerGround.x,
+        y: centerGround.y - boardBottomOffset,
+      },
+      Math.max(1, transform.pixelsPerMeter * 0.09),
+      '#34383f',
+      'butt',
+    )
+    this.context.beginPath()
+    this.context.moveTo(leftBottom.x, leftBottom.y)
+    this.context.lineTo(rightBottom.x, rightBottom.y)
+    this.context.lineTo(rightTop.x, rightTop.y)
+    this.context.lineTo(leftTop.x, leftTop.y)
+    this.context.closePath()
+    this.context.fillStyle = '#f5f4ef'
+    this.context.fill()
+    this.context.strokeStyle = '#1d2025'
+    this.context.lineWidth = Math.max(1, transform.pixelsPerMeter * 0.055)
+    this.context.stroke()
+
+    const center = {
+      x: (leftBottom.x + rightTop.x) / 2,
+      y: (leftBottom.y + rightTop.y) / 2,
+    }
+    const screenAngle = Math.atan2(
+      rightBottom.y - leftBottom.y,
+      rightBottom.x - leftBottom.x,
+    )
+    this.context.save()
+    this.context.translate(center.x, center.y)
+    this.context.rotate(screenAngle)
+    this.context.fillStyle = '#17191d'
+    this.context.font = `800 ${Math.max(8, transform.pixelsPerMeter * 0.58)}px Barlow, sans-serif`
+    this.context.textAlign = 'center'
+    this.context.textBaseline = 'middle'
+    this.context.fillText(String(marker.distanceToCornerMeters), 0, 0)
+    this.context.restore()
+  }
+
+  private offsetPolyline(
+    path: TrackBarrierPathPoint[],
+    side: 'left' | 'right',
+    offsetMeters: number,
+  ): Vector2[] {
+    if (path.length < 2) return path
+    const direction = side === 'left' ? 1 : -1
+    const normals = path.slice(0, -1).map((point, index) => {
+      const next = path[index + 1]
+      const delta = { x: next.x - point.x, y: next.y - point.y }
+      const length = Math.hypot(delta.x, delta.y) || 1
+      return {
+        x: (-delta.y / length) * direction,
+        y: (delta.x / length) * direction,
+      }
+    })
+    return path.map((point, index) => {
+      if (index === 0) {
+        return {
+          x: point.x + normals[0].x * offsetMeters,
+          y: point.y + normals[0].y * offsetMeters,
+        }
+      }
+      if (index === path.length - 1) {
+        const normal = normals.at(-1)!
+        return {
+          x: point.x + normal.x * offsetMeters,
+          y: point.y + normal.y * offsetMeters,
+        }
+      }
+      const previous = normals[index - 1]
+      const next = normals[index]
+      const sum = { x: previous.x + next.x, y: previous.y + next.y }
+      const sumLength = Math.hypot(sum.x, sum.y)
+      const miter = sumLength <= 1e-6
+        ? next
+        : { x: sum.x / sumLength, y: sum.y / sumLength }
+      const denominator = Math.max(0.45, miter.x * next.x + miter.y * next.y)
+      const miterLength = Math.min(
+        offsetMeters * 2.15,
+        offsetMeters / denominator,
+      )
+      return {
+        x: point.x + miter.x * miterLength,
+        y: point.y + miter.y * miterLength,
+      }
+    })
+  }
+
+  private drawCanonicalBarrierPath(
+    path: TrackBarrierPathPoint[],
     side: 'left' | 'right',
     thicknessMeters: number,
     style: {
@@ -1335,102 +1484,93 @@ export class RaceRenderer {
     drawStartCap: boolean,
     drawEndCap: boolean,
   ) {
-    const deltaX = toPoint.x - fromPoint.x
-    const deltaY = toPoint.y - fromPoint.y
-    const length = Math.hypot(deltaX, deltaY)
-    if (length <= Number.EPSILON) return
-    const sideDirection = side === 'left' ? 1 : -1
-    const outwardNormal = {
-      x: (-deltaY / length) * sideDirection,
-      y: (deltaX / length) * sideDirection,
-    }
-    const outwardPoint = (
-      point: TrackDefinition['barrierGeometry']['segments'][number]['path'][number],
-    ) => ({
-      x: point.x + outwardNormal.x * thicknessMeters,
-      y: point.y + outwardNormal.y * thicknessMeters,
-    })
-    const outerFrom = outwardPoint(fromPoint)
-    const outerTo = outwardPoint(toPoint)
-    const polygon = [fromPoint, toPoint, outerTo, outerFrom].map((point) =>
-      worldToCamera(point, transform),
-    )
-
+    if (path.length < 2) return
+    const outerPath = this.offsetPolyline(path, side, thicknessMeters)
     const height =
       style.heightMeters * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
-    const top = polygon.map((point) => ({ x: point.x, y: point.y - height }))
-    const fillFace = (
-      firstIndex: number,
-      secondIndex: number,
-      color: string,
-    ) => {
+    const inner = path.map((point) => worldToCamera(point, transform))
+    const outer = outerPath.map((point) => worldToCamera(point, transform))
+    const innerTop = inner.map((point) => ({ x: point.x, y: point.y - height }))
+    const outerTop = outer.map((point) => ({ x: point.x, y: point.y - height }))
+    const fillFace = (from: Vector2, to: Vector2, topTo: Vector2, topFrom: Vector2, color: string) => {
       this.context.beginPath()
-      this.context.moveTo(polygon[firstIndex].x, polygon[firstIndex].y)
-      this.context.lineTo(polygon[secondIndex].x, polygon[secondIndex].y)
-      this.context.lineTo(top[secondIndex].x, top[secondIndex].y)
-      this.context.lineTo(top[firstIndex].x, top[firstIndex].y)
+      this.context.moveTo(from.x, from.y)
+      this.context.lineTo(to.x, to.y)
+      this.context.lineTo(topTo.x, topTo.y)
+      this.context.lineTo(topFrom.x, topFrom.y)
       this.context.closePath()
       this.context.fillStyle = color
       this.context.fill()
     }
-    const innerDepth = (polygon[0].y + polygon[1].y) / 2
-    const outerDepth = (polygon[2].y + polygon[3].y) / 2
-    if (innerDepth >= outerDepth) fillFace(0, 1, style.sideColor)
-    else fillFace(3, 2, style.sideColor)
-    if (drawEndCap) fillFace(1, 2, 'rgba(64, 73, 84, 0.92)')
-    if (drawStartCap) fillFace(3, 0, 'rgba(86, 96, 108, 0.86)')
+
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const innerDepth = (inner[index].y + inner[index + 1].y) / 2
+      const outerDepth = (outer[index].y + outer[index + 1].y) / 2
+      if (innerDepth >= outerDepth) {
+        fillFace(
+          inner[index],
+          inner[index + 1],
+          innerTop[index + 1],
+          innerTop[index],
+          style.sideColor,
+        )
+      } else {
+        fillFace(
+          outer[index],
+          outer[index + 1],
+          outerTop[index + 1],
+          outerTop[index],
+          style.sideColor,
+        )
+      }
+    }
+    if (drawEndCap) {
+      const last = path.length - 1
+      fillFace(
+        inner[last],
+        outer[last],
+        outerTop[last],
+        innerTop[last],
+        'rgba(64, 73, 84, 0.92)',
+      )
+    }
+    if (drawStartCap) {
+      fillFace(
+        outer[0],
+        inner[0],
+        innerTop[0],
+        outerTop[0],
+        'rgba(86, 96, 108, 0.86)',
+      )
+    }
 
     this.context.beginPath()
-    this.context.moveTo(top[0].x, top[0].y)
-    for (const point of top.slice(1)) this.context.lineTo(point.x, point.y)
+    this.context.moveTo(innerTop[0].x, innerTop[0].y)
+    for (const point of innerTop.slice(1)) this.context.lineTo(point.x, point.y)
+    for (const point of [...outerTop].reverse()) this.context.lineTo(point.x, point.y)
     this.context.closePath()
     this.context.fillStyle = style.color
     this.context.fill()
-
-    // Consecutive canonical faces turn at every sampled centerline point. A
-    // small top joint masks the mathematical wedge between their normals; end
-    // caps remain exclusive to the real start/end of a protection segment.
-    if (!drawEndCap) {
-      const joint = {
-        x: (top[1].x + top[2].x) / 2,
-        y: (top[1].y + top[2].y) / 2,
-      }
-      this.context.beginPath()
-      this.context.arc(
-        joint.x,
-        joint.y,
-        Math.max(1, thicknessMeters * transform.pixelsPerMeter * 0.58),
-        0,
-        Math.PI * 2,
-      )
-      this.context.fillStyle = style.color
-      this.context.fill()
-    }
-
-    const topMiddleFrom = {
-      x: (top[0].x + top[3].x) / 2,
-      y: (top[0].y + top[3].y) / 2,
-    }
-    const topMiddleTo = {
-      x: (top[1].x + top[2].x) / 2,
-      y: (top[1].y + top[2].y) / 2,
-    }
+    const topMiddle = innerTop.map((point, index) => ({
+      x: (point.x + outerTop[index].x) / 2,
+      y: (point.y + outerTop[index].y) / 2,
+    }))
     this.context.save()
     if (style.dashMeters) {
       const tangentScale = projectedSegmentPixelsPerMeter(
-        fromPoint,
-        toPoint,
+        path[0],
+        path.at(-1)!,
         transform,
       )
       this.context.setLineDash(
         style.dashMeters.map((dash) => dash * tangentScale),
       )
     }
-    this.strokeSegment(
-      topMiddleFrom,
-      topMiddleTo,
+    this.strokePolyline(
+      topMiddle,
       Math.max(1, thicknessMeters * transform.pixelsPerMeter * 0.42),
       style.color,
+      'butt',
     )
     this.context.restore()
   }
@@ -1455,120 +1595,104 @@ export class RaceRenderer {
       }
       const visualStyle =
         environment.fenceVisualStyle ?? DEFAULT_FENCE_VISUAL_STYLE
-      for (let index = 0; index < barrier.path.length - 1; index += 1) {
-        const from = barrier.path[index]
-        const to = barrier.path[index + 1]
-        if (
-          from.elevationLayer !== visibleElevationLayer ||
-          to.distanceMeters < visibleFromDistance ||
-          from.distanceMeters > visibleToDistance
-        ) {
-          continue
-        }
-        const delta = { x: to.x - from.x, y: to.y - from.y }
-        const length = Math.hypot(delta.x, delta.y)
-        if (length <= Number.EPSILON) continue
-        const direction = barrier.side === 'left' ? 1 : -1
-        const outward = {
-          x: (-delta.y / length) * direction,
-          y: (delta.x / length) * direction,
-        }
-        const offset =
-          barrier.thicknessMeters +
-          FENCE_GAP_METERS +
-          FENCE_WIDTH_METERS / 2
-        this.drawFenceSegment(
-          { x: from.x + outward.x * offset, y: from.y + outward.y * offset },
-          { x: to.x + outward.x * offset, y: to.y + outward.y * offset },
-          transform,
-          visualStyle,
-          { x: -outward.x, y: -outward.y },
-        )
-      }
+      const visiblePath = barrier.path.filter(
+        (point) =>
+          point.elevationLayer === visibleElevationLayer &&
+          point.distanceMeters >= visibleFromDistance - 6 &&
+          point.distanceMeters <= visibleToDistance + 6,
+      )
+      if (visiblePath.length < 2) continue
+      const offset =
+        barrier.thicknessMeters +
+        FENCE_GAP_METERS +
+        FENCE_WIDTH_METERS / 2
+      this.drawFencePath(
+        visiblePath,
+        this.offsetPolyline(visiblePath, barrier.side, offset),
+        transform,
+        visualStyle,
+      )
     }
   }
 
-  private drawFenceSegment(
-    fromPoint: Vector2,
-    toPoint: Vector2,
+  private drawFencePath(
+    barrierPath: TrackBarrierPathPoint[],
+    fencePath: Vector2[],
     transform: CameraTransform,
     style: TrackFenceVisualStyle,
-    inward: Vector2,
   ) {
-    const from = worldToCamera(fromPoint, transform)
-    const to = worldToCamera(toPoint, transform)
-    const leanedFrom = worldToCamera(
-      {
-        x: fromPoint.x + inward.x * style.cantileverMeters,
-        y: fromPoint.y + inward.y * style.cantileverMeters,
-      },
-      transform,
-    )
-    const leanedTo = worldToCamera(
-      {
-        x: toPoint.x + inward.x * style.cantileverMeters,
-        y: toPoint.y + inward.y * style.cantileverMeters,
-      },
-      transform,
-    )
+    if (fencePath.length < 2) return
+    const ground = fencePath.map((point) => worldToCamera(point, transform))
+    const leaned = fencePath.map((point, index) => {
+      const towardBarrier = {
+        x: barrierPath[index].x - point.x,
+        y: barrierPath[index].y - point.y,
+      }
+      const length = Math.hypot(towardBarrier.x, towardBarrier.y) || 1
+      return worldToCamera(
+        {
+          x: point.x + towardBarrier.x / length * style.cantileverMeters,
+          y: point.y + towardBarrier.y / length * style.cantileverMeters,
+        },
+        transform,
+      )
+    })
     const height =
       style.heightMeters * transform.pixelsPerMeter * CAMERA_HEIGHT_SCALE
-    const topFrom = { x: leanedFrom.x, y: leanedFrom.y - height }
-    const topTo = { x: leanedTo.x, y: leanedTo.y - height }
-    this.context.beginPath()
-    this.context.moveTo(from.x, from.y)
-    this.context.lineTo(to.x, to.y)
-    this.context.lineTo(topTo.x, topTo.y)
-    this.context.lineTo(topFrom.x, topFrom.y)
-    this.context.closePath()
-    this.context.save()
-    this.context.globalAlpha *= style.meshOpacity
-    this.context.fillStyle = style.meshColor
-    this.context.fill()
-    this.context.restore()
+    const top = leaned.map((point) => ({ x: point.x, y: point.y - height }))
+    for (let index = 0; index < fencePath.length - 1; index += 1) {
+      this.context.beginPath()
+      this.context.moveTo(ground[index].x, ground[index].y)
+      this.context.lineTo(ground[index + 1].x, ground[index + 1].y)
+      this.context.lineTo(top[index + 1].x, top[index + 1].y)
+      this.context.lineTo(top[index].x, top[index].y)
+      this.context.closePath()
+      this.context.save()
+      this.context.globalAlpha *= style.meshOpacity
+      this.context.fillStyle = style.meshColor
+      this.context.fill()
+      this.context.restore()
+    }
 
-    this.strokeSegment(
-      topFrom,
-      topTo,
+    this.strokePolyline(
+      top,
       Math.max(1, transform.pixelsPerMeter * 0.08),
       style.postColor,
+      'butt',
     )
-    this.strokeSegment(
-      {
-        x: from.x + (topFrom.x - from.x) * 0.52,
-        y: from.y + (topFrom.y - from.y) * 0.52,
-      },
-      {
-        x: to.x + (topTo.x - to.x) * 0.52,
-        y: to.y + (topTo.y - to.y) * 0.52,
-      },
+    this.strokePolyline(
+      ground.map((point, index) => ({
+        x: point.x + (top[index].x - point.x) * 0.52,
+        y: point.y + (top[index].y - point.y) * 0.52,
+      })),
       Math.max(1, transform.pixelsPerMeter * 0.045),
       style.meshColor,
+      'butt',
     )
-    const lengthMeters = Math.hypot(
-      toPoint.x - fromPoint.x,
-      toPoint.y - fromPoint.y,
-    )
-    const postCount = Math.max(
-      1,
-      Math.ceil(lengthMeters / style.postSpacingMeters),
-    )
-    for (let index = 0; index <= postCount; index += 1) {
-      const ratio = index / postCount
-      const ground = {
-        x: from.x + (to.x - from.x) * ratio,
-        y: from.y + (to.y - from.y) * ratio,
-      }
-      const top = {
-        x: topFrom.x + (topTo.x - topFrom.x) * ratio,
-        y: topFrom.y + (topTo.y - topFrom.y) * ratio,
-      }
-      this.strokeSegment(
-        ground,
-        top,
-        Math.max(1, transform.pixelsPerMeter * 0.07),
-        style.postColor,
+    for (let segmentIndex = 0; segmentIndex < fencePath.length - 1; segmentIndex += 1) {
+      const lengthMeters = Math.hypot(
+        fencePath[segmentIndex + 1].x - fencePath[segmentIndex].x,
+        fencePath[segmentIndex + 1].y - fencePath[segmentIndex].y,
       )
+      const postCount = Math.max(1, Math.ceil(lengthMeters / style.postSpacingMeters))
+      for (let postIndex = segmentIndex === 0 ? 0 : 1; postIndex <= postCount; postIndex += 1) {
+        const ratio = postIndex / postCount
+        const postGround = {
+          x: ground[segmentIndex].x + (ground[segmentIndex + 1].x - ground[segmentIndex].x) * ratio,
+          y: ground[segmentIndex].y + (ground[segmentIndex + 1].y - ground[segmentIndex].y) * ratio,
+        }
+        const postTop = {
+          x: top[segmentIndex].x + (top[segmentIndex + 1].x - top[segmentIndex].x) * ratio,
+          y: top[segmentIndex].y + (top[segmentIndex + 1].y - top[segmentIndex].y) * ratio,
+        }
+        this.strokeSegment(
+          postGround,
+          postTop,
+          Math.max(1, transform.pixelsPerMeter * 0.07),
+          style.postColor,
+          'butt',
+        )
+      }
     }
   }
 
@@ -2178,6 +2302,7 @@ export class RaceRenderer {
           transform,
         ),
         '#111720',
+        'butt',
       )
       if (index % 7 === 0) {
         const columnWidth = Math.max(2, transform.pixelsPerMeter * 0.7)
