@@ -6,6 +6,7 @@ import type {
   TrackGate,
   TrackLimitSegment,
   TrackPathPoint,
+  TrackPitGarageBarrier,
   TrackRacingPoint,
   TrackSideEnvironment,
   TrackSurfaceMaterial,
@@ -151,6 +152,36 @@ function buildBarrierFaceSegments(
         inwardNormal,
       })
     }
+  }
+  return segments
+}
+
+function buildPitGarageBarrierFaceSegments(
+  garageBarrier: TrackPitGarageBarrier,
+  trackLengthMeters: number,
+  chunks: readonly TrackChunk[],
+): BarrierFaceSegment[] {
+  const segments: BarrierFaceSegment[] = []
+  for (let pathIndex = 0; pathIndex < garageBarrier.path.length - 1; pathIndex += 1) {
+    const from = garageBarrier.path[pathIndex]
+    const to = garageBarrier.path[pathIndex + 1]
+    const inwardNormal = barrierSegmentNormal(garageBarrier.side, from, to)
+    if (inwardNormal.x === 0 && inwardNormal.y === 0) continue
+    segments.push({
+      id: `garage-barrier-${pathIndex}`,
+      barrierIndex: -1,
+      side: garageBarrier.side,
+      material: garageBarrier.material,
+      collisionLayer: 'track-barrier',
+      chunkIndexes: chunks.map((chunk) => chunk.index),
+      elevationLayer: 0,
+      fromDistanceMeters: 0,
+      toDistanceMeters: trackLengthMeters,
+      thicknessMeters: garageBarrier.thicknessMeters,
+      from,
+      to,
+      inwardNormal,
+    })
   }
   return segments
 }
@@ -500,6 +531,14 @@ export class TrackGeometry {
         return { face, collider, bounds: colliderBounds(collider) }
       },
       ),
+      ...buildPitGarageBarrierFaceSegments(
+        definition.pitLane.garageBarrier,
+        definition.lengthMeters,
+        definition.chunks,
+      ).map((face) => {
+        const collider = barrierFaceSegmentCollider(face)
+        return { face, collider, bounds: colliderBounds(collider) }
+      }),
       ...buildEscapeRoadColliderRecords(
         definition.sceneryLayout.escapeRoads,
         definition.chunks,

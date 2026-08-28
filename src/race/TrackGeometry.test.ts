@@ -240,6 +240,38 @@ describe('TrackGeometry', () => {
     )
   })
 
+  it('keeps the pit corridor open while blocking passage through the garage shell', () => {
+    const definition = structuredClone(SHORT_TRACK)
+    definition.pitLane.path = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+    ]
+    definition.pitLane.garageBarrier = {
+      side: 'right',
+      material: 'concrete-wall',
+      thicknessMeters: 0.35,
+      path: [
+        { x: 0, y: -10 },
+        { x: 20, y: -10 },
+      ],
+    }
+    const geometry = new TrackGeometry(definition)
+
+    expect(
+      geometry.getBarrierCollisionManifolds(
+        [rectangle('pit-center-probe', 10, 0, 0.4, 0.4)],
+        0,
+      ),
+    ).toHaveLength(0)
+    const [garageContact] = geometry.getBarrierCollisionManifolds(
+      [rectangle('garage-through-probe', 10, -10.1, 0.3, 0.3)],
+      0,
+    )
+    expect(garageContact).toBeDefined()
+    expect(garageContact?.secondColliderId).toMatch(/^garage-barrier-/)
+    expect(garageContact?.secondCollisionMaterial).toBe('concrete-wall')
+  })
+
   it('accepts a directional gate only in order-compatible forward movement', () => {
     const gate = SHORT_TRACK.checkpoints[0]
     const from = {

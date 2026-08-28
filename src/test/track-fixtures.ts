@@ -146,7 +146,7 @@ export function createTrackFixture(
   const start = pointOnCircle(radius, 0)
   return {
     schemaVersion: '2.0.0',
-    catalogVersion: '2026.10',
+    catalogVersion: '2026.11',
     physicsContractVersion: '2.0.0',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
@@ -193,13 +193,23 @@ export function createTrackFixture(
         { x: radius - 35, y: 0 },
         { x: radius - 30, y: 30 },
       ],
+      garageBarrier: {
+        side: 'left',
+        material: 'concrete-wall',
+        thicknessMeters: 0.35,
+        path: [
+          { x: radius - 42, y: -20 },
+          { x: radius - 47, y: 0 },
+          { x: radius - 42, y: 20 },
+        ],
+      },
       visualStyle: {
         architecture: 'permanent-modern',
         primaryColor: '#d9dcdf',
         secondaryColor: '#505a64',
         accentColor: '#8f2933',
         roofColor: '#eceeef',
-        garageCount: 10,
+        garageCount: 22,
         buildingHeightMeters: 4.8,
         laneWidthMeters: 11,
         garageStartRatio: 0.2,

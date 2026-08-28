@@ -904,10 +904,20 @@ describe('RaceRenderer audited surfaces', () => {
     expect(
       operations.some(
         (operation) =>
-          operation.kind === 'fill' &&
-          operation.color === 'rgba(88, 148, 169, 0.56)',
+          operation.kind === 'fill' && operation.color === '#36505f',
       ),
     ).toBe(true)
+    expect(
+      operations.filter(
+        (operation) => operation.kind === 'fill' && operation.color === '#0c1218',
+      ),
+    ).toHaveLength(22)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'fill' && operation.color.startsWith('rgba('),
+      ),
+    ).toBe(false)
     const firstPitBox = operations.find(
       (operation) =>
         operation.kind === 'fill' && operation.color === '#d9dcdf55',
@@ -925,13 +935,13 @@ describe('RaceRenderer audited surfaces', () => {
       (operation) =>
         operation.kind === 'stroke' &&
         operation.color === '#505a64' &&
-        operation.path.length === 25,
+        operation.path.length < 25,
     )!
     const pitWallTop = operations.find(
       (operation) =>
         operation.kind === 'stroke' &&
         operation.color === '#8f2933' &&
-        operation.path.length === 25,
+        operation.path.length < 25,
     )!
     expect(pitWallBase).toBeDefined()
     expect(pitWallTop).toBeDefined()

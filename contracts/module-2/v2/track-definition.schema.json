@@ -35,7 +35,7 @@
       "const": "2.0.0"
     },
     "catalogVersion": {
-      "const": "2026.10"
+      "const": "2026.11"
     },
     "id": {
       "type": "string",
@@ -146,7 +146,8 @@
         "exitDistanceMeters",
         "speedLimitMetersPerSecond",
         "path",
-        "visualStyle"
+        "visualStyle",
+        "garageBarrier"
       ],
       "properties": {
         "entryDistanceMeters": {
@@ -170,6 +171,39 @@
         },
         "visualStyle": {
           "$ref": "#/$defs/pitVisualStyle"
+        },
+        "garageBarrier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "side",
+            "material",
+            "thicknessMeters",
+            "path"
+          ],
+          "properties": {
+            "side": {
+              "enum": [
+                "left",
+                "right"
+              ]
+            },
+            "material": {
+              "const": "concrete-wall"
+            },
+            "thicknessMeters": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 2
+            },
+            "path": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/vector"
+              }
+            }
+          }
         }
       }
     },
@@ -722,9 +756,7 @@
               ]
             },
             "garageCount": {
-              "type": "integer",
-              "minimum": 8,
-              "maximum": 16
+              "const": 22
             },
             "buildingHeightMeters": {
               "type": "number",
@@ -1006,7 +1038,11 @@
           "exclusiveMinimum": 0
         },
         "reason": {
-          "const": "escape-road-access"
+          "enum": [
+            "escape-road-access",
+            "pit-entry",
+            "pit-exit"
+          ]
         }
       }
     },

@@ -92,17 +92,6 @@ const BACKGROUND_COLORS: Record<TrackDefinition['sceneryLayout']['preset'], stri
   'night-city': '#171c25',
 }
 
-const GLAZED_PIT_ARCHITECTURES = new Set<
-  TrackPitVisualStyle['architecture']
->([
-  'permanent-modern',
-  'stepped-modern',
-  'wing',
-  'stadium',
-  'exhibition',
-  'marina-canopy',
-])
-
 const BARRIER_STYLES: Record<
   TrackBarrierType,
   {
@@ -189,7 +178,7 @@ type SceneryVisualMetrics = {
 /**
  * Converts authored metric structure dimensions to the legacy visual's local
  * scale. Keeping the conversion here lets old catalog objects retain their
- * `scale` fallback while 2026.10 structures use their real footprint for both
+ * `scale` fallback while 2026.11 structures use their real footprint for both
  * drawing and culling.
  */
 export function sceneryVisualMetrics(
@@ -1847,7 +1836,22 @@ export class RaceRenderer {
         style.roofColor,
       )
     }
-    this.drawPitWall(path, transform, style)
+    const wallFromIndex = Math.max(
+      0,
+      Math.floor((path.length - 1) * style.garageStartRatio),
+    )
+    const wallToIndex = Math.min(
+      path.length - 1,
+      Math.ceil((path.length - 1) * style.garageEndRatio),
+    )
+    // The divider is present only alongside the garage block.  The entry and
+    // exit transitions remain visually open, matching the physical openings
+    // published in barrierOpenings and keeping the pit lane drivable.
+    this.drawPitWall(
+      path.slice(wallFromIndex, wallToIndex + 1),
+      transform,
+      style,
+    )
     this.drawPitGarages(path, transform, style)
   }
 
@@ -2004,7 +2008,10 @@ export class RaceRenderer {
         garageCenter,
         tangent,
         outward,
-        slotLengthMeters * 0.46,
+        // Adjacent bays deliberately meet edge-to-edge.  The continuous
+        // shell is then articulated by opaque pillars instead of transparent
+        // gaps or disconnected floating buildings.
+        slotLengthMeters * 0.5,
         style.garageDepthMeters / 2,
       )
       this.drawExtrudedBuilding(garageCorners, transform, style, garageIndex)
@@ -2169,8 +2176,48 @@ export class RaceRenderer {
     this.context.lineTo(frontBottomRight.x, frontBottomRight.y)
     this.context.lineTo(frontBottomLeft.x, frontBottomLeft.y)
     this.context.closePath()
-    this.context.fillStyle = garageIndex % 2 === 0 ? '#27313a' : '#313b45'
+    // The bay is an opaque recess: it reads as an open garage from the race
+    // camera while the rear wall and side returns stay fully solid.
+    this.context.fillStyle = '#182027'
     this.context.fill()
+    const openingTopLeft = {
+      x: frontTopLeft.x + (frontTopRight.x - frontTopLeft.x) * 0.12,
+      y: frontTopLeft.y + (frontTopRight.y - frontTopLeft.y) * 0.12 + height * 0.08,
+    }
+    const openingTopRight = {
+      x: frontTopRight.x - (frontTopRight.x - frontTopLeft.x) * 0.12,
+      y: frontTopRight.y + (frontTopLeft.y - frontTopRight.y) * 0.12 + height * 0.08,
+    }
+    const openingBottomRight = {
+      x: frontBottomRight.x - (frontBottomRight.x - frontBottomLeft.x) * 0.12,
+      y: frontBottomRight.y + (frontBottomLeft.y - frontBottomRight.y) * 0.12,
+    }
+    const openingBottomLeft = {
+      x: frontBottomLeft.x + (frontBottomRight.x - frontBottomLeft.x) * 0.12,
+      y: frontBottomLeft.y + (frontBottomRight.y - frontBottomLeft.y) * 0.12,
+    }
+    this.context.beginPath()
+    this.context.moveTo(openingTopLeft.x, openingTopLeft.y)
+    this.context.lineTo(openingTopRight.x, openingTopRight.y)
+    this.context.lineTo(openingBottomRight.x, openingBottomRight.y)
+    this.context.lineTo(openingBottomLeft.x, openingBottomLeft.y)
+    this.context.closePath()
+    this.context.fillStyle = '#0c1218'
+    this.context.fill()
+    this.strokeSegment(
+      openingTopLeft,
+      openingBottomLeft,
+      Math.max(1, transform.pixelsPerMeter * 0.12),
+      style.secondaryColor,
+      'butt',
+    )
+    this.strokeSegment(
+      openingTopRight,
+      openingBottomRight,
+      Math.max(1, transform.pixelsPerMeter * 0.12),
+      style.secondaryColor,
+      'butt',
+    )
     this.strokeSegment(
       {
         x: top[0].x,
@@ -2184,6 +2231,23 @@ export class RaceRenderer {
       style.accentColor,
       'butt',
     )
+    if ((garageIndex + 1) % 2 === 0) {
+      const dividerBase = {
+        x: (base[0].x + base[1].x) / 2,
+        y: (base[0].y + base[1].y) / 2 - height * 0.04,
+      }
+      const dividerTop = {
+        x: (top[0].x + top[1].x) / 2,
+        y: (top[0].y + top[1].y) / 2 + height * 0.18,
+      }
+      this.strokeSegment(
+        dividerBase,
+        dividerTop,
+        Math.max(1, transform.pixelsPerMeter * 0.18),
+        style.accentColor,
+        'butt',
+      )
+    }
     this.drawPitBuildingDetails(
       base,
       top,
@@ -2213,7 +2277,7 @@ export class RaceRenderer {
 
     // Garage-door mullions and a number plate keep each team bay legible at
     // race zoom instead of reading as one uninterrupted rectangle.
-    this.context.strokeStyle = 'rgba(211, 219, 226, 0.34)'
+    this.context.strokeStyle = '#9aa6b3'
     this.context.lineWidth = Math.max(1, transform.pixelsPerMeter * 0.055)
     for (const ratio of [0.31, 0.5, 0.69]) {
       const from = facadeAt(ratio, 0.08)
@@ -2232,7 +2296,14 @@ export class RaceRenderer {
       transform.pixelsPerMeter * 0.4,
     )
 
-    if (GLAZED_PIT_ARCHITECTURES.has(style.architecture)) {
+    if (
+      style.architecture === 'permanent-modern' ||
+      style.architecture === 'stepped-modern' ||
+      style.architecture === 'wing' ||
+      style.architecture === 'stadium' ||
+      style.architecture === 'exhibition' ||
+      style.architecture === 'marina-canopy'
+    ) {
       const bandTopLeft = facadeAt(0.04, 0.92)
       const bandTopRight = facadeAt(0.96, 0.92)
       const bandBottomRight = facadeAt(0.96, 0.72)
@@ -2243,14 +2314,16 @@ export class RaceRenderer {
       this.context.lineTo(bandBottomRight.x, bandBottomRight.y)
       this.context.lineTo(bandBottomLeft.x, bandBottomLeft.y)
       this.context.closePath()
-      this.context.fillStyle = 'rgba(88, 148, 169, 0.56)'
+      // Opaque window band; transparent walls make the bay depth and team
+      // separation disappear on dark tracks.
+      this.context.fillStyle = '#36505f'
       this.context.fill()
       for (const ratio of [0.25, 0.5, 0.75]) {
         this.strokeSegment(
           facadeAt(ratio, 0.72),
           facadeAt(ratio, 0.92),
           Math.max(1, transform.pixelsPerMeter * 0.04),
-          'rgba(222, 230, 235, 0.5)',
+          '#c9d1d8',
           'butt',
         )
       }
@@ -2311,7 +2384,7 @@ export class RaceRenderer {
         facadeAt(0.02, 0.51),
         facadeAt(0.98, 0.51),
         Math.max(1, transform.pixelsPerMeter * 0.045),
-        'rgba(66, 76, 87, 0.5)',
+        '#424c57',
         'butt',
       )
     }

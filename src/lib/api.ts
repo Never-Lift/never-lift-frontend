@@ -177,7 +177,7 @@ export type TrackBarrierOpening = {
   side: 'left' | 'right'
   fromDistanceMeters: number
   toDistanceMeters: number
-  reason: 'escape-road-access'
+  reason: 'escape-road-access' | 'pit-entry' | 'pit-exit'
 }
 
 export type TrackBounds = {
@@ -200,7 +200,7 @@ export type TrackCatalogEntry = {
 
 export type TrackCatalog = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.10'
+  catalogVersion: '2026.11'
   physicsContractVersion: '2.0.0'
   seasonReference: 2026
   calendarPolicy: 'original-24-round-freeze'
@@ -287,6 +287,13 @@ export type TrackPitVisualStyle = TrackInfrastructurePalette & {
   canopyDepthMeters: number
 }
 
+export type TrackPitGarageBarrier = {
+  side: 'left' | 'right'
+  material: 'concrete-wall'
+  thicknessMeters: number
+  path: TrackVector[]
+}
+
 export type TrackSurfaceMaterial = 'asphalt' | 'grass' | 'gravel'
 
 export type TrackBarrierType =
@@ -366,7 +373,7 @@ export type TrackBarrierGeometrySegment = {
 
 export type TrackDefinition = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.10'
+  catalogVersion: '2026.11'
   physicsContractVersion: '2.0.0'
   id: string
   name: string
@@ -392,6 +399,7 @@ export type TrackDefinition = {
     exitDistanceMeters: number
     speedLimitMetersPerSecond: number
     path: TrackVector[]
+    garageBarrier: TrackPitGarageBarrier
     visualStyle: TrackPitVisualStyle
   }
   surfaceModel: {
@@ -471,7 +479,7 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.10' ||
+    payload.catalogVersion !== '2026.11' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('seasonReference' in payload) ||
@@ -739,7 +747,9 @@ function isCompatibleBarrierOpening(
     Number(value.toDistanceMeters) > Number(value.fromDistanceMeters) &&
     Number(value.toDistanceMeters) <= trackLengthMeters &&
     'reason' in value &&
-    value.reason === 'escape-road-access'
+    (value.reason === 'escape-road-access' ||
+      value.reason === 'pit-entry' ||
+      value.reason === 'pit-exit')
   )
 }
 
@@ -792,8 +802,7 @@ function isCompatiblePitVisualStyle(
     'garageCount' in value &&
     typeof value.garageCount === 'number' &&
     Number.isInteger(value.garageCount) &&
-    value.garageCount >= 8 &&
-    value.garageCount <= 16 &&
+    value.garageCount === 22 &&
     'buildingHeightMeters' in value &&
     typeof value.buildingHeightMeters === 'number' &&
     value.buildingHeightMeters >= 3 &&
@@ -820,6 +829,25 @@ function isCompatiblePitVisualStyle(
     'canopyDepthMeters' in value &&
     isFiniteNumberInRange(value.canopyDepthMeters, 0, 5) &&
     isCompatibleInfrastructurePalette(value)
+  )
+}
+
+function isCompatiblePitGarageBarrier(
+  value: unknown,
+): value is TrackPitGarageBarrier {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'side' in value &&
+    (value.side === 'left' || value.side === 'right') &&
+    'material' in value &&
+    value.material === 'concrete-wall' &&
+    'thicknessMeters' in value &&
+    isFiniteNumberInRange(value.thicknessMeters, 0.1, 2) &&
+    'path' in value &&
+    Array.isArray(value.path) &&
+    value.path.length >= 2 &&
+    value.path.every(isCompatibleTrackVector)
   )
 }
 
@@ -1048,7 +1076,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.10' ||
+    payload.catalogVersion !== '2026.11' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('centerline' in payload) ||
@@ -1077,6 +1105,8 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     payload.pitLane === null ||
     !('visualStyle' in payload.pitLane) ||
     !isCompatiblePitVisualStyle(payload.pitLane.visualStyle) ||
+    !('garageBarrier' in payload.pitLane) ||
+    !isCompatiblePitGarageBarrier(payload.pitLane.garageBarrier) ||
     !('curbs' in payload) ||
     !Array.isArray(payload.curbs) ||
     payload.curbs.length === 0 ||

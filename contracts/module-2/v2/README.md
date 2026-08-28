@@ -7,7 +7,7 @@ face visível de cada barreira a geometria canônica de colisão.
 ## Versões ativas
 
 - contrato físico e schema de pista: `2.0.0`;
-- catálogo: `2026.10`;
+- catálogo: `2026.11`;
 - unidade de mundo: metro; tempo: segundo; ângulo: radiano anti-horário desde `+x`.
 
 `contracts/module-2/v1/` permanece histórico e imutável. Resultados, salas,
@@ -24,14 +24,16 @@ recordes e fantasmas não podem misturar versões físicas.
 - `realtime-race-protocol.schema.json`: envelopes planejados do Módulo 3, já
   sem boost/nitro;
 - `track-catalog.schema.json`, `catalog.json`, `track-definition.schema.json` e
-  `tracks/`: catálogo `2026.10` com faces explícitas e contínuas de barreira,
+  `tracks/`: catálogo `2026.11` com faces explícitas e contínuas de barreira,
   perfis visuais de boxes, arquibancadas e edifícios nas 24 pistas, largadas
   auditadas, camadas de elevação para cruzamentos reais e vias especiais de
   escape explicitamente separadas da física. O Rettifilo de Monza é a exceção:
   seu corredor reto publica o mesmo asfalto da pista, fileiras alternadas de
   blocos brancos com chevrons vermelhos e muro de concreto somente na borda
-  externa. Todos os obstáculos participam da colisão pela mesma geometria usada
-  no renderer.
+  externa. Cada pit lane publica aberturas físicas de entrada e saída e uma
+  `garageBarrier` traseira opaca: o corredor permanece navegável, mas nenhum
+  carro atravessa a estrutura das 22 vagas (duas por equipe). Todos os
+  obstáculos participam da colisão pela mesma geometria usada no renderer.
 
 ## Fonte e geração
 
@@ -59,7 +61,8 @@ fora. O `2026.10` limita a curvatura das faces internas para impedir laços e
 quinas em muros grossos, declara a abertura canônica do escape do Rettifilo e
 publica placas regressivas de frenagem somente nas aproximações relevantes de
 cada circuito. As placas ficam junto da proteção externa, sem participar da
-física.
+física. O `2026.11` acrescenta as aberturas de pit e a face física traseira das
+garagens, alinhada à arquitetura visual opaca.
 
 README, decisões, modelo, schemas, constantes, cenários, protocolo e catálogo
 devem ser byte-idênticos no frontend e backend. `tracks/*.json` fica somente no
@@ -69,5 +72,5 @@ cópia das pistas em produção.
 ## Compatibilidade
 
 `GET /api/tracks` e `GET /api/tracks/{id}` publicam esta linha. O cliente deve
-enviar `trackCatalogVersion=2026.10` e `physicsContractVersion=2.0.0` ao persistir
+enviar `trackCatalogVersion=2026.11` e `physicsContractVersion=2.0.0` ao persistir
 resultado ou entrar em sala. Divergência é rejeitada, nunca convertida.
