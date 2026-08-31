@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://never-lift.local/contracts/module-2/v2/physics-reference-scenarios.schema.json",
+  "title": "Never Lift Physics Reference Scenarios v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "contractVersion", "physicsConstantsVersion", "physicsStepSeconds", "tolerance", "scenarios"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "contractVersion": { "const": "2.0.0" },
+    "physicsConstantsVersion": { "const": "2.0.0" },
+    "physicsStepSeconds": { "const": 0.008333333333333333 },
+    "tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positionMeters", "velocityMetersPerSecond", "angleRadians", "wheelRadiansPerSecond", "engineRpm"],
+      "properties": {
+        "positionMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "velocityMetersPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "angleRadians": { "type": "number", "exclusiveMinimum": 0 },
+        "wheelRadiansPerSecond": { "type": "number", "exclusiveMinimum": 0 },
+        "engineRpm": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 10,
+      "items": { "$ref": "#/$defs/scenario" }
+    }
+  },
+  "$defs": {
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["throttle", "brake", "steer"],
+      "properties": {
+        "throttle": { "type": "number", "minimum": 0, "maximum": 1 },
+        "brake": { "type": "number", "minimum": 0, "maximum": 1 },
+        "steer": { "type": "number", "minimum": -1, "maximum": 1 }
+      }
+    },
+    "initialState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "velocityX", "velocityY", "angle", "yawRate", "steeringAngle", "appliedThrottle", "appliedBrake", "frontWheelAngularSpeed", "rearWheelAngularSpeed", "gear", "engineRpm", "gearShiftTimeRemaining"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "velocityX": { "type": "number" },
+        "velocityY": { "type": "number" },
+        "angle": { "type": "number" },
+        "yawRate": { "type": "number" },
+        "steeringAngle": { "type": "number" },
+        "appliedThrottle": { "type": "number", "minimum": 0, "maximum": 1 },
+        "appliedBrake": { "type": "number", "minimum": 0, "maximum": 1 },
+        "frontWheelAngularSpeed": { "type": "number" },
+        "rearWheelAngularSpeed": { "type": "number" },
+        "gear": { "type": "integer", "minimum": -1, "maximum": 8 },
+        "engineRpm": { "type": "number", "minimum": 0 },
+        "gearShiftTimeRemaining": { "type": "number", "minimum": 0 }
+      }
+    },
+    "inputSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromStep", "toStep", "input"],
+      "properties": {
+        "fromStep": { "type": "integer", "minimum": 0 },
+        "toStep": { "type": "integer", "exclusiveMinimum": 0 },
+        "input": { "$ref": "#/$defs/input" }
+      }
+    },
+    "expectedRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric"],
+      "properties": {
+        "metric": { "type": "string", "minLength": 1 },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "expectedBoolean": { "type": "boolean" }
+      },
+      "anyOf": [
+        { "required": ["minimum"] },
+        { "required": ["maximum"] },
+        { "required": ["expectedBoolean"] }
+      ]
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "description", "surface", "steps", "initialState", "inputSegments", "expectedRanges"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "category": { "enum": ["acceleration", "coast-down", "braking", "cornering", "combined-slip", "surface", "collision", "determinism"] },
+        "description": { "type": "string", "minLength": 1 },
+        "surface": { "enum": ["asphalt", "curb", "grass", "gravel", "pit-lane"] },
+        "steps": { "type": "integer", "minimum": 1 },
+        "initialState": { "$ref": "#/$defs/initialState" },
+        "inputSegments": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/inputSegment" }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "barrier": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to", "material"],
+              "properties": {
+                "from": { "$ref": "#/$defs/vector" },
+                "to": { "$ref": "#/$defs/vector" },
+                "material": { "enum": ["concrete-wall", "guardrail", "tecpro", "tyre-barrier"] }
+              }
+            }
+          }
+        },
+        "expectedRanges": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/expectedRange" }
+        }
+      }
+    },
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    }
+  }
+}
+

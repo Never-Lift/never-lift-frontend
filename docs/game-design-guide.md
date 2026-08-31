@@ -18,7 +18,8 @@ Este arquivo deve permanecer sincronizado entre os repositórios frontend e back
 ## 2. Princípios de direção
 
 - Visual vivo, agressivo e contemporâneo, sem parecer infantil.
-- Base semirrealista com efeitos arcade controlados.
+- Condução `simcade` de F1: dinâmica fisicamente coerente e exigente, simplificada somente onde necessário para permanecer legível e jogável em 2D e no teclado.
+- Efeitos visuais arcade permanecem controlados e nunca substituem as causas físicas de derrapagem, frenagem ou colisão.
 - Legibilidade da corrida tem prioridade sobre detalhe, brilho ou fidelidade fotográfica.
 - A referência visual não autoriza reaproveitar código ou assets de outros jogos.
 - **Rush Rally Origins** é a principal referência de câmera e leitura geral.
@@ -72,7 +73,7 @@ Regras:
 - Renderização da corrida em Canvas 2D.
 - Carros e objetos principais usam sprites rasterizados de alta qualidade, preferencialmente pré-renderizados.
 - Pistas combinam texturas rasterizadas, formas do Canvas e elementos reutilizáveis.
-- Fumaça, chuva, faíscas, spray, nitro e vento usam partículas limitadas e reutilizadas.
+- Fumaça, chuva, faíscas, spray e vento usam partículas limitadas e reutilizadas.
 - Ícones, marcações e interface usam vetores sempre que fizer sentido.
 - Ilustrações estáticas podem usar pintura digital; pixel art não faz parte da direção.
 - Não usar uma imagem única gigantesca para cada circuito. A pista deve ser segmentada e desenhada por visibilidade.
@@ -94,19 +95,20 @@ Regras:
 ### 5.1 Perspectiva e movimento
 
 - Top-down levemente inclinado, mostrando principalmente o teto e uma pequena parte das laterais dos carros.
+- A projeção 2.5D preserva a escala lateral e usa inclinação fixa de `42°` a partir da vista superior: profundidade do solo em aproximadamente `0,743` da escala e elevação visual de `48°` acima do plano. Essa calibração deixa laterais, pneus e altura do carro claramente legíveis. É uma transformação somente de renderização: metros, colisões e física não mudam.
 - A câmera acompanha a posição do carro.
 - A câmera gira dinamicamente conforme a direção de movimento, não cada oscilação instantânea do ângulo da carroceria.
 - Suavização inicial de referência: `0,2–0,3 s` (**calibração**).
 - Quando o carro estiver parado ou quase parado, manter a última orientação válida.
-- Rodadas e mudanças para ré não podem produzir giros instantâneos de 180°.
+- Rodadas e mudanças para ré não podem produzir giros instantâneos de 180°. A câmera conserva a orientação no início da ré e, se o movimento contrário persistir, converge suavemente para a nova direção.
 - HUD e minimapa não giram com o mundo.
 
 ### 5.2 Enquadramento
 
-- O carro fica aproximadamente em 60% da altura da área de jogo, mostrando mais pista à frente sem eliminar a visão traseira.
+- O carro fica aproximadamente em 68% da altura da área de jogo, mostrando pouco mais que o dobro de pista à frente em relação à traseira sem eliminar a leitura de perseguidores.
 - Zoom fixo durante a corrida; adaptar resolução não significa alterar zoom.
-- Comprimento visual inicial do carro: aproximadamente 5,5% da altura da área de jogo, equivalente a cerca de 60 px em 1080p.
-- Limite visual inicial: 6% da altura (**calibração obrigatória no Módulo 2**).
+- Comprimento visual nominal do carro: 6% da altura da área de jogo, equivalente a cerca de 65 px em 1080p; a projeção final varia suavemente com o ângulo e a altura das peças.
+- Limite visual nominal inicial: 6% da altura (**calibração revisada no Módulo 2**).
 - Microtremor somente em colisões fortes, muito curto e discreto; deve poder ser desativado.
 
 ### 5.3 Minimap
@@ -120,7 +122,9 @@ Regras:
 
 ### 6.1 Catálogo e escala compartilhada
 
-- O catálogo terá 24 circuitos com nomes reais e traçados reconhecíveis, destinados ao uso pessoal informado pelo proprietário.
+- O catálogo histórico `2026.5` congela as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo se o campeonato real for alterado durante a temporada. O runtime `2026.12` preserva nomes reais, traçados reconhecíveis e ambientes laterais auditados, mantém as zebras autorais, estabiliza muros/grades, completa as referências métricas de frenagem, corrige as largadas de Silverstone e Marina Bay e publica pits navegáveis com 22 garagens opacas protegidas pela face física traseira; até a rodada futura de cenário temático, permanecem somente o fundo base e a infraestrutura necessária da pista.
+- Em Suzuka, somente para a câmera de um carro no nível inferior próximo ao cruzamento, a camada superior inteira fica progressivamente translúcida. A pista, suas proteções e os carros que passam acima continuam visíveis; ao se afastar, a opacidade volta suavemente ao normal. A câmera do nível superior nunca ativa esse efeito.
+- Curvas, asfalto, áreas externas, barreiras e grades derivam da mesma centerline métrica suavizada, amostrada a cada aproximadamente 5 m. Zebras são segmentos explícitos e autorais por curva, colocados além da borda do asfalto no lado interno e na saída conforme mapas e notas oficiais disponíveis, com largura, cadência, paleta e faixa pintada externa próprias. Pits, boxes, garagens, prédios e cercas usam dimensões métricas e não podem sobrepor asfalto, barreiras ou outra estrutura; a entrada e a saída do pit são aberturas físicas declaradas, e `pitLane.garageBarrier` bloqueia apenas o fundo opaco das 22 garagens, mantendo o corredor navegável. A funcionalidade de parada continua reservada ao Módulo 5. Vias de escape especiais podem existir como camada visual métrica separada e declaradamente sem física, mas nenhuma é publicada no catálogo executável `2026.12`; o Rettifilo de Monza voltou à proteção canônica da pista principal.
 - Se houver decisão futura de distribuição pública, nomes, marcas e apresentação devem ser revistos antes da publicação.
 - Circuitos podem ter comprimentos diferentes e próximos das proporções reais.
 - Unidade compartilhada de mundo: **1 unidade = 1 metro**.
@@ -128,6 +132,7 @@ Regras:
 - Pequenos ajustes aproximados de 10–20% são permitidos quando necessários para legibilidade, física ou diversão, preservando a identidade do traçado.
 - A pista existe em coordenadas de mundo e não precisa caber inteira na tela.
 - Renderização usa trechos, culling e elementos reutilizáveis; tamanho do circuito não pode exigir um bitmap proporcional ao mundo inteiro.
+- Limites são definidos por trecho e por lado. Cada lado declara uma sequência ordenada de zonas (`asphalt`, `grass` ou `gravel`) com largura em metros, seguida da barreira de impacto e, quando existir, de uma `debris-fence` externa independente. A grade é visual e nunca substitui nem desloca a barreira usada pela colisão. A largura do asfalto e a distância até a proteção podem variar ao longo da volta; mudanças grandes precisam de transição visual e física legível. Mônaco e circuitos urbanos murados preservam barreiras próximas, enquanto híbridos e autódromos alternam áreas de escape de acordo com as referências auditadas. Cruzamentos em níveis diferentes, como Suzuka, usam camada de elevação explícita para não misturar projeção, desenho nem colisões.
 
 ### 6.2 Aparência
 
@@ -152,18 +157,20 @@ Regras:
 
 ### 7.1 Direção dos modelos
 
-- Inspirados em veículos reais, sem copiar exatamente um modelo específico.
-- Proporções semirrealistas: carroceria natural, com largura, pneus, aerofólios e elementos de desempenho ligeiramente enfatizados.
-- Categorias mantêm silhuetas próprias, mas compartilham pinturas, iluminação, acabamentos e detalhes da identidade Never Lift.
-- Mistura de épocas: inspirações modernas, clássicas e retrô modificadas.
-- Preparação de pista plausível, sem peças ou proporções absurdas.
-- F1, supercarro e drift precisam ser reconhecíveis imediatamente pela silhueta.
+- O jogo usa um único modelo de corrida: um monoposto inspirado em carros de F1, sem copiar exatamente um modelo, equipe ou pintura real.
+- Proporções semirrealistas próximas de um monoposto moderno: carroceria aerodinâmica contínua, bico estreito, sidepods integrados, cintura traseira afunilada, pneus expostos e aerofólios ligeiramente enfatizados.
+- A silhueta inclui bico estreito e alongado, asa dianteira larga, quatro pneus expostos com traseiros maiores, suspensão simplificada, monocoque, cockpit com halo, sidepods, cobertura do motor afunilada e asa traseira. Frente, traseira e laterais são completas para que rodadas, perdas de aderência e outros participantes permaneçam legíveis.
+- Durante a corrida, a geometria é projetada continuamente pelo ângulo relativo a cada câmera, sem troca perceptível entre poses; em split-screen, o mesmo carro pode apresentar uma vista diferente em cada viewport. A prévia reutiliza a mesma geometria com detalhe adicional.
+- A silhueta deve permanecer orgânica e conectada em todas as vistas; evitar caixas altas, placas retangulares desproporcionais e peças que pareçam flutuar separadas da carroceria.
+- Não existe seleção entre categorias ou carrocerias; Supercarro e Drift foram retirados da direção aprovada.
+- A variedade visual vem de pintura, capacete, acabamento e detalhes cosméticos da identidade Never Lift.
+- A preparação de pista permanece plausível, sem peças ou proporções absurdas.
 
 ### 7.2 Detalhe e personalização
 
 - Alto detalhamento na seleção/garagem; versão otimizada durante a corrida.
-- Pintura-base com cor principal, secundária e detalhes.
-- **MVP — Módulo 2:** paleta simples de cores predefinidas.
+- Pintura-base com uma cor principal e variações tonais mais claras ou escuras da própria cor; carbono, pneus, suspensão e demais peças mecânicas usam neutros controlados, sem acentos neon concorrentes.
+- **MVP — Módulo 2:** somente três pinturas predefinidas e sóbrias — vermelho, azul e verde.
 - **Pós-MVP — Módulo 10:** cores predefinidas mais seletor avançado.
 - Prévia de personalização é imediata, mas exige Salvar ou Descartar.
 - Acabamentos brilhante, metálico e fosco usam reflexos suaves.
@@ -176,10 +183,26 @@ Regras:
   - danificado: marcas discretas e fumaça leve;
   - crítico: fumaça mais visível e pequenas faíscas ocasionais;
   - perda total: carro parado, visual escurecido e alerta no HUD.
-- Efeitos de movimento arcade controlados: fumaça proporcional ao drift, marcas de pneu limitadas, faíscas em contatos relevantes e nitro com chama/rastro curtos.
+- Efeitos de movimento controlados: fumaça proporcional ao slip físico, marcas de pneu limitadas e faíscas em contatos relevantes; não existe chama ou rastro de boost.
 - Iluminação simples: faróis, lanternas, luz de freio e cone noturno, com brilho suave.
-- Jogadores são diferenciados somente por modelo e pintura.
-- A mesma combinação de modelo e pintura não pode se repetir na mesma sala; modelos repetidos exigem cores principais diferentes.
+- Todos os participantes usam o mesmo modelo de F1 e a mesma física, colisão e desempenho.
+- Jogadores são diferenciados somente pela pintura e pelos detalhes cosméticos permitidos.
+- A mesma pintura principal não pode se repetir na mesma sala.
+
+### 7.4 Dinâmica veicular e colisões
+
+- **MVP — Parte 2d:** a base física é um monoposto inspirado na geração 2026, com tração traseira, câmbio automático de oito marchas, sem controle de tração e sem ABS.
+- O carro usa dinâmica de corpo rígido 2D com velocidade longitudinal/lateral, yaw e esterço real das rodas dianteiras. A carroceria não gira diretamente em resposta ao input.
+- Pneus dianteiros e traseiros têm aderência não linear. Acelerar, frear e virar disputam o mesmo orçamento de aderência; downforce, arrasto e transferência de carga alteram o limite conforme velocidade e comandos.
+- Acelerar excessivamente em curva pode saturar a traseira e causar sobresterço/rodada. Entrar rápido demais pode causar subesterço ou perda traseira conforme o eixo saturado; o resultado nunca é um efeito aleatório ou roteirizado.
+- A velocidade final emerge de potência e arrasto. Frenagem, aceleração e raio de curva são calibrados por cenários mensuráveis e referências primárias da F1 de 2026.
+- As rampas de teclado permitem modular acelerador, freio e esterço, mas não impedem patinagem, travamento ou perda de controle.
+- Todos usam exatamente o mesmo desempenho. A dificuldade dos bots altera decisões e execução, nunca potência, aderência, freio ou tolerância de colisão.
+- O collider do carro é composto por polígonos convexos métricos que acompanham asa, bico, rodas, chassi e traseira, com tolerância visual máxima de `2–5 cm`.
+- A face física de cada barreira é a mesma polilinha desenhada na pista. Não existe margem invisível entre asfalto e muro.
+- Colisões usam detecção contínua e impulso no ponto real de contato. Batidas centrais desaceleram, contatos excêntricos geram rotação e raspões não podem deixar carros enroscados.
+- Boost/nitro não existe. `Shift` fica sem função e não é ação configurável.
+- Temperatura/desgaste de pneus, combustível variável, freios térmicos, suspensão completa, câmbio manual, ERS detalhado e aerodinâmica ativa ficam fora desta parte.
 
 ## 8. Interface e HUD
 
@@ -205,7 +228,6 @@ Regras:
   - volta atual e total;
   - tempo atual e melhor volta;
   - minimapa;
-  - nitro;
   - velocidade.
 - Elementos condicionais:
   - dano somente quando existir;
@@ -240,9 +262,13 @@ Regras:
 - Estrutura compartilhada entre solo, local e online, adaptando campos e permissões.
 - Escolhas principais visíveis; opções adicionais em área expansível.
 - Circuitos em lista compacta com prévia grande do traçado, país, comprimento e ambiente.
-- Carro atual visível; “Trocar” abre painel compacto.
-- Painel lateral fixo resume pista, voltas, clima, horário, modo e carro.
+- O F1 atual fica visível; “Personalizar” abre um painel compacto de pintura e capacete, sem seleção de modelo.
+- Painel lateral fixo resume pista, voltas, clima, horário, tipo de prova e pintura.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
+- No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
+- A condução usa a mesma dinâmica F1 para todas as corridas e participantes; não existe seletor Normal/Drift nem troca de acerto durante a prova.
+- `Shift` não possui função. Boost/nitro não aparece na preparação, corrida, HUD ou configuração de controles.
+- Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa a intensidade física do contato (`impulso`/`delta-v`): fraco afeta direção, médio afeta motor, alto combina os dois e crítico causa perda total. Batidas menores repetidas também podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica um leve desvio persistente para a esquerda ou direita sem reduzir a capacidade de esterçar, e uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente, sem receber física privilegiada.
 
 ### 9.3 Resultado e pódio
 
@@ -278,7 +304,7 @@ Regras:
 
 | Módulo | Decisão de composição |
 |---|---|
-| 10 — Garagem | Carro em destaque, carrossel horizontal inferior, painel lateral, rotação manual, informações úteis e carros bloqueados visíveis com requisito |
+| 10 — Personalização | F1 em destaque, painel lateral, rotação manual e cosméticos bloqueados visíveis com requisito; sem carrossel de modelos |
 | 10 — Conquistas | Categorias, cards compactos, progresso e painel com requisito, raridade e recompensa |
 | 10 — Medalhas | Forma ligada à conquista; materiais bronze, prata, ouro e titânio escuro; três ícones com tooltip |
 | 11 — Contrarrelógio | Lista de circuitos e prévia detalhada; separar fantasma próprio dos fantasmas de amigos; um fantasma por tentativa |
@@ -301,7 +327,7 @@ Regras:
 
 ### 11.2 Medalhas
 
-- A forma comunica a conquista: troféu/bandeira para vitórias, louros para campeonatos, pneu para drift, cronômetro/calendário para idade da conta, escudo para corrida limpa e traçado para domínio de circuito.
+- A forma comunica a conquista: troféu/bandeira para vitórias, louros para campeonatos, volante para domínio técnico, cronômetro/calendário para idade da conta, escudo para corrida limpa e traçado para domínio de circuito.
 - O material comunica a raridade: bronze, prata, ouro e titânio escuro com detalhe azul/magenta.
 - Três medalhas equipadas aparecem abaixo da identidade do jogador.
 - Nome, requisito e data ficam em tooltip ou painel curto; lobby e pódio usam versões menores.
@@ -323,7 +349,7 @@ Executar em uma rodada e PR próprios, sem misturar com funcionalidade de corrid
 
 | Módulo | Principais decisões aplicadas |
 |---|---|
-| 2 | física em metros, circuitos extensos, câmera, minimapa local, culling, carro/cores e tela de preparação |
+| 2 | física em metros; Partes 2a–2c de circuitos, câmera, minimapa, culling, F1/pintura e preparação; Parte 2d de dinâmica F1, colisores precisos e remoção de boost |
 | 3 | lobby, minimapa online, carros remotos e preparação com permissões |
 | 4 | presets de horário, clima otimizado e modo caos |
 | 5 | HUD, dano simples, efeitos de movimento, resultado e pódio |
@@ -337,10 +363,16 @@ Executar em uma rodada e PR próprios, sem misturar com funcionalidade de corrid
 
 Os itens abaixo precisam de protótipo, mas não autorizam trocar a direção definida:
 
-- intensidade e curva exata da suavização da câmera;
-- escala final do carro dentro do alvo de 5,5% e limite inicial de 6%;
+- intensidade e curva exata da suavização da câmera — calibração da Parte 2b: `0,25s`, limite angular para impedir giros instantâneos e retenção inicial de `0,4s` antes de convergir durante ré sustentada;
+- escala nominal final do carro dentro do limite inicial de 6% — calibração revisada do Módulo 2: `6%` da altura da viewport focada, com envelope projetado dependente do ângulo;
+- inclinação 2.5D e leitura multidirecional do F1 — calibração revisada após validação visual do Módulo 2: `42°` a partir da vista superior, profundidade do solo em aproximadamente `0,743`, elevação visual de `48°`, âncora vertical em `68%` e projeção angular contínua por viewport;
 - densidade máxima de partículas por nível de qualidade;
 - tons intermediários das superfícies escuras;
-- quantidade de trechos de pista mantidos em memória;
+- quantidade de trechos de pista mantidos em memória — na Parte 2b, somente os `chunks` cuja projeção intercepta a viewport, com margem equivalente à largura visual da pista, são desenhados;
 - compressão e resolução final de sprites e imagens estáticas;
-- pequenos ajustes métricos de cada circuito para jogabilidade.
+- pequenos ajustes métricos de cada circuito para jogabilidade;
+- passo físico v2 congelado em `1/120 s`; CCD linear e angular permanece obrigatório nessa frequência;
+- massa, inércia, centro de gravidade, curva de potência, relações de marcha, `CdA`, `ClA` e coeficientes de pneu fundamentados e publicados no JSON executável do contrato `2.0.0`;
+- faixas de aceleração `0–100/200/300`, velocidade terminal emergente, frenagem em tempo/distância e raio mínimo de curva, validadas por cenários reproduzíveis;
+- rampas digitais de acelerador, freio e esterço, calibradas para teclado sem funcionar como controle de tração ou ABS;
+- tolerância final entre silhueta e collider dentro do limite aprovado de `2–5 cm` e ausência de contato invisível nas barreiras.

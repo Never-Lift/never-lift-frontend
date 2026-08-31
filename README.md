@@ -1,6 +1,6 @@
 # Never Lift
 
-Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco em drift. Este repositório contém as telas do aplicativo e, nos próximos módulos, o motor de corrida renderizado em Canvas.
+Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com simulação acessível de um monoposto inspirado na F1 de 2026 e efeitos visuais arcade controlados. Este repositório contém as telas do aplicativo e o motor de corrida renderizado em Canvas.
 
 ## Fundação técnica
 
@@ -30,11 +30,29 @@ Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com foco 
 
 Como a sessão fica exclusivamente em memória, recarregar a página remove o login atual e, ao voltar para `/`, uma nova sessão guest é criada. Esse comportamento é intencional enquanto o backend não adotar cookie `httpOnly`.
 
+## Módulo 2 — motor local, pistas e ambiente
+
+- `/race` abre a preparação do `RaceEngine`, com as 24 pistas do catálogo `2026.12`, prévia do traçado, país, comprimento e ambiente, além do F1 único e sua paleta de pinturas predefinidas.
+- O runtime v2 usa passo fixo de `1/120s`; o `requestAnimationFrame` apenas alimenta o acumulador e interpola a renderização entre os dois últimos ticks.
+- A Parte 2d implementa o contrato físico `2.0.0`: corpo rígido 2D, pneus com aderência combinada, transferência de carga, downforce/drag, tração traseira, câmbio automático, frenagem sem ABS, colisores compostos precisos, manifold, torque de impacto e CCD. A especificação e as fontes estão em `docs/contracts/module-2-physics-v2-proposal.md`.
+- O frontend carrega `TrackDefinition` `2.0.0` por `GET /api/tracks/{id}` e a injeta no motor. Grid, centerline, largura, superfícies, checkpoints direcionais, linha de corrida, zebras, limites e faces canônicas de barreira vêm da mesma definição métrica usada pelo backend. A centerline é suavizada e amostrada a cada aproximadamente 5 m para que asfalto, áreas externas, barreiras e grades acompanhem as curvas. Cada lado pode combinar asfalto externo, grama e brita antes de uma barreira de impacto (`concrete-wall`, `guardrail`, `tecpro` ou `tyre-barrier`) e de uma grade de detritos externa opcional; a face desenhada da barreira é também seu limite físico. O pit lane publica aberturas navegáveis de entrada/saída e `pitLane.garageBarrier` bloqueia apenas a face traseira opaca das 22 garagens, sem colisão invisível no corredor. Vias especiais de escape e placas de frenagem são composições visuais por padrão, enquanto eventuais aberturas de proteção precisam ser declaradas e removidas igualmente do desenho e da colisão. O Rettifilo de Monza é a exceção funcional: seu corredor sai reto da aproximação, usa o mesmo asfalto da pista, fileiras alternadas de blocos brancos com chevrons vermelhos e muro físico somente na borda externa, sem muro invisível cortando a rota.
+- A câmera acompanha a posição e exclusivamente a direção do movimento com suavização de `0,25s`; o ângulo da carroceria não interfere na orientação. A projeção 2.5D usa inclinação de `42°` a partir da vista superior, comprime a profundidade para aproximadamente `0,743` e posiciona o carro em `68%` da altura, exibindo pouco mais que o dobro de pista à frente em relação à traseira. O comprimento visual nominal usa 6% da altura antes da projeção angular. Paradas preservam a última orientação e uma inversão sustentada segura a câmera por `0,4s` antes da convergência suave. O minimapa usa as mesmas coordenadas do mundo e nunca gira.
+- O F1 original usa geometria Canvas detalhada e rotação visual contínua relativa a cada câmera, sem saltos entre poses. A silhueta combina volumes aerodinâmicos contínuos, bico alongado, asas multicamada, quatro pneus e rodas, suspensão, sidepods, assoalho, difusor, cockpit, capacete, halo e cobertura do motor legíveis conforme o ângulo, evitando a aparência de blocos retangulares desconectados. No Módulo 2, a pintura competitivamente neutra fica restrita a vermelho, azul ou verde em tons sóbrios; superfícies secundárias derivam da mesma cor em valores mais claros ou escuros, enquanto carbono, pneus e peças mecânicas permanecem neutros. A prévia usa o mesmo modelo com detalhe adicional.
+- O modo local usa câmera própria para cada jogador: divisão vertical em áreas largas e horizontal abaixo da razão `1,35`. A pista é desenhada vetorialmente somente nos `chunks` visíveis, sem bitmap proporcional ao circuito completo.
+- Solo cria dois bots determinísticos. No modo local, o jogador 1 usa WASD e o jogador 2 usa setas. Em solo, WASD e setas controlam o mesmo carro; A/seta esquerda esterçam para a esquerda e D/seta direita, para a direita.
+- Boost/nitro não existe no runtime v2 e `Shift` não é capturado nem executa qualquer ação.
+- O dano mecânico v2 é cumulativo e deriva da variação de velocidade normal do impacto. Danos de direção e motor afetam a dinâmica; impactos críticos ou perda de toda a integridade causam perda total, que desativa os controles.
+- Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result` com `trackId`, `trackCatalogVersion` e `physicsContractVersion` efetivamente usados.
+
+As Partes 2a, 2b, 2c e 2d e o catálogo `2026.12` foram validados manualmente de forma integrada em 31/08/2026. A simplificação para F1 único/condução fixa e os refinamentos de câmera 2.5D/F1 estão concluídos. O catálogo preserva as revisões anteriores e acrescenta placas regressivas por curva, largada oficial de Silverstone reposicionada, sentido anti-horário corrigido de Marina Bay e remoção do escape provisório de Monza, mantendo muros/grades contínuos e aberturas navegáveis de pit com 22 garagens opacas protegidas por collider traseiro. A Parte 2d e o Módulo 2 estão prontos; o Módulo 3 ainda não foi iniciado.
+
 ## Roadmap
 
-Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e carros por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
+Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e cosméticos por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
 
 A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.
+
+A preparação técnica do Módulo 2 está em [`docs/contracts/module-2-shared-contracts.md`](docs/contracts/module-2-shared-contracts.md), na [proposta aprovada da física v2](docs/contracts/module-2-physics-v2-proposal.md), na [auditoria de proteções e frenagem](docs/module-2-track-safety-audit-2026.10.md) e em [`contracts/module-2/v2/`](contracts/module-2/v2/). O `v1` preserva o catálogo `2026.5` e a física `1.3.0` como histórico imutável; o runtime atual usa a linha `v2`, catálogo `2026.12` e física `2.0.0`. O frontend mantém somente a pista selecionada em memória; as 24 geometrias completas pertencem ao backend e chegam pela API.
 
 ## Pré-requisitos
 
@@ -116,7 +134,8 @@ src/
   auth/         # sessão JWT exclusivamente em memória
   components/   # componentes React e base local do shadcn/ui
   lib/          # utilitários compartilhados e base do shadcn/ui
-  pages/        # menu, login, cadastro e conta
+  pages/        # menu, autenticação, conta e laboratório de corrida
+  race/         # física, loop fixo, colisões, input, bots e Canvas 2D
   test/         # configuração global dos testes
 ```
 

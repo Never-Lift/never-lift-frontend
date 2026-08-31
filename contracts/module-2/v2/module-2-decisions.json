@@ -1,0 +1,35 @@
+{
+  "contractVersion": "2.0.0",
+  "trackSchemaVersion": "2.0.0",
+  "catalogVersion": "2026.12",
+  "seasonReference": 2026,
+  "calendarPolicy": "original-24-round-freeze",
+  "vehiclePolicy": "single-f1-paint-only",
+  "handlingPolicy": "single-fixed-simcade",
+  "drivetrain": "rear-wheel-drive",
+  "transmission": "automatic-eight-speed",
+  "driverAssists": {
+    "tractionControl": false,
+    "antiLockBrakes": false
+  },
+  "inputActions": ["throttle", "brake", "steer"],
+  "boostPolicy": "removed",
+  "shiftKeyPolicy": "unassigned",
+  "collisionPolicy": "compound-convex-ccd-impulse",
+  "barrierPolicy": "explicit-track-facing-polylines",
+  "pitPolicy": "navigable-lane-garage-shell-collision",
+  "garagePolicy": "22-opaque-bays-rear-barrier",
+  "localDamage": "cumulative-contact-delta-v",
+  "resultVersionPolicy": "physics-contract-version-required",
+  "notes": [
+    "Todos os participantes usam o mesmo monoposto e a mesma calibração; pintura é cosmética.",
+    "A velocidade final resulta do equilíbrio entre potência, relação de marcha e arrasto; não existe hard cap.",
+    "Aderência longitudinal e lateral compartilham uma elipse combinada e podem saturar sem TC ou ABS.",
+    "As rampas de entrada digital são determinísticas, mas não corrigem patinagem, travamento ou perda de controle.",
+    "A face publicada da barreira é usada igualmente por renderer, motor TypeScript e motor Java.",
+    "A entrada e a saída do pit são abertas fisicamente; a face traseira opaca de cada uma das 22 garagens bloqueia atravessamento sem bloquear o corredor.",
+    "Boost e nitro não existem no contrato v2; Shift não produz ação ou mensagem.",
+    "Tempos de versões físicas diferentes nunca compartilham ranking, recorde ou fantasma."
+  ]
+}
+

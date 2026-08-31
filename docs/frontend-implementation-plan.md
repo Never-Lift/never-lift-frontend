@@ -29,7 +29,7 @@
 
 Mesmo modelo do backend: **plano REST** pra tudo que não é corrida ao vivo, **plano tempo real** (um WebSocket por sala) pro motor de corrida, onde o servidor é a autoridade e o cliente prevê + reconcilia + interpola (ver diagramas de arquitetura discutidos antes deste plano).
 
-Duas implementações de física existem no projeto: a do servidor (Java, autoritativa) e a do cliente (TypeScript, usada tanto pra **predição online** quanto — sozinha, sem servidor nenhum — pros **modos solo e local**). Elas precisam ter exatamente as mesmas constantes de atrito, arrasto, aceleração e drift que o motor do backend. Trate qualquer divergência percebida (o carro "sente" diferente entre local e online) como bug de prioridade alta, não como ajuste de sensação.
+Duas implementações de física existem no projeto: a do servidor (Java, autoritativa) e a do cliente (TypeScript, usada tanto pra **predição online** quanto — sozinha, sem servidor nenhum — pros **modos solo e local**). Elas precisam reproduzir as mesmas fórmulas, ordem de integração, estado dinâmico, constantes de pneus/aerodinâmica/powertrain e solver de colisão, além dos mesmos cenários de referência. Trate qualquer divergência percebida (o carro "sente" diferente entre local e online) como bug de prioridade alta, não como ajuste de sensação.
 
 Todas as grandezas espaciais compartilhadas usam **1 unidade de mundo = 1 metro**. O `RaceEngine`, as definições de pista, checkpoints e snapshots trabalham em metros; a câmera converte metros em pixels somente na renderização. Circuitos extensos são segmentados e desenhados por visibilidade, nunca armazenados como um bitmap do tamanho do mundo inteiro.
 
@@ -39,11 +39,11 @@ Todas as grandezas espaciais compartilhadas usam **1 unidade de mundo = 1 metro*
 
 Envelope: `{ "type": "...", "payload": {...} }`.
 
-**Cliente → Servidor:** `join_room { roomCode, trackCatalogVersion }`, `select_loadout`, `ready`, `input { throttle, brake, steer, nitro, clientSeq, clientTimestamp }` — nunca posição, só intenção.
+**Cliente → Servidor:** `join_room { roomCode, trackCatalogVersion, physicsContractVersion }`, `select_loadout { color }`, `ready`, `input { throttle, brake, steer, clientSeq, clientTimestamp }` — nunca posição, só intenção. O modelo do carro e o modo de condução não fazem parte do payload: toda corrida usa o mesmo F1 e a mesma configuração física. Boost/nitro não existe e propriedades desconhecidas são rejeitadas.
 
-**Servidor → Cliente:** `room_state`, `countdown { startAtServerTime }`, `state_snapshot { tick, serverTime, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, damageState, nitroRemaining, lap, isGhost, inPit }] }`, `race_event`, `race_result`, `error`.
+**Servidor → Cliente:** `room_state`, `countdown { startAtServerTime }`, `state_snapshot { tick, serverTime, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining }, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, lap, isGhost, inPit }] }`, `race_event`, `race_result`, `error`.
 
-Nos snapshots, `x` e `y` são metros num plano cartesiano com `+X` para a direita e `+Y` para cima; `velocityX`/`velocityY` e `speed` usam metros por segundo; `angle` usa radianos no sentido anti-horário a partir de `+X`. O frontend não converte esses valores em pixels até o estágio de câmera/renderização.
+Nos snapshots, `x` e `y` são metros num plano cartesiano com `+X` para a direita e `+Y` para cima; `velocityX`/`velocityY` e `speed` usam metros por segundo; `angle` usa radianos no sentido anti-horário a partir de `+X`. Dentro de `physicsState`, `yawRate` usa radianos por segundo, `steeringAngle` é o ângulo físico das rodas dianteiras e as velocidades angulares usam radianos por segundo. Controles aplicados, rodas, marcha, RPM e transição de troca são estado autoritativo necessário à reconciliação. O frontend não converte esses valores em pixels até o estágio de câmera/renderização.
 
 ### Como o cliente usa `state_snapshot`
 - **Carro do próprio jogador:** já foi desenhado localmente no instante do input (predição). Quando chega o snapshot, comparar posição prevista com a posição real; se divergir, corrigir suavemente (não teleportar) ao longo de alguns frames.
@@ -83,55 +83,81 @@ Mesma numeração e dependências do plano de backend.
 
 ### Módulo 2 — Motor de corrida local (sem rede)
 **Depende de:** Módulo 0 (frontend) + Módulo 2 (backend, catálogo versionado de pistas e persistência de resultado).
+**Contrato de entrada atual:** `contracts/module-2/v2/` define `TrackDefinition` `2.0.0`, catálogo `2026.12`, constantes físicas `2.0.0`, colliders compostos, faces canônicas de barreira, aberturas físicas de pit, face traseira `pitLane.garageBarrier` das garagens, placas métricas de frenagem e perfis visuais métricos de infraestrutura. O frontend consome as 24 geometrias pela API e mantém localmente somente os artefatos comuns do contrato; `contracts/module-2/v1/` preserva o runtime `1.3.0` como histórico imutável.
+**Estado da entrega:** pronto. As Partes 2a, 2b, 2c e 2d, a física `2.0.0` e o catálogo `2026.12` foram validados manualmente de forma integrada em 31/08/2026. A simplificação para F1 único/condução única, o refinamento de câmera 2.5D/F1 multidirecional e a revisão de segurança visual das 24 pistas estão concluídos: zebras autorais, faixas contínuas de muro/grade, placas completas por curva, largada de Silverstone reposicionada, Marina Bay orientada no sentido anti-horário, entradas/saídas navegáveis do pit, 22 vãos opacos de garagem por circuito com face traseira colidível e remoção do escape provisório do Rettifilo de Monza. A Parte 2d e o Módulo 2 estão prontos; o Módulo 3 ainda não foi iniciado.
+
+**Simplificação implementada em 24/08/2026 (frontend #90 / backend #72):** o produto tem somente o F1 e uma configuração fixa de condução que preserva os valores do antigo perfil Normal. A seleção Normal/Drift, os perfis visuais Supercarro/Drift e qualquer dimensão competitiva baseada em modelo ou handling foram removidos. O contrato físico incompatível `1.3.0` foi publicado de forma sincronizada nos dois repositórios.
+
+**Refinamento visual implementado:** a câmera deixa de usar uma projeção ortográfica uniforme e passa a aplicar uma perspectiva 2.5D fixa de `42°` a partir da vista superior, comprimindo a profundidade para aproximadamente `0,743` sem alterar coordenadas, física, colisões ou contratos. O carro focado fica em `68%` da viewport para exibir pouco mais que o dobro de pista à frente em relação à traseira. A orientação depende somente do vetor de movimento, com retenção em baixa velocidade, atraso inicial em inversão sustentada e limite de giro por frame. O F1 provisório foi substituído por um modelo Canvas original detalhado cuja geometria usa continuamente o ângulo relativo a cada câmera, sem degraus entre poses, com volumes aerodinâmicos integrados, frente, traseira, laterais, pneus, rodas, suspensão, asas multicamada, assoalho, difusor, sidepods, cockpit, capacete e halo completos. A pintura do MVP oferece somente vermelho, azul ou verde em tons sóbrios e deriva os detalhes da própria cor selecionada, sem acentos neon concorrentes. Pista, zebras, barreiras, grades, marcas de pneu e ordenação dos carros usam a mesma projeção; split-screen continua com uma câmera independente por jogador.
+
+**Parte 2d — implementação e validação manual concluídas em 31/08/2026:** o integrador cinemático v1.3 foi substituído por corpo rígido 2D com modelo de bicicleta dinâmico, pneus não lineares, aderência longitudinal/lateral combinada, transferência de carga, drag/downforce, powertrain traseiro com oito marchas automáticas, travamento sem ABS e patinagem sem controle de tração. Boost/nitro foi removido e `Shift` não possui função. Colliders convexos compostos acompanham a silhueta; faces canônicas de barreira são compartilhadas com o renderer; manifold, impulso no ponto de contato, torque, solver iterativo e CCD compõem a colisão v2. `physicsContractVersion` é persistida, cenários determinísticos foram publicados e todas as constantes do planejador dos bots estão no contrato; dificuldade altera somente decisões. Os cenários de física, colisão, câmera, minimapa, culling, circuitos curto/longo/urbano, bots e split-screen foram validados manualmente conforme o critério de pronto.
+
+**Parte 2a entregue — registro histórico anterior à decisão #90/#72:** `RaceEngine` determinístico a `1/60s`, interpolação entre ticks, física única para todos os modelos, superfícies do contrato v1.2, escolha normal/drift aplicada à corrida inteira, colisões de carros e barreiras, dano mecânico cumulativo, oval técnico temporário, seleção visual dos três modelos e cores, bots determinísticos, dois jogadores com controles distintos, corrida curta completa e persistência em `POST /api/races/local-result`. O motor e o Canvas mantêm posições e velocidades fora do estado React. A equivalência a 30/60/120 FPS, a equidade entre modelos, as regras físicas, os inputs, as colisões, os dois modos e o payload REST possuem cobertura automatizada.
+
+**Limite da Parte 2a:** o oval usava provisoriamente o identificador de catálogo `albert-park` apenas para que o resultado técnico fosse aceito pelo contrato do backend. Ao fim da Parte 2a, split-screen com câmera individual, catálogo/24 pistas, minimapa e culling ainda estavam pendentes para a Parte 2b; semáforo, noite, partículas temáticas e alertas visuais permanecem pendentes para a Parte 2c.
+**Parte 2b implementada:** `GET /api/tracks` e `GET /api/tracks/{id}` tipados pelo contrato real; preparação com as 24 pistas, metadados, ambiente e prévia; `TrackDefinition` injetada no `RaceEngine`; grid, largura, superfícies, checkpoints direcionais, `racingLine`, `curbs` e `trackLimits` oficiais; câmera por jogador suavizada em `0,25s`, carro limitado inicialmente a 6% da altura e enquadramento revisado em `68%`; minimapa fixo; split vertical ou horizontal no limite `1,35`; e renderização vetorial somente dos `chunks` visíveis. O resultado usa o `id` e a `catalogVersion` selecionados. As auditorias `2026.4`/`2026.5` renderizavam, por trecho e lado, asfalto externo, grama, brita, barreiras, grade externa, zebras e landmarks específicos por pista; a centerline suavizada e reamostrada a aproximadamente 5 m orienta pista e entornos. Esse registro descreve a entrega original v1.3. A Parte 2d publicou as faces canônicas no catálogo `2026.6`; `2026.7` corrigiu continuidade/sobreposição estrutural, zebras, pits, pontes, escape de Monza e largada de Mônaco; `2026.8` acrescentou identidade de box, arquibancadas, cercas e transparência contextual; `2026.9` publicou perfis de zebra por curva. O `2026.10` estabiliza as faces canônicas nas curvas apertadas, extruda muros/grades como faixas contínuas, publica placas regressivas de frenagem, remove as pontas escuras da estrutura de Suzuka e abre a proteção de Monza no corredor do Rettifilo. O escape de Monza sai reto da aproximação e reconecta depois da chicane; usa o mesmo asfalto da pista, blocos brancos com chevrons vermelhos e muro colidível apenas na borda externa. O `2026.11` acrescenta aberturas derivadas de `pit-entry`/`pit-exit` em todas as pistas, 22 vãos de garagem opacos (duas vagas por equipe) em arquitetura híbrida específica por circuito e a face física traseira de cada shell, sem bloquear o corredor navegável. O `2026.12` completa as placas solicitadas, corrige as origens de largada de Silverstone e Marina Bay e remove o escape provisório de Monza. As placas foram ampliadas no renderer sem mudar sua posição métrica. A implementação automatizada está concluída; a validação manual permanece pendente.
+**Parte 2c implementada:** presets de dia, entardecer e noite; cone de farol limitado à pista e ocluso por níveis superiores; partículas ambientais com orçamento por qualidade; semáforo de largada e penalidade de largada queimada; alertas visuais e telemetria de dano sem alterar o estado físico.
+**Limite da Parte 2b:** não inclui semáforo, largada queimada, presets visuais de horário, iluminação noturna, partículas temáticas nem alertas visuais completos de dano. Esses itens permanecem exclusivamente na Parte 2c ou no módulo indicado pelo guia de design.
 **Cobre features:** 4 (solo/local), 5, 6 (menos vácuo, que só existe com outro jogador real), 14, 15, 16, 17, 18, 21, 22, 23, 24.
 **Este módulo é o motor físico do jogo novo, escrito do zero em TypeScript — o protótipo entra só como referência de sensação/comportamento esperado, não como código a converter (isso não é uma versão do jogo antigo). Nenhuma rede envolvida aqui.**
 **Escopo:**
-- `RaceEngine` em TS: passo de física em **delta de tempo fixo** (ex. `1/60s`), desacoplado do `requestAnimationFrame` — corrige o problema do protótipo onde a física dependia do FPS de cada máquina. Inclui atrito maior fora da pista (grama: carro mais liso e mais lento, feature 5) e a alternância `driftMode`/normal (feature 4, com a mesma tunagem que o motor autoritativo do backend usa). Renderização interpola visualmente entre os dois últimos passos de física quando o frame real cai entre dois ticks.
-- Input: WASD **e** setas simultaneamente habilitados.
+- `RaceEngine` em TS: passo fixo desacoplado do `requestAnimationFrame`, com opção final entre `1/60s` e `1/120s` congelada somente após benchmark. O integrador v2 calcula corpo rígido, yaw, esterço físico, pneus por eixo, combined slip, transferência de carga, aerodinâmica, powertrain e frenagem. Existe uma única configuração física, aplicada igualmente a humanos e bots e reproduzida pelo backend; não há modo selecionável. A renderização apenas interpola os dois últimos estados.
+- Input: WASD **e** setas simultaneamente habilitados; esquerda produz esterço à esquerda nos dois mapeamentos. Rampas determinísticas permitem modular comandos digitais sem impedir perda de aderência. `Shift` não é capturado e não possui função; não existe boost, nitro ou freio de mão.
+- Modo local com colisão entre carros. O split-screen usa divisão vertical em telas largas e horizontal quando a razão de aspecto for menor que `1.35`; cada jogador possui câmera própria.
 - Renderização: pista, carro, sujeira de pneu, partículas — com o protótipo como referência visual de ponto de partida, não como código reaproveitado diretamente.
 - Carregar metadados por `GET /api/tracks` e a definição selecionada por `GET /api/tracks/{id}`; manter a `trackCatalogVersion` da definição para entrar em salas e registrar resultados. O motor local não depende do backend depois que a pista foi carregada.
 - Coordenadas, dimensões, distância e velocidade usam metros e segundos; escala de câmera não pode afetar física ou colisão.
-- Câmera top-down levemente inclinada, acompanhando posição e direção de movimento com suavização, zoom fixo e tratamento estável para parada, ré e rodadas. Os valores iniciais de enquadramento e tamanho do carro são calibrações obrigatórias conforme `game-design-guide.md`.
+- Câmera top-down levemente inclinada em projeção 2.5D, acompanhando posição e exclusivamente a direção de movimento com suavização, zoom fixo e tratamento estável para parada, inversão e rodadas. O F1 usa uma vista relativa própria em cada viewport, inclusive no split-screen. Os valores de projeção, enquadramento e tamanho do carro são calibrações documentadas em `game-design-guide.md`.
 - Minimap de orientação fixa com traçado completo, jogador e bots, derivado das mesmas coordenadas do mundo.
 - Renderização por trechos com culling de pista, cenário e partículas fora da área visível; resolução interna limitada e ajustável por nível de qualidade.
 - Semáforo de largada (não contagem regressiva): sequência de luzes; largada queimada trava o acelerador por 5s.
 - Cone de luz dinâmico à frente do carro em pistas noturnas; escurecimento controlado do restante da pista, sem depender de blur pesado de tela inteira.
-- Seleção de modelo (F1 com cor = capacete, Supercarro, Drift) e cor antes de correr.
-- Catálogo com 24 circuitos de nomes reais e traçados reconhecíveis para o uso pessoal declarado, comprimentos variados e escala métrica aproximada. Pequenos ajustes de 10–20% são permitidos quando necessários à jogabilidade; uma futura distribuição pública exige revisão de nomes e apresentação.
+- Um único F1 é usado por todos. Antes de correr, o jogador escolhe somente uma pintura predefinida entre vermelho, azul ou verde, aplicada também ao capacete; detalhes visuais usam variações tonais da cor escolhida e não existe seleção de modelo. Massa, aceleração, potência, frenagem, esterço, pneus, aero e colisores são únicos.
+- O collider do monoposto é uma união de convexos métricos cobrindo asa, bico, rodas, chassi e traseira, alinhada ao modelo visual dentro de `2–5 cm`. As barreiras publicam a face voltada à pista e renderer/colisão usam a mesma polilinha. CCD, manifold e impulsos no ponto de contato impedem atravessamento, contato invisível e enrosco; impactos excêntricos geram rotação.
+- Catálogo `2026.5` congelado com as 24 etapas do calendário original de 2026, incluindo Bahrain e Jeddah mesmo diante de alterações posteriores no calendário real. Os traçados são reconhecíveis, têm comprimentos variados e escala métrica aproximada. `trackLimits` cobre toda a volta e descreve zonas laterais auditadas de asfalto, grama ou brita antes da barreira de impacto, com grade externa opcional em campo próprio; `curbs` descreve zebras por distância, lado, largura, cadência e paleta; `sceneryLayout` publica landmarks semânticos específicos e ancorados à pista. A centerline recebe suavização fechada e amostragem aproximada de 5 m, compartilhada por asfalto, entornos e proteções. As fontes ficam na definição. Pequenos ajustes de 10–20% são permitidos quando necessários à jogabilidade; uma futura distribuição pública exige revisão de nomes e apresentação.
 - Cenário semirrealista simples: superfície limpa, limites legíveis, pontos marcantes próximos e áreas distantes de baixo detalhe; objetos ambientais estáticos.
-- Alertas visuais de peça danificada (aqui ainda sem dano real — dano de verdade só existe online, ver Módulo 5; local pode simular dano cosmético/local se quiserem consistência de sensação, a decidir).
-**Testes obrigatórios específicos:** equivalência de passo físico em diferentes FPS; transformação mundo→câmera e mundo→minimap; estabilidade da câmera em parada/ré/rodada; culling sem desaparecimento visível; circuito curto e longo concluídos sem depender do tamanho da tela.
-**Critério de pronto:** correr sozinho contra bots ou em split-screen local (2 jogadores, mesmo teclado com mapeamentos distintos) do início ao fim de uma corrida, com física estável em qualquer taxa de frame do navegador, câmera/minimap legíveis e circuito extenso sem borda ou bitmap global visível.
+- Impactos classificam dano mecânico cumulativo pelo impulso/energia ou `delta-v` do contato e reduzem uma barra de vida: fraco danifica direção, médio danifica motor, alto combina motor e direção e crítico causa perda total; impactos menores repetidos também podem zerar a vida. Falhas nunca são substituídas nem curadas por nova colisão. O Módulo 5 acrescenta reparo em pits e regras de corrida associadas.
+- Bots usam a linha de corrida e planejam velocidade por curvatura, ponto de frenagem, tangência, aplicação de acelerador e recuperação. Dificuldade maior melhora decisões e execução, nunca física ou tolerância de contato.
+**Testes obrigatórios específicos:** equivalência do resultado com renderização a 30/60/120 FPS; curva de aceleração e velocidade terminal; frenagem e travamento; curva constante, subesterço, sobresterço de potência, lift-off e transições de superfície; colisões centrais/excêntricas carro–carro e carro–muro; contato no bico/asa/roda, CCD sem tunneling, raspão sem enrosco e folga sem falso positivo em Mônaco; transformação mundo→câmera 2.5D e mundo→minimap; estabilidade da câmera; alinhamento collider↔silhueta; circuito curto, longo e urbano concluídos por humanos e bots.
+**Critério de pronto:** correr sozinho contra bots ou em split-screen local do início ao fim em circuito de baixa e alta velocidade e em uma pista urbana; acelerar continuamente não produz volta competitiva; frenagem, tangência e retomada são necessárias; perdas dianteira/traseira e contatos têm causa física legível; não há sobreposição, colisão invisível, enrosco ou tunneling; câmera/minimap/culling permanecem estáveis; `Shift` não envia nem executa ação.
 
 ### Módulo 3 — Motor autoritativo online (núcleo)
 **Depende de:** Módulo 1, Módulo 2, Módulo 3 do backend.
 **Cobre features:** 4 (lobby online), 8.
+**Decisões aprovadas:** o registro completo das 80 decisões desta rodada está em
+[`module-3-online-decisions.md`](module-3-online-decisions.md). Ele é normativo
+para a implementação, mas não altera o status: o Módulo 3 ainda não foi iniciado.
 **Escopo:**
-- Cliente WebSocket com reconexão automática (backoff simples).
-- Lobby: lista de jogadores, host, checkbox de pronto por jogador, host só pode iniciar quando todos estão `ready`.
+- Cliente WebSocket com reconexão automática (backoff simples), obtendo antes um ticket de uso único vinculado à sala/usuário (validade de 60 s) em vez de expor o JWT principal.
+- Lobby: lista pública e entrada por código, até 22 carros por sala (humanos e bots), grid configurável de 2 a 22, senha opcional, host, checkbox de pronto por jogador e host só pode iniciar quando todos os humanos estiverem `ready`. Bots ficam desativados por padrão e o host escolhe uma dificuldade única quando os habilitar.
+- Classificação simultânea e isolada: uma tentativa de até 3 minutos por participante, com contagem sincronizada de 3 s, lançamento padronizado antes da linha, mesmas condições secas da corrida e ordenação do grid por tempo autoritativo. Voltas inválidas ficam no fim em ordem determinística.
+- Fluxo de corrida: três voltas, sentido oficial, sem entrada tardia, sem pausa ou reinício manual; após a chegada o carro vira `ghost`, os resultados ficam visíveis por confirmação ou no máximo 60 s e a sala retorna ao lobby.
 - **Predição:** ao apertar uma tecla, o `RaceEngine` do Módulo 2 já simula o carro do próprio jogador imediatamente e envia `input` pro servidor.
-- **Reconciliação:** ao chegar `state_snapshot`, comparar posição prevista com a recebida; se divergir além de um limiar pequeno, corrigir suavemente ao longo de poucos frames (nunca um "pulo" perceptível).
+- **Compatibilidade:** `join_room` envia `physicsContractVersion`; servidor rejeita cliente com física incompatível antes da corrida.
+- **Reconciliação:** ao chegar `state_snapshot`, comparar posição, velocidade, ângulo e todo `physicsState` previsto com o estado autoritativo; reaplicar inputs ainda não confirmados e corrigir erro visual suavemente, sem esconder divergência persistente de motor.
 - **Interpolação:** carros remotos desenhados ~100ms atrás, interpolando entre os dois snapshots mais recentes — nunca perseguindo um alvo cru como no protótipo.
 - Reaproveita o mesmo `RaceEngine` do Módulo 2 como motor de predição — não duplicar a física numa segunda implementação dentro do próprio frontend.
 - Minimap online transforma as posições interpoladas dos snapshots na mesma projeção fixa usada no modo local; nunca mantém um estado paralelo de posição.
-**Critério de pronto:** dois navegadores, mesma sala, os carros colidem (ou não) igual nas duas telas — mesmo teste de aceitação do Módulo 3 do backend, visto do lado do cliente.
+- Transporte: servidor a 30 ticks/s com subpassos de 1/120 s, inputs a 30 Hz, snapshots a 20 Hz, heartbeat a cada 10 s, ticket de uso único vinculado à sala/usuário com validade de 60 s e janela de reconexão de aproximadamente 30 s. O servidor valida/normaliza inputs e mantém o último comando por aproximadamente 150–250 ms antes de neutralizar gradualmente.
+- A corrida usa o pit lane navegável sem limite de velocidade ou serviço no M3; cortes respeitam checkpoints e limites, invalidam a quali e não concedem progresso até o retorno válido. O estado físico é restaurado entre quali e corrida.
+**Critério de pronto:** dois navegadores, mesma sala e mesma versão física convergem em trajetória, perda de aderência e colisões; clientes incompatíveis não entram e o mesmo contato produz resultado autoritativo nas duas telas.
 
 ### Módulo 4 — Ambiente e modo caos
 **Depende de:** Módulo 3.
 **Cobre features:** 4 (dia/noite/chuva/sol/caos completo em multiplayer).
-**Escopo:** tela compartilhada de preparação adaptada ao modo, com painel lateral de resumo; host edita bots/dificuldade/voltas/pista/período/clima/`driftMode`. O checkbox de modo caos desabilita visualmente os outros campos (`settingsLocked` vindo do backend) e mostra aviso de que tudo será sorteado. Período é um preset fixo por corrida (dia/entardecer/noite). Vento, chuva, spray, poças de óleo e caixas são renderizados com efeitos limitados por qualidade e recebidos do servidor quando autoritativos — nunca sorteados no cliente.
+**Escopo:** tela compartilhada de preparação adaptada ao tipo de prova, com painel lateral de resumo; host edita bots/dificuldade/voltas/pista/período/clima. Não existe campo de modo de condução. O checkbox de modo caos desabilita visualmente os outros campos (`settingsLocked` vindo do backend) e mostra aviso de que tudo será sorteado. Período é um preset fixo por corrida (dia/entardecer/noite). Vento, chuva, spray, poças de óleo e caixas são renderizados com efeitos limitados por qualidade e recebidos do servidor quando autoritativos — nunca sorteados no cliente. Chuva e superfícies molhadas modulam os parâmetros de pneu/aderência do contrato v2, sem criar uma segunda física.
 **Critério de pronto:** ativar modo caos na UI reflete exatamente os obstáculos que o servidor decidiu, iguais nas telas de todos os jogadores da sala.
 
-### Módulo 5 — Corrida completa (dano, nitro, vácuo, fantasma, pits, HUD)
+### Módulo 5 — Corrida completa (dano, vácuo, fantasma, pits, HUD)
 **Depende de:** Módulo 3.
-**Cobre features:** 5 (feedback visual), 6, 7, 15 (aplicado online), 19, 24.
+**Cobre features:** 5 (feedback visual), 6, 7, 15 (aplicado online), 24.
 **Escopo:**
-- HUD periférico e compacto: posição, competidores, volta atual/total, tempo atual/melhor, velocidade, minimapa e nitro; dano e penalidades aparecem somente quando relevantes. Classificação detalhada não deve ocupar permanentemente o centro da corrida.
-- Indicador de nitro (barra decrescente, não recarrega).
+- HUD periférico e compacto: posição, competidores, volta atual/total, tempo atual/melhor, velocidade e minimapa; dano e penalidades aparecem somente quando relevantes. Classificação detalhada não deve ocupar permanentemente o centro da corrida. Não existe indicador de boost/nitro.
+- Vácuo reduz moderadamente o arrasto no modelo aerodinâmico v2 quando as condições autoritativas forem atendidas; nunca concede força extra independente da física.
 - Renderização simples de dano por estado (`damageState` do snapshot): marcas discretas/fumaça leve, estado crítico mais visível e carro escurecido/parado na perda total; sem deformação complexa ou peças destacáveis.
 - Ao `race_event: finished`, o próprio carro vira visualmente fantasma (transparência); a UI só desenha fantasma de quem também já terminou, conforme a regra de colisão do Módulo 5 do backend.
 - Pódio final e resultado na mesma composição: top 3 em degraus, demais participantes em lista compacta, tempo total, melhor volta, penalidades e próximas ações.
-**Critério de pronto:** HUD reflete every campo do `state_snapshot` sem atraso perceptível; pódio final renderiza corretamente com 2, 3 ou 4 jogadores.
+**Critério de pronto:** HUD reflete sem atraso perceptível todos os campos do snapshot que têm representação de interface; pódio final renderiza corretamente com 2, 3 ou 4 jogadores.
 
 ### Módulo 6 — Campeonatos
 **Depende de:** Módulo 3, Módulo 5.
@@ -149,8 +175,8 @@ Mesma numeração e dependências do plano de backend.
 ### Módulo 8 — Perfil, recordes e histórico
 **Depende de:** Módulo 6.
 **Cobre features:** 3 (estatísticas), 10, 26.
-**Telas:** Perfil híbrido com identidade e abas de visão geral/estatísticas/histórico; `/records` com top 3 discreto, tabelas filtráveis e marca pessoal fácil de localizar; histórico paginado dentro do perfil privado.
-**Critério de pronto:** as três telas consomem os endpoints do Módulo 8 do backend e atualizam depois de uma corrida/campeonato novo.
+**Telas:** Perfil híbrido com identidade e abas de visão geral/estatísticas/histórico; `/records` com top 3 discreto, tabelas filtráveis e marca pessoal fácil de localizar; histórico paginado dentro do perfil privado. Recordes e melhores tempos exibem a `physicsContractVersion` ativa e nunca misturam versões incompatíveis; resultados antigos aparecem somente em filtro/histórico identificado.
+**Critério de pronto:** as três telas consomem os endpoints do Módulo 8 do backend e atualizam depois de uma corrida/campeonato novo, mantendo tempos de versões físicas diferentes em classificações separadas.
 
 ### Módulo 9 — Polimento e i18n
 **Depende de:** todos os anteriores.
@@ -164,23 +190,23 @@ Mesma numeração e dependências do plano de backend.
 
 Os Módulos 0–9 continuam formando o MVP original. Os módulos abaixo registram funcionalidades aprovadas para uma fase posterior e não bloqueiam a conclusão do Módulo 9. Todos permanecem sujeitos às mesmas regras de testes, validação manual, PR isolado e sincronização de contrato com o backend.
 
-### Módulo 10 — Progressão, carros e medalhas
+### Módulo 10 — Progressão, personalização e medalhas
 **Depende de:** Módulo 5, Módulo 6 e Módulo 8 dos dois repositórios.
 **Escopo:**
-- A conta começa com exatamente um carro padrão; os demais aparecem bloqueados na garagem, com a conquista necessária claramente indicada.
-- Garagem com carro em destaque, carrossel horizontal, rotação manual, painel de informações úteis e personalização com prévia imediata + Salvar/Descartar.
-- Tela de conquistas com categorias, cards compactos, progresso, requisito, raridade, recompensa e painel de detalhes; concluir conquistas pode liberar carros e recompensas exclusivamente cosméticas.
+- Toda conta usa o mesmo F1; não há catálogo nem desbloqueio de outros modelos de carro.
+- Área de personalização com o F1 em destaque, rotação manual, painel de informações úteis e prévia imediata + Salvar/Descartar.
+- Tela de conquistas com categorias, cards compactos, progresso, requisito, raridade, recompensa e painel de detalhes; concluir conquistas pode liberar pinturas, capacetes, acabamentos e outras recompensas exclusivamente cosméticas.
 - Medalhas por idade da conta calculadas a partir de `createdAt`, sem confundir idade da conta com horas efetivamente jogadas.
 - Seletor de até três medalhas para exibição pública no perfil, lobby, pódio e cartão do piloto; forma representa a conquista e material representa a raridade (bronze, prata, ouro, titânio escuro); a seleção pode ser alterada a qualquer momento.
 - Nenhuma recompensa altera física, velocidade, dano ou qualquer vantagem competitiva.
-**Testes obrigatórios:** cobrir carro inicial, bloqueios/desbloqueios, progresso, idempotência da recompensa e seleção de no máximo três medalhas.
-**Critério de pronto:** uma conquista válida libera seu carro/recompensa uma única vez e as três medalhas escolhidas aparecem de forma consistente para outros usuários.
+**Testes obrigatórios:** cobrir F1 único, bloqueios/desbloqueios cosméticos, progresso, idempotência da recompensa e seleção de no máximo três medalhas.
+**Critério de pronto:** uma conquista válida libera sua recompensa cosmética uma única vez e as três medalhas escolhidas aparecem de forma consistente para outros usuários.
 
 ### Módulo 11 — Contrarrelógio e fantasmas
 **Depende de:** Módulo 2, Módulo 7, Módulo 8 e Módulo 11 do backend.
 **Rotas:** `/time-trial`, `/time-trial/:trackId`.
 **Escopo:**
-- Salvar melhor tempo e trajetória por jogador, circuito, modelo de carro, modo de drift e condições determinísticas.
+- Salvar melhor tempo e trajetória por jogador, circuito, versão de física e condições determinísticas; modelo e modo de condução não são dimensões porque são únicos.
 - Correr por padrão contra o fantasma do próprio recorde; permitir selecionar o recorde de um amigo quando houver permissão.
 - Tela com lista compacta de circuitos, prévia detalhada e seleção separada entre fantasma pessoal e fantasmas de amigos; apenas um fantasma por tentativa.
 - O fantasma é somente visual: não colide, não afeta física e não participa da classificação da corrida.
@@ -193,7 +219,7 @@ Os Módulos 0–9 continuam formando o MVP original. Os módulos abaixo registra
 **Responsabilidade:** exclusivamente frontend; não exige endpoint nem alteração no backend.
 **Depende de:** Módulo 2.
 **Escopo:**
-- Tela de configuração para acelerador, freio/ré, esquerda, direita, nitro e demais ações de corrida.
+- Tela de configuração para acelerador, freio/ré, esquerda, direita e demais ações existentes de corrida; `Shift` é explicitamente ignorado, não pode ser vinculado a nenhuma ação e boost/nitro não aparece como ação.
 - Suportar teclado, botões do mouse ou combinação dos dois; cliques usados pela interface não podem acionar comandos da corrida.
 - Detectar conflitos de teclas/botões e oferecer explicitamente Trocar ou Cancelar; permitir restaurar padrões e oferecer perfis distintos para os dois jogadores do modo local.
 - Persistir preferências localmente de forma versionada e fornecer fallback seguro quando um mapeamento antigo ficar incompatível.

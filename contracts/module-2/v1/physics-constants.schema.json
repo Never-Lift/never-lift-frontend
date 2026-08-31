@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://never-lift.local/contracts/module-2/v1/physics-constants.schema.json",
+  "title": "Never Lift Physics Constants v1.3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "calibrationStatus", "units", "simulation", "vehiclePerformance", "vehicleVisual", "handling", "surfaces", "collision", "damage", "race", "bots"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": "1.3.0" },
+    "calibrationStatus": { "enum": ["initial", "validated"] },
+    "units": {
+      "type": "object",
+      "required": ["distance", "time", "angle", "mass"],
+      "properties": {
+        "distance": { "const": "meter" },
+        "time": { "const": "second" },
+        "angle": { "const": "radian" },
+        "mass": { "const": "kilogram" }
+      }
+    },
+    "simulation": { "type": "object" },
+    "vehiclePerformance": { "$ref": "#/$defs/vehiclePerformance" },
+    "vehicleVisual": { "$ref": "#/$defs/vehicleVisual" },
+    "handling": { "$ref": "#/$defs/handling" },
+    "surfaces": { "type": "object" },
+    "collision": { "type": "object" },
+    "damage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thresholds", "effects"],
+      "properties": {
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimumImpactSpeed", "mediumImpactSpeed", "combinedImpactSpeed", "totalLossImpactSpeed", "maximumHealth", "healthDamagePerImpactSpeed"],
+          "properties": {
+            "minimumImpactSpeed": { "type": "number", "minimum": 0 },
+            "mediumImpactSpeed": { "type": "number", "exclusiveMinimum": 0 },
+            "combinedImpactSpeed": { "type": "number", "exclusiveMinimum": 0 },
+            "totalLossImpactSpeed": { "type": "number", "exclusiveMinimum": 0 },
+            "maximumHealth": { "type": "number", "exclusiveMinimum": 0 },
+            "healthDamagePerImpactSpeed": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "effects": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engineAccelerationMultiplier", "engineMaxSpeedMultiplier", "steeringPullStrength", "totalLossDragMultiplier"],
+          "properties": {
+            "engineAccelerationMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "engineMaxSpeedMultiplier": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "steeringPullStrength": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "totalLossDragMultiplier": { "type": "number", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "race": { "type": "object" },
+    "bots": { "type": "object" }
+  },
+  "$defs": {
+    "vehiclePerformance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["massKg", "collisionRadiusMeters", "maxForwardSpeed", "maxReverseSpeed", "engineAcceleration", "brakeDeceleration", "linearDrag", "quadraticDrag", "maxSteerRate", "highSpeedSteerReduction", "baseLateralGrip"],
+      "properties": {
+        "massKg": { "type": "number", "exclusiveMinimum": 0 },
+        "collisionRadiusMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "maxForwardSpeed": { "type": "number", "exclusiveMinimum": 0 },
+        "maxReverseSpeed": { "type": "number", "exclusiveMinimum": 0 },
+        "engineAcceleration": { "type": "number", "exclusiveMinimum": 0 },
+        "brakeDeceleration": { "type": "number", "exclusiveMinimum": 0 },
+        "linearDrag": { "type": "number", "minimum": 0 },
+        "quadraticDrag": { "type": "number", "minimum": 0 },
+        "maxSteerRate": { "type": "number", "exclusiveMinimum": 0 },
+        "highSpeedSteerReduction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "baseLateralGrip": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "vehicleVisual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lengthMeters", "widthMeters"],
+      "properties": {
+        "lengthMeters": { "type": "number", "exclusiveMinimum": 0 },
+        "widthMeters": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "handling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lateralGripMultiplier", "longitudinalGripMultiplier", "steeringMultiplier", "yawDampingPerSecond"],
+      "properties": {
+        "lateralGripMultiplier": { "type": "number", "exclusiveMinimum": 0 },
+        "longitudinalGripMultiplier": { "type": "number", "exclusiveMinimum": 0 },
+        "steeringMultiplier": { "type": "number", "exclusiveMinimum": 0 },
+        "yawDampingPerSecond": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,1207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://never-lift.local/contracts/module-2/v2/track-definition.schema.json",
+  "title": "Never Lift Track Definition v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "catalogVersion",
+    "physicsContractVersion",
+    "id",
+    "name",
+    "countryCode",
+    "locality",
+    "lengthMeters",
+    "coordinateSystem",
+    "bounds",
+    "centerline",
+    "racingLine",
+    "startFinish",
+    "gridSlots",
+    "checkpoints",
+    "pitLane",
+    "surfaceModel",
+    "curbs",
+    "trackLimits",
+    "chunks",
+    "sceneryLayout",
+    "barrierOpenings",
+    "barrierGeometry",
+    "source"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0.0"
+    },
+    "catalogVersion": {
+      "const": "2026.12"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "countryCode": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "locality": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lengthMeters": {
+      "type": "number",
+      "minimum": 2500,
+      "maximum": 8000
+    },
+    "coordinateSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "xAxis",
+        "yAxis",
+        "angleUnit",
+        "angleDirection",
+        "angleOrigin"
+      ],
+      "properties": {
+        "unit": {
+          "const": "meter"
+        },
+        "xAxis": {
+          "const": "right"
+        },
+        "yAxis": {
+          "const": "up"
+        },
+        "angleUnit": {
+          "const": "radian"
+        },
+        "angleDirection": {
+          "const": "counterclockwise"
+        },
+        "angleOrigin": {
+          "const": "+x"
+        }
+      }
+    },
+    "bounds": {
+      "$ref": "#/$defs/bounds"
+    },
+    "centerline": {
+      "type": "array",
+      "minItems": 20,
+      "items": {
+        "$ref": "#/$defs/pathPoint"
+      }
+    },
+    "racingLine": {
+      "type": "array",
+      "minItems": 20,
+      "items": {
+        "$ref": "#/$defs/racingPoint"
+      }
+    },
+    "startFinish": {
+      "$ref": "#/$defs/gate"
+    },
+    "gridSlots": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "position",
+          "angle"
+        ],
+        "properties": {
+          "position": {
+            "$ref": "#/$defs/vector"
+          },
+          "angle": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    },
+    "pitLane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entryDistanceMeters",
+        "exitDistanceMeters",
+        "speedLimitMetersPerSecond",
+        "path",
+        "visualStyle",
+        "garageBarrier"
+      ],
+      "properties": {
+        "entryDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "exitDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "speedLimitMetersPerSecond": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "path": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/vector"
+          }
+        },
+        "visualStyle": {
+          "$ref": "#/$defs/pitVisualStyle"
+        },
+        "garageBarrier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "side",
+            "material",
+            "thicknessMeters",
+            "path"
+          ],
+          "properties": {
+            "side": {
+              "enum": [
+                "left",
+                "right"
+              ]
+            },
+            "material": {
+              "const": "concrete-wall"
+            },
+            "thicknessMeters": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 2
+            },
+            "path": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/vector"
+              }
+            }
+          }
+        }
+      }
+    },
+    "surfaceModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "onTrack",
+        "pitLane"
+      ],
+      "properties": {
+        "onTrack": {
+          "const": "asphalt"
+        },
+        "pitLane": {
+          "const": "pit-lane"
+        }
+      }
+    },
+    "curbs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/curbSegment"
+      }
+    },
+    "trackLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segments"
+      ],
+      "properties": {
+        "segments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/trackLimitSegment"
+          }
+        }
+      }
+    },
+    "chunks": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "fromDistanceMeters",
+          "toDistanceMeters",
+          "bounds"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fromDistanceMeters": {
+            "type": "number",
+            "minimum": 0
+          },
+          "toDistanceMeters": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "bounds": {
+            "$ref": "#/$defs/bounds"
+          }
+        }
+      }
+    },
+    "sceneryLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preset",
+        "landmarks",
+        "staticObjects",
+        "escapeRoads",
+        "brakingMarkers"
+      ],
+      "properties": {
+        "preset": {
+          "enum": [
+            "park",
+            "street",
+            "desert",
+            "coastal",
+            "classic",
+            "night-city"
+          ]
+        },
+        "landmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sceneryObject"
+          }
+        },
+        "staticObjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sceneryObject"
+          }
+        },
+        "escapeRoads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/escapeRoad"
+          }
+        },
+        "brakingMarkers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/brakingMarker"
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset",
+        "license",
+        "url",
+        "transformation",
+        "environmentReferences"
+      ],
+      "properties": {
+        "dataset": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "transformation": {
+          "type": "string"
+        },
+        "environmentReferences": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "url",
+              "checkedAt"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^https://"
+              },
+              "checkedAt": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        }
+      }
+    },
+    "physicsContractVersion": {
+      "const": "2.0.0"
+    },
+    "barrierOpenings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/barrierOpening"
+      }
+    },
+    "barrierGeometry": {
+      "$ref": "#/$defs/barrierGeometry"
+    }
+  },
+  "$defs": {
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minX",
+        "minY",
+        "maxX",
+        "maxY"
+      ],
+      "properties": {
+        "minX": {
+          "type": "number"
+        },
+        "minY": {
+          "type": "number"
+        },
+        "maxX": {
+          "type": "number"
+        },
+        "maxY": {
+          "type": "number"
+        }
+      }
+    },
+    "pathPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "distanceMeters",
+        "halfWidthMeters",
+        "elevationLayer"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "distanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "halfWidthMeters": {
+          "type": "number",
+          "minimum": 3.5,
+          "maximum": 13
+        },
+        "elevationLayer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "racingPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "distanceMeters",
+        "targetSpeedFactor"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "distanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "targetSpeedFactor": {
+          "type": "number",
+          "minimum": 0.35,
+          "maximum": 1
+        }
+      }
+    },
+    "trackLimitSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "fromDistanceMeters",
+        "toDistanceMeters",
+        "left",
+        "right"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "toDistanceMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "left": {
+          "$ref": "#/$defs/trackSideEnvironment"
+        },
+        "right": {
+          "$ref": "#/$defs/trackSideEnvironment"
+        }
+      }
+    },
+    "curbSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "fromDistanceMeters",
+        "toDistanceMeters",
+        "side",
+        "widthMeters",
+        "stripeLengthMeters",
+        "palette"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "toDistanceMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "side": {
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "widthMeters": {
+          "type": "number",
+          "minimum": 0.3,
+          "maximum": 2.5
+        },
+        "stripeLengthMeters": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 8
+        },
+        "palette": {
+          "enum": [
+            "red-white",
+            "orange-white",
+            "red-white-blue",
+            "green-white-red",
+            "red-yellow",
+            "green-yellow",
+            "maroon-white",
+            "blue-white"
+          ]
+        },
+        "outerColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "outerWidthMeters": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1.5
+        }
+      }
+    },
+    "trackSideEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zones",
+        "barrier"
+      ],
+      "properties": {
+        "zones": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "surface",
+              "widthMeters"
+            ],
+            "properties": {
+              "surface": {
+                "enum": [
+                  "asphalt",
+                  "grass",
+                  "gravel"
+                ]
+              },
+              "widthMeters": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 60
+              }
+            }
+          }
+        },
+        "barrier": {
+          "enum": [
+            "concrete-wall",
+            "guardrail",
+            "tecpro",
+            "tyre-barrier"
+          ]
+        },
+        "fence": {
+          "const": "debris-fence"
+        },
+        "fenceVisualStyle": {
+          "$ref": "#/$defs/fenceVisualStyle"
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "distanceMeters",
+        "position",
+        "forward",
+        "halfWidthMeters"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "position": {
+          "$ref": "#/$defs/vector"
+        },
+        "forward": {
+          "$ref": "#/$defs/vector"
+        },
+        "halfWidthMeters": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 14
+        }
+      }
+    },
+    "sceneryObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "position",
+        "rotation",
+        "scale"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "$ref": "#/$defs/vector"
+        },
+        "rotation": {
+          "type": "number"
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "visualStyle": {
+          "$ref": "#/$defs/infrastructurePalette"
+        },
+        "dimensions": {
+          "$ref": "#/$defs/infrastructureDimensions"
+        }
+      }
+    },
+    "infrastructurePalette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primaryColor",
+        "secondaryColor",
+        "accentColor",
+        "roofColor"
+      ],
+      "properties": {
+        "primaryColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "secondaryColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "accentColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "roofColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      }
+    },
+    "pitVisualStyle": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/infrastructurePalette"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "architecture": {
+              "enum": [
+                "temporary-modular",
+                "permanent-modern",
+                "desert-canopy",
+                "stepped-modern",
+                "urban-compact",
+                "wing",
+                "heritage",
+                "exhibition",
+                "stadium",
+                "marina-canopy"
+              ]
+            },
+            "garageCount": {
+              "const": 22
+            },
+            "buildingHeightMeters": {
+              "type": "number",
+              "minimum": 3,
+              "maximum": 24
+            },
+            "laneWidthMeters": {
+              "type": "number",
+              "minimum": 6,
+              "maximum": 16
+            },
+            "garageStartRatio": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 0.8
+            },
+            "garageEndRatio": {
+              "type": "number",
+              "minimum": 0.2,
+              "maximum": 0.95
+            },
+            "pitBoxLengthMeters": {
+              "type": "number",
+              "minimum": 3,
+              "maximum": 12
+            },
+            "pitBoxDepthMeters": {
+              "type": "number",
+              "minimum": 1.5,
+              "maximum": 4
+            },
+            "pitBoxCenterOffsetMeters": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "garageDepthMeters": {
+              "type": "number",
+              "minimum": 3,
+              "maximum": 16
+            },
+            "garageCenterOffsetMeters": {
+              "type": "number",
+              "minimum": 6,
+              "maximum": 24
+            },
+            "pitWallHeightMeters": {
+              "type": "number",
+              "minimum": 0.6,
+              "maximum": 1.5
+            },
+            "canopyDepthMeters": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "architecture",
+            "garageCount",
+            "buildingHeightMeters",
+            "laneWidthMeters",
+            "garageStartRatio",
+            "garageEndRatio",
+            "pitBoxLengthMeters",
+            "pitBoxDepthMeters",
+            "pitBoxCenterOffsetMeters",
+            "garageDepthMeters",
+            "garageCenterOffsetMeters",
+            "pitWallHeightMeters",
+            "canopyDepthMeters"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "infrastructureDimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lengthMeters",
+        "depthMeters",
+        "heightMeters"
+      ],
+      "properties": {
+        "lengthMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 400
+        },
+        "depthMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 120
+        },
+        "heightMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 80
+        }
+      }
+    },
+    "escapeObstacleRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "blockLengthMeters",
+        "palette"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/vector"
+        },
+        "to": {
+          "$ref": "#/$defs/vector"
+        },
+        "blockLengthMeters": {
+          "type": "number",
+          "minimum": 0.4,
+          "maximum": 4
+        },
+        "palette": {
+          "const": "white-red-chevron"
+        },
+        "collisionMaterial": {
+          "const": "concrete-wall"
+        }
+      }
+    },
+    "escapeRoad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "affectsPhysics",
+        "elevationLayer",
+        "widthMeters",
+        "path",
+        "obstacleRows"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "slalom-block-rows"
+        },
+        "affectsPhysics": {
+          "type": "boolean"
+        },
+        "elevationLayer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "widthMeters": {
+          "type": "number",
+          "minimum": 4,
+          "maximum": 16
+        },
+        "path": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/vector"
+          }
+        },
+        "obstacleRows": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/escapeObstacleRow"
+          }
+        },
+        "edgeMaterial": {
+          "const": "concrete-wall"
+        },
+        "edgeSides": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "left",
+              "right"
+            ]
+          }
+        }
+      }
+    },
+    "brakingMarker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "cornerIndex",
+        "distanceToCornerMeters",
+        "trackDistanceMeters",
+        "side",
+        "position",
+        "rotation",
+        "elevationLayer"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cornerIndex": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "distanceToCornerMeters": {
+          "enum": [
+            50,
+            100,
+            150,
+            200,
+            250,
+            300
+          ]
+        },
+        "trackDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "side": {
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "position": {
+          "$ref": "#/$defs/vector"
+        },
+        "rotation": {
+          "type": "number"
+        },
+        "elevationLayer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "barrierOpening": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "side",
+        "fromDistanceMeters",
+        "toDistanceMeters",
+        "reason"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "side": {
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "fromDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "toDistanceMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "reason": {
+          "enum": [
+            "escape-road-access",
+            "pit-entry",
+            "pit-exit"
+          ]
+        }
+      }
+    },
+    "fenceVisualStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "heightMeters",
+        "postSpacingMeters",
+        "postColor",
+        "meshColor",
+        "meshOpacity",
+        "cantileverMeters"
+      ],
+      "properties": {
+        "heightMeters": {
+          "type": "number",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "postSpacingMeters": {
+          "type": "number",
+          "minimum": 1.5,
+          "maximum": 5
+        },
+        "postColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "meshColor": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "meshOpacity": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.5
+        },
+        "cantileverMeters": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.2
+        }
+      }
+    },
+    "barrierFacePoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "distanceMeters",
+        "elevationLayer"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "distanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "elevationLayer": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "barrierSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "trackLimitSegmentIndex",
+        "side",
+        "fromDistanceMeters",
+        "toDistanceMeters",
+        "material",
+        "thicknessMeters",
+        "collisionLayer",
+        "chunkIndexes",
+        "path"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trackLimitSegmentIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "side": {
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "fromDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "toDistanceMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "material": {
+          "enum": [
+            "concrete-wall",
+            "guardrail",
+            "tecpro",
+            "tyre-barrier"
+          ]
+        },
+        "thicknessMeters": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 2
+        },
+        "collisionLayer": {
+          "const": "track-barrier"
+        },
+        "chunkIndexes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "path": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/barrierFacePoint"
+          }
+        }
+      }
+    },
+    "barrierGeometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "segments"
+      ],
+      "properties": {
+        "segments": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/barrierSegment"
+          }
+        }
+      }
+    }
+  }
+}
