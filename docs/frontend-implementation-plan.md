@@ -124,15 +124,22 @@ Mesma numeração e dependências do plano de backend.
 ### Módulo 3 — Motor autoritativo online (núcleo)
 **Depende de:** Módulo 1, Módulo 2, Módulo 3 do backend.
 **Cobre features:** 4 (lobby online), 8.
+**Decisões aprovadas:** o registro completo das 80 decisões desta rodada está em
+[`module-3-online-decisions.md`](module-3-online-decisions.md). Ele é normativo
+para a implementação, mas não altera o status: o Módulo 3 ainda não foi iniciado.
 **Escopo:**
-- Cliente WebSocket com reconexão automática (backoff simples).
-- Lobby: lista de jogadores, host, checkbox de pronto por jogador, host só pode iniciar quando todos estão `ready`.
+- Cliente WebSocket com reconexão automática (backoff simples), obtendo antes um ticket de uso único vinculado à sala/usuário (validade de 60 s) em vez de expor o JWT principal.
+- Lobby: lista pública e entrada por código, até 22 carros por sala (humanos e bots), grid configurável de 2 a 22, senha opcional, host, checkbox de pronto por jogador e host só pode iniciar quando todos os humanos estiverem `ready`. Bots ficam desativados por padrão e o host escolhe uma dificuldade única quando os habilitar.
+- Classificação simultânea e isolada: uma tentativa de até 3 minutos por participante, com contagem sincronizada de 3 s, lançamento padronizado antes da linha, mesmas condições secas da corrida e ordenação do grid por tempo autoritativo. Voltas inválidas ficam no fim em ordem determinística.
+- Fluxo de corrida: três voltas, sentido oficial, sem entrada tardia, sem pausa ou reinício manual; após a chegada o carro vira `ghost`, os resultados ficam visíveis por confirmação ou no máximo 60 s e a sala retorna ao lobby.
 - **Predição:** ao apertar uma tecla, o `RaceEngine` do Módulo 2 já simula o carro do próprio jogador imediatamente e envia `input` pro servidor.
 - **Compatibilidade:** `join_room` envia `physicsContractVersion`; servidor rejeita cliente com física incompatível antes da corrida.
 - **Reconciliação:** ao chegar `state_snapshot`, comparar posição, velocidade, ângulo e todo `physicsState` previsto com o estado autoritativo; reaplicar inputs ainda não confirmados e corrigir erro visual suavemente, sem esconder divergência persistente de motor.
 - **Interpolação:** carros remotos desenhados ~100ms atrás, interpolando entre os dois snapshots mais recentes — nunca perseguindo um alvo cru como no protótipo.
 - Reaproveita o mesmo `RaceEngine` do Módulo 2 como motor de predição — não duplicar a física numa segunda implementação dentro do próprio frontend.
 - Minimap online transforma as posições interpoladas dos snapshots na mesma projeção fixa usada no modo local; nunca mantém um estado paralelo de posição.
+- Transporte: servidor a 30 ticks/s com subpassos de 1/120 s, inputs a 30 Hz, snapshots a 20 Hz, heartbeat a cada 10 s, ticket de uso único vinculado à sala/usuário com validade de 60 s e janela de reconexão de aproximadamente 30 s. O servidor valida/normaliza inputs e mantém o último comando por aproximadamente 150–250 ms antes de neutralizar gradualmente.
+- A corrida usa o pit lane navegável sem limite de velocidade ou serviço no M3; cortes respeitam checkpoints e limites, invalidam a quali e não concedem progresso até o retorno válido. O estado físico é restaurado entre quali e corrida.
 **Critério de pronto:** dois navegadores, mesma sala e mesma versão física convergem em trajetória, perda de aderência e colisões; clientes incompatíveis não entram e o mesmo contato produz resultado autoritativo nas duas telas.
 
 ### Módulo 4 — Ambiente e modo caos
