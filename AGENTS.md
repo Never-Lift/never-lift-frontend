@@ -20,6 +20,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/frontend-implementation-plan.md` — plano deste repositório, módulo a módulo.
 - `docs/backend-implementation-plan.md` — plano do repositório backend, incluído aqui só como referência da API/WebSocket que este cliente consome. Não implementar nada daqui.
 - `docs/game-design-guide.md` — fonte oficial das decisões visuais, de câmera, escala, telas e fase de implementação. Ler antes de qualquer trabalho de interface ou corrida.
+- `docs/module-3-online-decisions.md` — registro aprovado das 80 decisões de produto e arquitetura para o online; consultar antes de implementar o Módulo 3.
 - `docs/contracts/module-2-shared-contracts.md`, `docs/contracts/module-2-physics-v2-proposal.md` e `contracts/module-2/v1/`/`v2/` — decisões e contratos publicados do Módulo 2. O `v1` é histórico imutável; o `v2` é a linha executável da Parte 2d.
 
 ## Stack e convenções deste repositório
