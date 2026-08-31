@@ -178,7 +178,7 @@ type SceneryVisualMetrics = {
 /**
  * Converts authored metric structure dimensions to the legacy visual's local
  * scale. Keeping the conversion here lets old catalog objects retain their
- * `scale` fallback while 2026.11 structures use their real footprint for both
+ * `scale` fallback while 2026.12 structures use their real footprint for both
  * drawing and culling.
  */
 export function sceneryVisualMetrics(

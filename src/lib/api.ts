@@ -200,7 +200,7 @@ export type TrackCatalogEntry = {
 
 export type TrackCatalog = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.11'
+  catalogVersion: '2026.12'
   physicsContractVersion: '2.0.0'
   seasonReference: 2026
   calendarPolicy: 'original-24-round-freeze'
@@ -373,7 +373,7 @@ export type TrackBarrierGeometrySegment = {
 
 export type TrackDefinition = {
   schemaVersion: '2.0.0'
-  catalogVersion: '2026.11'
+  catalogVersion: '2026.12'
   physicsContractVersion: '2.0.0'
   id: string
   name: string
@@ -479,7 +479,7 @@ function compatibleTrackCatalog(payload: unknown): TrackCatalog {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.11' ||
+    payload.catalogVersion !== '2026.12' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('seasonReference' in payload) ||
@@ -1076,7 +1076,7 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
     !('schemaVersion' in payload) ||
     payload.schemaVersion !== '2.0.0' ||
     !('catalogVersion' in payload) ||
-    payload.catalogVersion !== '2026.11' ||
+    payload.catalogVersion !== '2026.12' ||
     !('physicsContractVersion' in payload) ||
     payload.physicsContractVersion !== '2.0.0' ||
     !('centerline' in payload) ||

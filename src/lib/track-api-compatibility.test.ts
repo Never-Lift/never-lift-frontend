@@ -551,13 +551,13 @@ describe('track API compatibility guard', () => {
     )
   })
 
-  it('rejects a 2026.11 catalog with a malformed track entry', async () => {
+  it('rejects a 2026.12 catalog with a malformed track entry', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         jsonResponse({
           schemaVersion: '2.0.0',
-          catalogVersion: '2026.11',
+          catalogVersion: '2026.12',
           physicsContractVersion: '2.0.0',
           seasonReference: 2026,
           calendarPolicy: 'original-24-round-freeze',
