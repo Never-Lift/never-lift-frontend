@@ -898,7 +898,7 @@ describe('RaceRenderer audited surfaces', () => {
       operations.some(
         (operation) =>
           operation.kind === 'fill' &&
-          operation.color === '#d9dcdf55',
+          operation.color === '#d9dcdf',
       ),
     ).toBe(true)
     expect(
@@ -930,9 +930,15 @@ describe('RaceRenderer audited surfaces', () => {
           operation.kind === 'fill' && operation.color.startsWith('rgba('),
       ),
     ).toBe(false)
+    expect(
+      operations.some(
+        (operation) =>
+          operation.kind === 'fill' && /^#[\da-f]{8}$/i.test(operation.color),
+      ),
+    ).toBe(false)
     const firstPitBox = operations.find(
       (operation) =>
-        operation.kind === 'fill' && operation.color === '#d9dcdf55',
+        operation.kind === 'fill' && operation.color === '#d9dcdf',
     )!
     const boxWidth =
       Math.max(...firstPitBox.path.map((point) => point.x)) -
