@@ -1986,8 +1986,8 @@ export class RaceRenderer {
         boxCorners,
         transform,
         garageIndex % 2 === 0
-          ? `${style.primaryColor}55`
-          : `${style.accentColor}42`,
+          ? style.primaryColor
+          : style.accentColor,
       )
       const boxLineFrom = {
         x: boxCenter.x - tangent.x * boxHalfLength,
