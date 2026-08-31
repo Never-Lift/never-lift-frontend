@@ -61,7 +61,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | em andamento — Partes 2a/2b/2c e catálogo `2026.5` validados manualmente em 24/08/2026; simplificação #90 para F1 único/condução fixa concluída; revisão de câmera 2.5D/F1 aguardando validação manual final; Parte 2d (dinâmica F1, colisões precisas, contrato físico v2 e remoção de boost): implementação automatizada concluída; catálogo `2026.12` com zebras autorais preservadas, muros/grades contínuos, placas métricas de frenagem em todas as curvas solicitadas, largada de Silverstone reposicionada, Marina Bay orientada no sentido anti-horário e aberturas físicas de entrada/saída do pit; 22 vagas visuais (duas por equipe) com arquitetura híbrida opaca por circuito e face traseira colidível; escape provisório do Rettifilo de Monza removido e proteção canônica restaurada, aguardando validação manual; Parte 2d e Módulo 2 ainda não estão prontos |
+| 2 — Motor de corrida local | pronto — Partes 2a/2b/2c/2d, física `2.0.0` e catálogo `2026.12` validados manualmente de forma integrada em 31/08/2026; simplificação para F1 único/condução fixa concluída; dinâmica F1, colisões precisas, dano cumulativo, câmera 2.5D, minimapa, split-screen, culling, pits navegáveis, 22 vagas visuais sólidas por circuito, zebras, muros/grades contínuos, placas métricas, largadas corrigidas, proteção canônica de Monza e remoção do escape provisório concluídos. Parte 2d e Módulo 2 prontos; Módulo 3 ainda não iniciado |
 | 3 — Motor autoritativo online | não iniciado |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/vácuo/pits/HUD) | não iniciado |
