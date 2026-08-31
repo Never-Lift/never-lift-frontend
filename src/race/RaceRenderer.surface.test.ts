@@ -907,6 +907,18 @@ describe('RaceRenderer audited surfaces', () => {
           operation.kind === 'fill' && operation.color === '#36505f',
       ),
     ).toBe(true)
+    const opaqueRoofFascias = operations.filter(
+      (operation) =>
+        operation.kind === 'fill' &&
+        operation.color === '#505a64' &&
+        operation.path.length === 4 &&
+        operation.path[2].y > operation.path[1].y &&
+        operation.path[3].y > operation.path[0].y,
+    )
+    // Every bay gets a solid fascia under its roof cap.  This catches the
+    // regression where only the garage walls were painted and the roofs
+    // appeared to float or disappear at race zoom.
+    expect(opaqueRoofFascias).toHaveLength(22)
     expect(
       operations.filter(
         (operation) => operation.kind === 'fill' && operation.color === '#0c1218',

@@ -131,6 +131,11 @@ const BARRIER_STYLES: Record<
 
 const FENCE_WIDTH_METERS = 0.22
 const FENCE_GAP_METERS = 0.18
+// A small opaque fascia makes the roof/body junction readable in the 2.5D
+// projection.  Without it, the top cap can look detached when a garage is
+// viewed from the lane side (especially on the heritage and stepped presets).
+const PIT_ROOF_FASCIA_HEIGHT_RATIO = 0.055
+const PIT_ROOF_EDGE_WIDTH_METERS = 0.08
 const DEFAULT_FENCE_VISUAL_STYLE: TrackFenceVisualStyle = {
   heightMeters: 2.6,
   postSpacingMeters: 3,
@@ -2094,6 +2099,7 @@ export class RaceRenderer {
     this.context.closePath()
     this.context.fillStyle = style.roofColor
     this.context.fill()
+    this.drawPitRoofFascia(top, height, style)
 
     if (style.canopyDepthMeters > Number.EPSILON) {
       const frontMiddle = {
@@ -2256,6 +2262,48 @@ export class RaceRenderer {
       style,
       garageIndex,
     )
+    // Details such as the heritage ridge are intentionally drawn above the
+    // cap.  Re-stroking the perimeter afterwards guarantees an opaque,
+    // connected roof silhouette even when adjacent bays overlap in projection.
+    this.drawPitRoofOutline(top, transform, style)
+  }
+
+  private drawPitRoofFascia(
+    top: Vector2[],
+    height: number,
+    style: TrackPitVisualStyle,
+  ) {
+    if (top.length < 2) return
+    const fasciaHeight = Math.max(1.5, height * PIT_ROOF_FASCIA_HEIGHT_RATIO)
+    this.context.beginPath()
+    this.context.moveTo(top[0].x, top[0].y)
+    this.context.lineTo(top[1].x, top[1].y)
+    this.context.lineTo(top[1].x, top[1].y + fasciaHeight)
+    this.context.lineTo(top[0].x, top[0].y + fasciaHeight)
+    this.context.closePath()
+    this.context.fillStyle = style.secondaryColor
+    this.context.fill()
+  }
+
+  private drawPitRoofOutline(
+    top: Vector2[],
+    transform: CameraTransform,
+    style: TrackPitVisualStyle,
+  ) {
+    if (top.length < 2) return
+    this.context.save()
+    this.context.beginPath()
+    this.context.moveTo(top[0].x, top[0].y)
+    for (const point of top.slice(1)) this.context.lineTo(point.x, point.y)
+    this.context.closePath()
+    this.context.strokeStyle = style.secondaryColor
+    this.context.lineWidth = Math.max(
+      1,
+      transform.pixelsPerMeter * PIT_ROOF_EDGE_WIDTH_METERS,
+    )
+    this.context.lineJoin = 'round'
+    this.context.stroke()
+    this.context.restore()
   }
 
   private drawPitBuildingDetails(
