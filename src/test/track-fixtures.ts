@@ -146,7 +146,7 @@ export function createTrackFixture(
   const start = pointOnCircle(radius, 0)
   return {
     schemaVersion: '2.0.0',
-    catalogVersion: '2026.11',
+    catalogVersion: '2026.12',
     physicsContractVersion: '2.0.0',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',

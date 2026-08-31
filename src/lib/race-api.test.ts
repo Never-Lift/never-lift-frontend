@@ -28,7 +28,7 @@ describe('raceApi', () => {
     }))
     const catalog = {
       schemaVersion: '2.0.0',
-      catalogVersion: '2026.11',
+      catalogVersion: '2026.12',
       physicsContractVersion: '2.0.0',
       seasonReference: 2026,
       calendarPolicy: 'original-24-round-freeze',
@@ -83,7 +83,7 @@ describe('raceApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     const payload = {
       trackId: 'albert-park',
-      trackCatalogVersion: '2026.11',
+      trackCatalogVersion: '2026.12',
       physicsContractVersion: '2.0.0',
       mode: 'local' as const,
       results: [
