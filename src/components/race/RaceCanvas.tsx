@@ -228,7 +228,7 @@ export function RaceCanvas({
               {mode === 'solo' ? 'Solo contra bots' : 'Duelo local'}
             </h1>
             <p className="hidden text-[10px] font-semibold text-muted-foreground xl:block">
-              {mode === 'solo' ? 'WASD ou setas' : 'P1: WASD · P2: setas'}
+              {mode === 'solo' ? 'WASD ou setas' : 'P1: WASD · P2: setas ou IJKL'}
             </p>
           </div>
         </div>
