@@ -55,4 +55,28 @@ describe('onlineApi', () => {
     )
     expect(String(fetchMock.mock.calls[1][0])).not.toContain('jwt')
   })
+
+  it('uses explicit endpoints to remove a participant and leave the room', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ code: '1234', trackId: 'albert-park' }))
+      .mockResolvedValueOnce(jsonResponse({ code: '1234', trackId: 'albert-park' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await onlineApi.removePlayer('1234', 'player-2', 'host.jwt')
+    await onlineApi.leaveRoom('1234', 'player.jwt')
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://localhost:8080/api/rooms/1234/participants/player-2',
+    )
+    expect(fetchMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'http://localhost:8080/api/rooms/1234/leave',
+    )
+    expect(fetchMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
 })

@@ -89,9 +89,17 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 79. **Resultados:** tela permanece até todos confirmarem ou por no máximo 60 s; depois retorna ao lobby.
 80. **Heartbeat:** ping/pong a cada 10 s; duas ou três falhas consecutivas iniciam o fluxo de desconexão.
 
+## Refinamentos validados na Parte 3a
+
+- A criação inicial solicita somente nome, visibilidade e senha; pista, limite do grid e bots são escolhidos pelo host dentro da sala antes do primeiro `ready`.
+- O estado pronto é reversível no lobby. O payload normativo é `ready { ready: boolean }`.
+- A sessão WebSocket pertence ao app, não à página do lobby: navegar por Início, Jogar, Online ou Minha conta não remove o jogador. O item Online identifica e reabre a sala ativa.
+- A saída voluntária ocorre pelo botão **Sair da sala**, sempre com confirmação. Entrada, saída, remoção e alterações do host são publicadas imediatamente a todos os participantes.
+- Uma queda preserva jogador e vaga durante a janela de reconexão de 30 s. Sem retorno após essa janela, o participante desconectado é removido e a vaga volta a ficar disponível. “Jogador inativo” na decisão 75 significa um cliente ainda conectado sem interagir e continua sem remoção automática.
+
 ## Limites e dependências
 
-- Estas decisões não alteram o status: o Módulo 2 continua pendente de validação final e o Módulo 3 continua **não iniciado**.
+- Estas decisões não tornam o Módulo 3 completo: o Módulo 2 está pronto, a Parte 3a está implementada e aguarda a nova validação manual integrada, e as Partes 3b/3c permanecem pendentes.
 - O M3 precisa reproduzir o contrato físico v2 e os cenários congelados antes de aceitar partidas online.
 - O limite de velocidade e os serviços de pit permanecem deliberadamente fora do M3; entram no Módulo 5 conforme o plano.
 - Penalidades esportivas de tempo e conduta permanecem no Módulo 16.

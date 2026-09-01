@@ -11,7 +11,7 @@ Jogo de corrida 2D multiplayer top-down, com simulação acessível de um monopo
 
 ## Protocolo de tempo real (contrato com o backend — não alterar sem avisar o outro lado)
 Envelope: `{ "type": "...", "payload": {...} }`.
-- Cliente → Servidor: `join_room { roomCode, trackCatalogVersion, physicsContractVersion }`, `select_loadout`, `ready`, `input { throttle, brake, steer, clientSeq, clientTimestamp }`.
+- Cliente → Servidor: `join_room { roomCode, trackCatalogVersion, physicsContractVersion }`, `select_loadout`, `ready { ready }`, `input { throttle, brake, steer, clientSeq, clientTimestamp }`.
 - Servidor → Cliente: `room_state`, `countdown`, `state_snapshot`, `race_event`, `race_result`, `error`.
 
 Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seção 3.
@@ -61,7 +61,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | pronto — Partes 2a/2b/2c/2d, física `2.0.0` e catálogo `2026.12` validados manualmente de forma integrada em 31/08/2026; simplificação para F1 único/condução fixa concluída; dinâmica F1, colisões precisas, dano cumulativo, câmera 2.5D, minimapa, split-screen, culling, pits navegáveis, 22 vagas visuais sólidas por circuito, zebras, muros/grades contínuos, placas métricas, largadas corrigidas, proteção canônica de Monza e remoção do escape provisório concluídos. Parte 2d e Módulo 2 prontos; Módulo 3 ainda não iniciado |
+| 2 — Motor de corrida local | pronto — Partes 2a/2b/2c/2d, física `2.0.0` e catálogo `2026.12` validados manualmente de forma integrada em 31/08/2026; simplificação para F1 único/condução fixa concluída; dinâmica F1, colisões precisas, dano cumulativo, câmera 2.5D, minimapa, split-screen, culling, pits navegáveis, 22 vagas visuais sólidas por circuito, zebras, muros/grades contínuos, placas métricas, largadas corrigidas, proteção canônica de Monza e remoção do escape provisório concluídos. Parte 2d e Módulo 2 prontos |
 | 3 — Motor autoritativo online | Parte 3a (sala, ticket, lobby) implementada; validação manual em dois navegadores pendente; 3b (motor físico) e 3c (classificação e fluxo de corrida) pendentes |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/vácuo/pits/HUD) | não iniciado |

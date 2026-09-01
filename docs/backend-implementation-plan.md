@@ -47,7 +47,7 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 |---|---|---|
 | `join_room` | `{ roomCode, trackCatalogVersion, physicsContractVersion }` | ao entrar numa sala; rejeita geometria ou física incompatível antes da corrida |
 | `select_loadout` | `{ color }` | antes de ficar ready; o modelo é sempre F1 e a condução é fixa |
-| `ready` | `{}` | jogador confirma pronto |
+| `ready` | `{ ready }` | jogador confirma ou retira o pronto durante o lobby |
 | `input` | `{ throttle, brake, steer, clientSeq, clientTimestamp }` | a cada mudança de input (não a cada frame); boost/nitro não existe |
 
 **Importante:** o cliente nunca envia posição — só intenção (`input`). Isso é o que torna o servidor a única fonte de verdade.
@@ -56,7 +56,7 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 
 | type | payload | quando |
 |---|---|---|
-| `room_state` | `{ players[], hostId, settings, readyStates }`, com `settings.trackId`, `settings.trackCatalogVersion` e `settings.physicsContractVersion` | mudança no lobby |
+| `room_state` | `{ code, name, players[], hostId, settings, readyStates, settingsLocked, state, participantCount, limit, hasPassword }`, com identidade/conexão de cada jogador e versões da pista/física em `settings` | toda entrada, saída, reconexão, remoção ou mudança no lobby |
 | `countdown` | `{ startAtServerTime }` | semáforo iniciando (feature 14) |
 | `state_snapshot` | `{ tick, serverTime, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining }, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
 | `race_event` | `{ type: collision \| checkpoint \| lap_complete \| finished \| false_start \| pit_enter \| pit_exit \| breakdown, ...dados específicos }` | evento discreto decidido pelo servidor |
@@ -130,9 +130,11 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Depende de:** Módulos 1 e 2, com a Parte 2d do frontend validada e os cenários físicos v2 congelados.
 **Cobre features:** 4 (modos online — lobby, configuração de sala), 8, parte de 6 (física básica compartilhada), parte de 5 (colisão).
 **Este é o módulo de maior risco do projeto — é onde a lição sobre servidor autoritativo se aplica.**
+**Estado da Parte 3a:** sala, ticket e lobby implementados; nova validação manual integrada em dois navegadores pendente. As Partes 3b/3c permanecem pendentes.
 **Escopo:**
-- Sessão WebSocket por conexão (`/ws`), autenticada via JWT na query string ou header de handshake.
-- `RoomManager`: cria/lista salas, no máximo 4 jogadores+bots por sala, atribui `hostId`.
+- Sessão WebSocket por conexão (`/ws`), autenticada por ticket de uso único de 60 s vinculado à sala e ao usuário; o JWT principal não vai na URL.
+- `RoomManager`: cria/lista salas públicas e privadas por código numérico de 4 dígitos, atribui `hostId` e suporta até 22 humanos/bots. A criação recebe nome, visibilidade e senha; pista, grid de 2 a 22 e bots são configurados pelo host dentro do lobby.
+- Toda mutação do lobby transmite `room_state` imediatamente. `ready` é reversível; saída voluntária e remoção liberam a vaga, enquanto uma queda preserva o participante por 30 s para reconexão antes da remoção automática.
 - `RaceEngine` por sala escrito do zero em Java, reproduzindo o contrato físico 2.0 e os vetores congelados do TypeScript: corpo rígido 2D, modelo de bicicleta dinâmico, pneus não lineares/combined slip, transferência de carga, drag/downforce, tração traseira, câmbio automático, patinagem e travamento. Todo participante usa o mesmo F1 e nenhuma dificuldade recebe física privilegiada.
 - O loop externo roda a `30 ticks/segundo` e executa a quantidade de subpassos fixada pelo contrato v2 (`1/60s` ou `1/120s` após benchmark), lendo o último input normalizado de cada jogador. Estado inclui vetor de velocidade, yaw, esterço e câmbio para snapshots e reconciliação.
 - A sala fixa `trackId`, `trackCatalogVersion` e `physicsContractVersion` antes da largada e rejeita incompatibilidade em vez de simular motores ou geometrias diferentes.

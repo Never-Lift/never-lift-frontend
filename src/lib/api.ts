@@ -335,10 +335,10 @@ export type RoomSummary = {
 
 export type CreateRoomRequest = {
   name?: string
-  trackId: string
-  gridSize: number
-  botsEnabled: boolean
-  botDifficulty: RoomBotDifficulty
+  trackId?: string
+  gridSize?: number
+  botsEnabled?: boolean
+  botDifficulty?: RoomBotDifficulty
   visibility: RoomVisibility
   password?: string
 }
@@ -429,11 +429,19 @@ export const onlineApi = {
         body: JSON.stringify(changes),
       }, token),
     ),
-  removePlayer: (roomCode: string, playerId: string, token?: string) =>
-    apiRequest<void>(
-      `/rooms/${encodeURIComponent(roomCode)}/participants/${encodeURIComponent(playerId)}`,
-      { method: 'DELETE' },
-      token,
+  removePlayer: async (roomCode: string, playerId: string, token?: string) =>
+    roomResponse(
+      await apiRequest(
+        `/rooms/${encodeURIComponent(roomCode)}/participants/${encodeURIComponent(playerId)}`,
+        { method: 'DELETE' },
+        token,
+      ),
+    ),
+  leaveRoom: async (roomCode: string, token?: string) =>
+    roomResponse(
+      await apiRequest(`/rooms/${encodeURIComponent(roomCode)}/leave`, {
+        method: 'POST',
+      }, token),
     ),
   closeRoom: (roomCode: string, token?: string) =>
     apiRequest<void>(
