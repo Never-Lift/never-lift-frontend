@@ -424,14 +424,14 @@ export const onlineApi = {
     token?: string,
   ) =>
     roomResponse(
-      await apiRequest(`/rooms/${encodeURIComponent(roomCode)}`, {
+      await apiRequest(`/rooms/${encodeURIComponent(roomCode)}/settings`, {
         method: 'PATCH',
         body: JSON.stringify(changes),
       }, token),
     ),
   removePlayer: (roomCode: string, playerId: string, token?: string) =>
     apiRequest<void>(
-      `/rooms/${encodeURIComponent(roomCode)}/players/${encodeURIComponent(playerId)}`,
+      `/rooms/${encodeURIComponent(roomCode)}/participants/${encodeURIComponent(playerId)}`,
       { method: 'DELETE' },
       token,
     ),

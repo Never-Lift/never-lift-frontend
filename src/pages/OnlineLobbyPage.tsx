@@ -90,7 +90,7 @@ function participantFrom(value: unknown, readyStates?: Record<string, boolean>):
     displayName:
       typeof source.displayName === 'string' ? source.displayName : null,
     gamertag: typeof source.gamertag === 'string' ? source.gamertag : null,
-    bot: source.bot === true || source.kind === 'bot',
+    bot: source.bot === true || source.isBot === true || source.kind === 'bot',
     ready,
     connected: source.connected !== false,
     color: typeof source.color === 'string' ? source.color : null,
