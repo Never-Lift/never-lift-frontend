@@ -14,7 +14,6 @@ import {
   UserRound,
   Users,
   Wifi,
-  X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -638,18 +637,17 @@ export function OnlineLobbyPage({
               {players.length < 2 && <p className="mt-4 text-xs font-semibold text-warning">São necessários pelo menos dois carros para iniciar.</p>}
               <div className="mt-6 flex flex-wrap gap-3 border-t border-border/70 pt-5">
                 <Button
-                  disabled={!currentPlayer || readyPending || clientStatus !== 'connected' || room.state !== 'lobby'}
+                  disabled={!currentPlayer || currentPlayer.ready || readyPending || clientStatus !== 'connected' || room.state !== 'lobby'}
                   onClick={() => {
-                    const nextReady = !currentPlayer?.ready
                     setReadyPending(true)
-                    clientRef.current?.setReady(nextReady)
+                    clientRef.current?.setReady(true)
                     window.setTimeout(() => setReadyPending(false), 450)
                   }}
                   size="lg"
                   variant={currentPlayer?.ready ? 'secondary' : 'default'}
                 >
-                  {currentPlayer?.ready ? <X aria-hidden="true" className="size-4" /> : <Check aria-hidden="true" className="size-4" />}
-                  {currentPlayer?.ready ? 'Cancelar pronto' : 'Estou pronto'}
+                  <Check aria-hidden="true" className="size-4" />
+                  {currentPlayer?.ready ? 'Pronto' : 'Estou pronto'}
                 </Button>
                 {isHost && <Button disabled={!canStart || submitting} onClick={() => void handleStart()} size="lg"><Crown aria-hidden="true" className="size-4" /> Iniciar classificação</Button>}
                 {isHost && room.state === 'lobby' && <Button onClick={() => void handleClose()} size="lg" variant="destructive"><DoorOpen aria-hidden="true" className="size-4" /> Fechar sala</Button>}
