@@ -26,7 +26,7 @@ class FakeSocket implements SocketLike {
   }
 }
 
-const ticket = (expiresAt = '2026-09-01T12:01:00.000Z'): ConnectionTicketResponse => ({
+const ticket = (expiresAt = '2027-01-01T00:00:00.000Z'): ConnectionTicketResponse => ({
   ticket: 'short-lived-ticket',
   roomCode: '1234',
   expiresAt,
@@ -164,6 +164,7 @@ describe('OnlineRoomClient', () => {
           sockets.push(socket)
           return socket
         },
+        now: () => Date.parse('2026-09-01T12:00:00.000Z'),
         onEnvelope: (envelope) => states.push(envelope),
       })
 
