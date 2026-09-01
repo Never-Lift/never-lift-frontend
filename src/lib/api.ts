@@ -441,6 +441,12 @@ export const onlineApi = {
       { method: 'POST' },
       token,
     ),
+  startRoom: (roomCode: string, token?: string) =>
+    apiRequest<RoomResponse>(
+      `/rooms/${encodeURIComponent(roomCode)}/start`,
+      { method: 'POST' },
+      token,
+    ),
 }
 
 export type TrackPitGarageBarrier = {

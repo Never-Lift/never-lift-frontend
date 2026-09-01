@@ -52,6 +52,7 @@ type LobbyApi = Pick<
   | 'updateRoom'
   | 'removePlayer'
   | 'closeRoom'
+  | 'startRoom'
 >
 
 type LobbyDependencies = {
@@ -566,6 +567,25 @@ export function OnlineLobbyPage({
     }
   }, [api, isHost, navigate, room, session])
 
+  const handleStart = useCallback(async () => {
+    if (!room || !session || !isHost || !canStart) return
+    if (typeof api.startRoom !== 'function') {
+      clientRef.current?.startRace()
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const started = await api.startRoom(room.code, session.token)
+      const normalized = roomFromPayload(started, room.code)
+      if (normalized) setRoom(normalized)
+    } catch (startError: unknown) {
+      setError(getErrorMessage(startError))
+    } finally {
+      setSubmitting(false)
+    }
+  }, [api, canStart, isHost, room, session])
+
   if (!session || loading) {
     return (
       <AppShell moduleLabel="Lobby online">
@@ -631,7 +651,7 @@ export function OnlineLobbyPage({
                   {currentPlayer?.ready ? <X aria-hidden="true" className="size-4" /> : <Check aria-hidden="true" className="size-4" />}
                   {currentPlayer?.ready ? 'Cancelar pronto' : 'Estou pronto'}
                 </Button>
-                {isHost && <Button disabled={!canStart} onClick={() => clientRef.current?.startRace()} size="lg"><Crown aria-hidden="true" className="size-4" /> Iniciar classificação</Button>}
+                {isHost && <Button disabled={!canStart || submitting} onClick={() => void handleStart()} size="lg"><Crown aria-hidden="true" className="size-4" /> Iniciar classificação</Button>}
                 {isHost && room.state === 'lobby' && <Button onClick={() => void handleClose()} size="lg" variant="destructive"><DoorOpen aria-hidden="true" className="size-4" /> Fechar sala</Button>}
               </div>
             </section>
