@@ -39,7 +39,7 @@ Todas as grandezas espaciais compartilhadas usam **1 unidade de mundo = 1 metro*
 
 Envelope: `{ "type": "...", "payload": {...} }`.
 
-**Cliente → Servidor:** `join_room { roomCode, trackCatalogVersion, physicsContractVersion }`, `select_loadout { color }`, `ready`, `input { throttle, brake, steer, clientSeq, clientTimestamp }` — nunca posição, só intenção. O modelo do carro e o modo de condução não fazem parte do payload: toda corrida usa o mesmo F1 e a mesma configuração física. Boost/nitro não existe e propriedades desconhecidas são rejeitadas.
+**Cliente → Servidor:** `join_room { roomCode, trackCatalogVersion, physicsContractVersion }`, `select_loadout { color }`, `ready { ready }`, `input { throttle, brake, steer, clientSeq, clientTimestamp }` — nunca posição, só intenção. `ready` aceita `true` e `false`, pois a confirmação é reversível enquanto a sala está no lobby. O modelo do carro e o modo de condução não fazem parte do payload: toda corrida usa o mesmo F1 e a mesma configuração física. Boost/nitro não existe e propriedades desconhecidas são rejeitadas.
 
 **Servidor → Cliente:** `room_state`, `countdown { startAtServerTime }`, `state_snapshot { tick, serverTime, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining }, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, lap, isGhost, inPit }] }`, `race_event`, `race_result`, `error`.
 
@@ -131,14 +131,17 @@ para a implementação, mas não altera o status: o Módulo 3 continua em andame
 **Estado da Parte 3a:** sala e protocolo implementados no frontend; a validação
 manual com dois navegadores ainda é necessária para declarar a parte pronta. A tela de
 `/race/setup?mode=online` lista e cria salas; `/race/lobby/:roomCode` mantém o
-lobby conectado por WebSocket. O cliente obtém `POST /api/rooms/{code}/connection-ticket`
+lobby conectado por WebSocket. A criação define somente nome, visibilidade e senha;
+pista, grid e bots são configurados pelo host dentro da sala. A sessão WebSocket vive
+fora da página e permanece ativa durante a navegação; a saída normal ocorre somente
+pelo comando explícito com confirmação. O cliente obtém `POST /api/rooms/{code}/connection-ticket`
 antes do handshake, usa apenas o ticket temporário na URL, reconecta dentro da
 janela de 30 s, e cobre pronto/permissões do host sem iniciar física. As Partes
 3b (motor físico autoritativo) e 3c (classificação e fluxo de corrida) continuam
 pendentes.
 **Escopo:**
 - Cliente WebSocket com reconexão automática (backoff simples), obtendo antes um ticket de uso único vinculado à sala/usuário (validade de 60 s) em vez de expor o JWT principal.
-- Lobby: lista pública e entrada por código, até 22 carros por sala (humanos e bots), grid configurável de 2 a 22, senha opcional, host, checkbox de pronto por jogador e host só pode iniciar quando todos os humanos estiverem `ready`. Bots ficam desativados por padrão e o host escolhe uma dificuldade única quando os habilitar.
+- Lobby: lista pública e entrada por código, até 22 carros por sala (humanos e bots), grid configurável de 2 a 22, senha opcional, identificação visual do host, pronto reversível por jogador e host só pode iniciar quando todos os humanos estiverem `ready`. Bots ficam desativados por padrão e o host escolhe uma dificuldade única quando os habilitar. Entrada, saída, remoção e configuração são propagadas imediatamente a todos; desconexão reserva a vaga somente durante a janela de reconexão.
 - Classificação simultânea e isolada: uma tentativa de até 3 minutos por participante, com contagem sincronizada de 3 s, lançamento padronizado antes da linha, mesmas condições secas da corrida e ordenação do grid por tempo autoritativo. Voltas inválidas ficam no fim em ordem determinística.
 - Fluxo de corrida: três voltas, sentido oficial, sem entrada tardia, sem pausa ou reinício manual; após a chegada o carro vira `ghost`, os resultados ficam visíveis por confirmação ou no máximo 60 s e a sala retorna ao lobby.
 - **Predição:** ao apertar uma tecla, o `RaceEngine` do Módulo 2 já simula o carro do próprio jogador imediatamente e envia `input` pro servidor.

@@ -1,11 +1,12 @@
 import { Gamepad2, Globe2, House, LogIn, LogOut, UserRound } from 'lucide-react'
 import type { PropsWithChildren } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '@/auth/auth-context'
 import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useOnlineRoomSession } from '@/online/OnlineRoomSession'
 
 const navItemClass =
   'group inline-flex h-10 items-center justify-center gap-3 rounded-[10px] border border-transparent px-3 text-sm font-bold text-muted-foreground transition hover:border-border hover:bg-muted/70 hover:text-foreground lg:w-full lg:justify-start'
@@ -20,6 +21,11 @@ export function AppShell({
 }: AppShellProps) {
   const { account, isUser, signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const onlineSession = useOnlineRoomSession()
+  const onlineTarget = onlineSession.roomCode
+    ? `/race/lobby/${onlineSession.roomCode}`
+    : '/race/setup?mode=online'
 
   function handleSignOut() {
     signOut()
@@ -65,6 +71,7 @@ export function AppShell({
                   'border-primary/30 bg-primary/10 text-foreground shadow-[inset_3px_0_0_var(--primary)]',
               )
             }
+            end
             to="/race"
           >
             <Gamepad2 aria-hidden="true" className="size-4 text-primary" />
@@ -73,17 +80,21 @@ export function AppShell({
 
           <NavLink
             aria-label="Online"
-            className={({ isActive }) =>
+            className={() =>
               cn(
                 navItemClass,
-                isActive &&
+                (location.pathname.startsWith('/race/lobby/') ||
+                  (location.pathname === '/race/setup' &&
+                    new URLSearchParams(location.search).get('mode') === 'online')) &&
                   'border-primary/30 bg-primary/10 text-foreground shadow-[inset_3px_0_0_var(--primary)]',
               )
             }
-            to="/race/setup?mode=online"
+            to={onlineTarget}
           >
             <Globe2 aria-hidden="true" className="size-4 text-info" />
-            <span className="hidden lg:inline">Online</span>
+            <span className="hidden lg:inline">
+              Online{onlineSession.roomCode ? ` · ${onlineSession.roomCode}` : ''}
+            </span>
           </NavLink>
 
           {isUser ? (

@@ -5,6 +5,7 @@ import { AuthContext, type AuthContextValue } from '@/auth/auth-context'
 import { OnlineLobbyPage } from '@/pages/OnlineLobbyPage'
 import type { RoomSummary, TrackCatalog } from '@/lib/api'
 import type { OnlineEnvelope, OnlineRoomClient } from '@/online/OnlineRoomClient'
+import { onlineRoomSession } from '@/online/OnlineRoomSession'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 const catalog: TrackCatalog = {
@@ -94,6 +95,7 @@ function renderSetup(api: Record<string, unknown>) {
 
 describe('OnlineLobbyPage', () => {
   afterEach(() => {
+    onlineRoomSession.resetForTests()
     cleanup()
     vi.restoreAllMocks()
   })
@@ -149,7 +151,7 @@ describe('OnlineLobbyPage', () => {
     expect(await screen.findByText('lobby route')).toBeInTheDocument()
   })
 
-  it('creates a public 22-car room with bots disabled by default', async () => {
+  it('creates a room with identity and access only, leaving race settings for the lobby', async () => {
     const api = {
       listRooms: vi.fn().mockResolvedValue([]),
       createRoom: vi.fn().mockResolvedValue(room()),
@@ -161,10 +163,6 @@ describe('OnlineLobbyPage', () => {
       expect(api.createRoom).toHaveBeenCalledWith(
         {
           name: undefined,
-          trackId: 'albert-park',
-          gridSize: 22,
-          botsEnabled: false,
-          botDifficulty: 'normal',
           visibility: 'public',
           password: undefined,
         },
@@ -203,6 +201,11 @@ describe('OnlineLobbyPage', () => {
         roomCode: '1234',
         expiresAt: '2026-09-01T12:01:00.000Z',
       }),
+      startRoom: vi.fn().mockResolvedValue({
+        ...initial,
+        state: 'qualifying',
+        players: initial.players?.map((player) => ({ ...player, ready: true })),
+      }),
     }
     render(
       <AuthContext.Provider value={authValue()}>
@@ -237,6 +240,109 @@ describe('OnlineLobbyPage', () => {
     })
     await waitFor(() => expect(start).toBeEnabled())
     await userEvent.click(start)
-    expect(client.startRace).toHaveBeenCalledTimes(1)
+    expect(api.startRoom).toHaveBeenCalledWith('1234', 'jwt')
+  })
+
+  it('identifies the host, configures and moderates the room, toggles ready, and leaves with confirmation', async () => {
+    const initial = room({
+      participantCount: 2,
+      players: [
+        ...room().players!,
+        {
+          id: 'user-2',
+          userId: 'user-2',
+          displayName: 'Segundo piloto',
+          bot: false,
+          ready: false,
+          connected: true,
+        },
+      ],
+    })
+    let clientOptions: { onStatus?: (status: 'connected') => void; onEnvelope?: (envelope: OnlineEnvelope) => void } | undefined
+    const client = {
+      connect: vi.fn().mockImplementation(async () => clientOptions?.onStatus?.('connected')),
+      disconnect: vi.fn(),
+      setReady: vi.fn(),
+      startRace: vi.fn(),
+    } as unknown as OnlineRoomClient
+    const api = {
+      getRoom: vi.fn().mockResolvedValue(initial),
+      getConnectionTicket: vi.fn(),
+      updateRoom: vi.fn().mockResolvedValue({ ...initial, limit: 12 }),
+      removePlayer: vi.fn().mockResolvedValue({
+        ...initial,
+        participantCount: 1,
+        players: initial.players?.slice(0, 1),
+      }),
+      leaveRoom: vi.fn().mockResolvedValue({
+        ...initial,
+        participantCount: 1,
+        players: initial.players?.slice(1),
+      }),
+      closeRoom: vi.fn(),
+      startRoom: vi.fn(),
+    }
+    render(
+      <AuthContext.Provider value={authValue()}>
+        <MemoryRouter initialEntries={['/race/lobby/1234']}>
+          <Routes>
+            <Route
+              element={
+                <OnlineLobbyPage
+                  api={api as never}
+                  createClient={(options) => {
+                    clientOptions = options as typeof clientOptions
+                    return client
+                  }}
+                  getTracks={vi.fn().mockResolvedValue(catalog)}
+                />
+              }
+              path="/race/lobby/:roomCode"
+            />
+            <Route element={<p>online setup</p>} path="/race/setup" />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    expect(await screen.findByLabelText('Host da sala')).toBeInTheDocument()
+    const user = userEvent.setup()
+    const grid = screen.getByLabelText('Limite de carros')
+    await user.clear(grid)
+    await user.type(grid, '12')
+    await user.click(screen.getByRole('button', { name: /salvar ajustes/i }))
+    await waitFor(() =>
+      expect(api.updateRoom).toHaveBeenCalledWith(
+        '1234',
+        expect.objectContaining({ gridSize: 12 }),
+        'jwt',
+      ),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Remover Segundo piloto' }))
+    expect(api.removePlayer).toHaveBeenCalledWith('1234', 'user-2', 'jwt')
+
+    await user.click(screen.getByRole('button', { name: /estou pronto/i }))
+    expect(client.setReady).toHaveBeenCalledWith(true)
+    clientOptions?.onEnvelope?.({
+      type: 'room_state',
+      payload: {
+        ...initial,
+        players: initial.players?.map((player) =>
+          player.id === 'user-1' ? { ...player, ready: true } : player,
+        ),
+      },
+    })
+    const unready = await screen.findByRole('button', { name: /retirar pronto/i })
+    await new Promise((resolve) => window.setTimeout(resolve, 500))
+    await user.click(unready)
+    expect(client.setReady).toHaveBeenLastCalledWith(false)
+
+    await user.click(screen.getByRole('button', { name: /^sair da sala$/i }))
+    expect(await screen.findByText(/deseja realmente sair da sala treino de sexta/i)).toBeInTheDocument()
+    const leaveButtons = screen.getAllByRole('button', { name: /^sair da sala$/i })
+    await user.click(leaveButtons.at(-1)!)
+    await waitFor(() => expect(api.leaveRoom).toHaveBeenCalledWith('1234', 'jwt'))
+    expect(await screen.findByText('online setup')).toBeInTheDocument()
   })
 })

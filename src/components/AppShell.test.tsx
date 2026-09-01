@@ -1,0 +1,69 @@
+import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+
+import { AuthContext, type AuthContextValue } from '@/auth/auth-context'
+import { AppShell } from '@/components/AppShell'
+import type { RoomSummary } from '@/lib/api'
+import { onlineRoomSession } from '@/online/OnlineRoomSession'
+
+const room: RoomSummary = {
+  code: '1234',
+  name: 'Sala ativa',
+  hostId: 'guest-1',
+  trackId: 'albert-park',
+  trackCatalogVersion: '2026.12',
+  physicsContractVersion: '2.0.0',
+  participantCount: 1,
+  limit: 22,
+  state: 'lobby',
+  hasPassword: false,
+  settingsLocked: false,
+}
+
+const auth: AuthContextValue = {
+  session: { role: 'guest', token: 'guest.jwt', subject: 'guest-1' },
+  account: null,
+  isGuest: true,
+  isUser: false,
+  startGuestSession: vi.fn(),
+  login: vi.fn(),
+  register: vi.fn(),
+  loadAccount: vi.fn(),
+  updateAccount: vi.fn(),
+  deleteAccount: vi.fn(),
+  signOut: vi.fn(),
+}
+
+describe('AppShell online navigation', () => {
+  afterEach(() => {
+    onlineRoomSession.resetForTests()
+    cleanup()
+  })
+
+  it('marks Online instead of Jogar and keeps the active room as its destination', async () => {
+    onlineRoomSession.setRoom(room)
+    render(
+      <AuthContext.Provider value={auth}>
+        <MemoryRouter initialEntries={['/race/lobby/1234']}>
+          <Routes>
+            <Route element={<AppShell><p>Lobby</p></AppShell>} path="/race/lobby/:roomCode" />
+            <Route element={<AppShell><p>Início</p></AppShell>} path="/" />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    expect(screen.getByRole('link', { name: 'Jogar' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: 'Online' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Online' })).toHaveAttribute(
+      'href',
+      '/race/lobby/1234',
+    )
+
+    await userEvent.click(screen.getByRole('link', { name: 'Início' }))
+    expect(await screen.findAllByText('Início')).not.toHaveLength(0)
+    expect(onlineRoomSession.getSnapshot().roomCode).toBe('1234')
+  })
+})
