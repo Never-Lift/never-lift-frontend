@@ -137,7 +137,7 @@ describe('RaceCanvas layout', () => {
       'size-full',
     )
     expect(
-      screen.getByText('P1: WASD · P2: setas').closest('header'),
+      screen.getByText('P1: WASD · P2: setas ou IJKL').closest('header'),
     ).not.toBeNull()
     expect(rendererCapture.options).toHaveLength(1)
     expect(rendererCapture.options[0].splitScreenAspectRatio?.()).toBe(1.125)

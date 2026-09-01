@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { KeyboardControls } from '@/race/KeyboardControls'
+import {
+  ALTERNATIVE_LOCAL_KEYBOARD_BINDINGS,
+  KeyboardControls,
+} from '@/race/KeyboardControls'
 
 let controls: KeyboardControls | null = null
 
@@ -62,5 +65,88 @@ describe('KeyboardControls', () => {
       brake: 0,
       steer: 0,
     })
+  })
+
+  it('keeps every independent key when both local players use multiple controls', () => {
+    controls = new KeyboardControls()
+    for (const code of ['KeyW', 'KeyA', 'ArrowUp', 'ArrowRight']) {
+      key('keydown', code)
+    }
+
+    expect(controls.getPressedCodes()).toEqual([
+      'ArrowRight',
+      'ArrowUp',
+      'KeyA',
+      'KeyW',
+    ])
+    expect(controls.getPlayerOneInput('local')).toEqual({
+      throttle: 1,
+      brake: 0,
+      steer: 1,
+    })
+    expect(controls.getPlayerTwoInput()).toEqual({
+      throttle: 1,
+      brake: 0,
+      steer: -1,
+    })
+
+    key('keyup', 'KeyA')
+    expect(controls.getPlayerOneInput('local')).toMatchObject({
+      throttle: 1,
+      steer: 0,
+    })
+    expect(controls.getPlayerTwoInput()).toMatchObject({
+      throttle: 1,
+      steer: -1,
+    })
+  })
+
+  it('supports an alternative local layout without sharing state between players', () => {
+    controls = new KeyboardControls(window, ALTERNATIVE_LOCAL_KEYBOARD_BINDINGS)
+    key('keydown', 'KeyW')
+    key('keydown', 'KeyI')
+    key('keydown', 'KeyJ')
+
+    expect(controls.getPlayerOneInput('local')).toEqual({
+      throttle: 1,
+      brake: 0,
+      steer: 0,
+    })
+    expect(controls.getPlayerTwoInput()).toEqual({
+      throttle: 1,
+      brake: 0,
+      steer: 1,
+    })
+  })
+
+  it('accepts the built-in IJKL fallback for player two', () => {
+    controls = new KeyboardControls()
+    key('keydown', 'KeyI')
+    key('keydown', 'KeyL')
+
+    expect(controls.getPlayerTwoInput()).toEqual({
+      throttle: 1,
+      brake: 0,
+      steer: -1,
+    })
+  })
+
+  it('clears held keys when the window loses focus or visibility', () => {
+    controls = new KeyboardControls()
+    key('keydown', 'KeyW')
+    window.dispatchEvent(new Event('blur'))
+    expect(controls.getPlayerOneInput('local')).toEqual({
+      throttle: 0,
+      brake: 0,
+      steer: 0,
+    })
+
+    key('keydown', 'KeyW')
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(controls.getPressedCodes()).toEqual([])
   })
 })
