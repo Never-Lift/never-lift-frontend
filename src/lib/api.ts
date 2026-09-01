@@ -287,6 +287,168 @@ export type TrackPitVisualStyle = TrackInfrastructurePalette & {
   canopyDepthMeters: number
 }
 
+export type RoomVisibility = 'public' | 'private'
+export type RoomState = 'lobby' | 'qualifying' | 'race' | 'closed'
+export type RoomBotDifficulty = 'easy' | 'normal' | 'hard'
+
+export type RoomParticipant = {
+  id: string
+  userId: string | null
+  displayName?: string | null
+  gamertag?: string | null
+  bot: boolean
+  ready: boolean
+  connected: boolean
+  color?: string | null
+  joinedAt?: string
+}
+
+export type RoomSettings = {
+  trackId: string
+  trackCatalogVersion: string
+  physicsContractVersion: string
+  gridSize: number
+  botsEnabled: boolean
+  botDifficulty: RoomBotDifficulty
+  visibility: RoomVisibility
+  settingsLocked: boolean
+  passwordRequired?: boolean
+}
+
+export type RoomSummary = {
+  code: string
+  name: string
+  hostId: string
+  hostName?: string | null
+  trackId: string
+  trackName?: string | null
+  trackCatalogVersion: string
+  physicsContractVersion: string
+  participantCount: number
+  limit: number
+  state: RoomState
+  hasPassword: boolean
+  settingsLocked: boolean
+  settings?: RoomSettings
+  players?: RoomParticipant[]
+}
+
+export type CreateRoomRequest = {
+  name?: string
+  trackId: string
+  gridSize: number
+  botsEnabled: boolean
+  botDifficulty: RoomBotDifficulty
+  visibility: RoomVisibility
+  password?: string
+}
+
+export type JoinRoomRequest = {
+  password?: string
+}
+
+export type RoomSettingsUpdate = {
+  trackId?: string
+  gridSize?: number
+  botsEnabled?: boolean
+  botDifficulty?: RoomBotDifficulty
+  visibility?: RoomVisibility
+  password?: string
+}
+
+export type ConnectionTicketResponse = {
+  ticket: string
+  roomCode: string
+  expiresAt: string
+}
+
+export type RoomResponse = RoomSummary
+
+function roomResponse(payload: unknown): RoomResponse {
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'room' in payload &&
+    typeof payload.room === 'object' &&
+    payload.room !== null
+  ) {
+    return payload.room as RoomResponse
+  }
+  return payload as RoomResponse
+}
+
+function roomListResponse(payload: unknown): RoomSummary[] {
+  if (Array.isArray(payload)) return payload as RoomSummary[]
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'rooms' in payload &&
+    Array.isArray(payload.rooms)
+  ) {
+    return payload.rooms as RoomSummary[]
+  }
+  return []
+}
+
+/** REST resources used by the online lobby. No race state is handled here. */
+export const onlineApi = {
+  listRooms: async (token?: string) =>
+    roomListResponse(await apiRequest('/rooms', {}, token)),
+  createRoom: async (request: CreateRoomRequest, token?: string) =>
+    roomResponse(
+      await apiRequest('/rooms', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      }, token),
+    ),
+  joinRoom: async (roomCode: string, request: JoinRoomRequest = {}, token?: string) =>
+    roomResponse(
+      await apiRequest(`/rooms/${encodeURIComponent(roomCode)}/join`, {
+        method: 'POST',
+        body: JSON.stringify(request),
+      }, token),
+    ),
+  getRoom: async (roomCode: string, token?: string) =>
+    roomResponse(
+      await apiRequest(`/rooms/${encodeURIComponent(roomCode)}`, {}, token),
+    ),
+  getConnectionTicket: (roomCode: string, token?: string) =>
+    apiRequest<ConnectionTicketResponse>(
+      `/rooms/${encodeURIComponent(roomCode)}/connection-ticket`,
+      { method: 'POST' },
+      token,
+    ),
+  updateRoom: async (
+    roomCode: string,
+    changes: RoomSettingsUpdate,
+    token?: string,
+  ) =>
+    roomResponse(
+      await apiRequest(`/rooms/${encodeURIComponent(roomCode)}/settings`, {
+        method: 'PATCH',
+        body: JSON.stringify(changes),
+      }, token),
+    ),
+  removePlayer: (roomCode: string, playerId: string, token?: string) =>
+    apiRequest<void>(
+      `/rooms/${encodeURIComponent(roomCode)}/participants/${encodeURIComponent(playerId)}`,
+      { method: 'DELETE' },
+      token,
+    ),
+  closeRoom: (roomCode: string, token?: string) =>
+    apiRequest<void>(
+      `/rooms/${encodeURIComponent(roomCode)}/close`,
+      { method: 'POST' },
+      token,
+    ),
+  startRoom: (roomCode: string, token?: string) =>
+    apiRequest<RoomResponse>(
+      `/rooms/${encodeURIComponent(roomCode)}/start`,
+      { method: 'POST' },
+      token,
+    ),
+}
+
 export type TrackPitGarageBarrier = {
   side: 'left' | 'right'
   material: 'concrete-wall'

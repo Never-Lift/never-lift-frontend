@@ -2,6 +2,7 @@ import {
   ArrowRight,
   Flag,
   Gamepad2,
+  Globe2,
   LoaderCircle,
   LockKeyhole,
   Play,
@@ -183,8 +184,8 @@ export function HomePage() {
                       className="mt-0.5 size-5 shrink-0 text-warning"
                     />
                     <p className="text-sm leading-6 text-muted-foreground">
-                      Você pode explorar como guest. Qualquer modo online será
-                      bloqueado até que faça login.
+                      Você pode explorar como guest e entrar no lobby online. Recursos
+                      exclusivos de conta serão liberados quando fizer login.
                     </p>
                   </div>
                 )}
@@ -215,6 +216,26 @@ export function HomePage() {
                 className="h-36 w-full"
                 color={DEFAULT_VEHICLE_PAINT_COLOR}
               />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-info/25 bg-info/5 p-5">
+            <div className="flex items-start gap-4">
+              <span className="grid size-10 shrink-0 place-items-center rounded-[10px] border border-info/30 bg-info/10 text-info">
+                <Globe2 aria-hidden="true" className="size-4" />
+              </span>
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-info">
+                  Corrida online
+                </p>
+                <p className="mt-1 font-bold">Entre em uma sala</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Guest e contas podem participar do lobby. A corrida online será habilitada nas próximas partes.
+                </p>
+                <Button asChild className="mt-4" size="sm" variant="secondary">
+                  <Link to="/race/setup?mode=online">Abrir lobby</Link>
+                </Button>
+              </div>
             </div>
           </div>
         </aside>

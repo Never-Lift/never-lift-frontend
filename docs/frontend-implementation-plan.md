@@ -55,7 +55,7 @@ Nos snapshots, `x` e `y` são metros num plano cartesiano com `+X` para a direit
 
 `/` (menu, com guest ativo por padrão) · `/login` `/register` · `/account` · `/friends` · `/notifications` · `/records` · `/info` · `/race/setup?mode=solo|local|online` · `/race/lobby/:roomCode` · `/race/:roomCode` · `/championship/setup` · `/championship/:id`
 
-Guest autenticado por padrão ao abrir o app (feature 2): rotas de `online` redirecionam pra `/login` com mensagem "Faça login para liberar" se a claim JWT for `role: guest`.
+Guest autenticado por padrão ao abrir o app (feature 2): o lobby da Parte 3a aceita guest e usuário logado igualmente. Rotas online que exigirem conta (por exemplo, recursos sociais ou ações associadas a resultados) continuam sob `OnlineRoute` e redirecionam pra `/login` com mensagem "Faça login para liberar" quando a claim JWT for `role: guest`.
 
 ---
 
@@ -126,7 +126,16 @@ Mesma numeração e dependências do plano de backend.
 **Cobre features:** 4 (lobby online), 8.
 **Decisões aprovadas:** o registro completo das 80 decisões desta rodada está em
 [`module-3-online-decisions.md`](module-3-online-decisions.md). Ele é normativo
-para a implementação, mas não altera o status: o Módulo 3 ainda não foi iniciado.
+para a implementação, mas não altera o status: o Módulo 3 continua em andamento.
+
+**Estado da Parte 3a:** sala e protocolo implementados no frontend; a validação
+manual com dois navegadores ainda é necessária para declarar a parte pronta. A tela de
+`/race/setup?mode=online` lista e cria salas; `/race/lobby/:roomCode` mantém o
+lobby conectado por WebSocket. O cliente obtém `POST /api/rooms/{code}/connection-ticket`
+antes do handshake, usa apenas o ticket temporário na URL, reconecta dentro da
+janela de 30 s, e cobre pronto/permissões do host sem iniciar física. As Partes
+3b (motor físico autoritativo) e 3c (classificação e fluxo de corrida) continuam
+pendentes.
 **Escopo:**
 - Cliente WebSocket com reconexão automática (backoff simples), obtendo antes um ticket de uso único vinculado à sala/usuário (validade de 60 s) em vez de expor o JWT principal.
 - Lobby: lista pública e entrada por código, até 22 carros por sala (humanos e bots), grid configurável de 2 a 22, senha opcional, host, checkbox de pronto por jogador e host só pode iniciar quando todos os humanos estiverem `ready`. Bots ficam desativados por padrão e o host escolhe uma dificuldade única quando os habilitar.
