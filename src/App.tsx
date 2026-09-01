@@ -4,6 +4,7 @@ import { AccountRoute } from '@/components/RouteGuards'
 import { AccountPage } from '@/pages/AccountPage'
 import { AuthPage } from '@/pages/AuthPage'
 import { HomePage } from '@/pages/HomePage'
+import { OnlineLobbyPage } from '@/pages/OnlineLobbyPage'
 import { RacePage } from '@/pages/RacePage'
 
 export function App() {
@@ -18,6 +19,8 @@ export function App() {
       </Route>
 
       <Route element={<RacePage />} path="/race" />
+      <Route element={<OnlineLobbyPage />} path="/race/setup" />
+      <Route element={<OnlineLobbyPage />} path="/race/lobby/:roomCode" />
 
       <Route element={<HomePage />} path="*" />
     </Routes>

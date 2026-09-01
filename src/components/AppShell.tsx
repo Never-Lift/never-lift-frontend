@@ -1,4 +1,4 @@
-import { Gamepad2, House, LogIn, LogOut, UserRound } from 'lucide-react'
+import { Gamepad2, Globe2, House, LogIn, LogOut, UserRound } from 'lucide-react'
 import type { PropsWithChildren } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 
@@ -69,6 +69,21 @@ export function AppShell({
           >
             <Gamepad2 aria-hidden="true" className="size-4 text-primary" />
             <span className="hidden lg:inline">Jogar</span>
+          </NavLink>
+
+          <NavLink
+            aria-label="Online"
+            className={({ isActive }) =>
+              cn(
+                navItemClass,
+                isActive &&
+                  'border-primary/30 bg-primary/10 text-foreground shadow-[inset_3px_0_0_var(--primary)]',
+              )
+            }
+            to="/race/setup?mode=online"
+          >
+            <Globe2 aria-hidden="true" className="size-4 text-info" />
+            <span className="hidden lg:inline">Online</span>
           </NavLink>
 
           {isUser ? (

@@ -26,7 +26,7 @@ Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com simul
 - `/login` e `/register` autenticam o piloto; o cadastro aceita um dos oito avatares chibi originais do Never Lift.
 - `/account` permite trocar nome, avatar ou senha mediante confirmação da senha atual e excluir a conta por meio de um `AlertDialog` irreversível.
 - O backend atual devolve JWT no corpo. O frontend guarda esse token somente no estado em memória e o envia como `Authorization: Bearer`; nada é escrito em `localStorage` ou `sessionStorage`.
-- Rotas online futuras devem ser aninhadas sob o componente `OnlineRoute`, que direciona guest e visitante para `/login` com uma mensagem explicativa.
+- O lobby online da Parte 3a aceita guest e usuário logado. Rotas online que exigirem conta continuam aninhadas sob `OnlineRoute`, que direciona guest e visitante para `/login` com uma mensagem explicativa.
 
 Como a sessão fica exclusivamente em memória, recarregar a página remove o login atual e, ao voltar para `/`, uma nova sessão guest é criada. Esse comportamento é intencional enquanto o backend não adotar cookie `httpOnly`.
 
@@ -44,7 +44,14 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 - O dano mecânico v2 é cumulativo e deriva da variação de velocidade normal do impacto. Danos de direção e motor afetam a dinâmica; impactos críticos ou perda de toda a integridade causam perda total, que desativa os controles.
 - Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result` com `trackId`, `trackCatalogVersion` e `physicsContractVersion` efetivamente usados.
 
-As Partes 2a, 2b, 2c e 2d e o catálogo `2026.12` foram validados manualmente de forma integrada em 31/08/2026. A simplificação para F1 único/condução fixa e os refinamentos de câmera 2.5D/F1 estão concluídos. O catálogo preserva as revisões anteriores e acrescenta placas regressivas por curva, largada oficial de Silverstone reposicionada, sentido anti-horário corrigido de Marina Bay e remoção do escape provisório de Monza, mantendo muros/grades contínuos e aberturas navegáveis de pit com 22 garagens opacas protegidas por collider traseiro. A Parte 2d e o Módulo 2 estão prontos; o Módulo 3 ainda não foi iniciado.
+## Módulo 3 — Parte 3a: lobby online
+
+- `/race/setup?mode=online` lista salas públicas e permite criar uma sala com até 22 carros, pista, bots opcionais, dificuldade única, visibilidade e senha.
+- `/race/lobby/:roomCode` mantém o estado do lobby por WebSocket: jogadores confirmam presença, o host acompanha quem está pronto, remove participantes e inicia a classificação somente quando houver pelo menos dois carros e todos os humanos estiverem prontos.
+- Antes do handshake o frontend obtém `POST /api/rooms/{roomCode}/connection-ticket`. O ticket é temporário, vinculado à sala e usado sozinho na URL do WebSocket; o JWT principal nunca é exposto. Quedas de conexão usam backoff e reaproveitam o ticket durante a janela de reconexão.
+- A Parte 3a não executa física, classificação ou largada; isso permanece nas Partes 3b e 3c.
+
+As Partes 2a, 2b, 2c e 2d e o catálogo `2026.12` foram validados manualmente de forma integrada em 31/08/2026. A simplificação para F1 único/condução fixa e os refinamentos de câmera 2.5D/F1 estão concluídos. O catálogo preserva as revisões anteriores e acrescenta placas regressivas por curva, largada oficial de Silverstone reposicionada, sentido anti-horário corrigido de Marina Bay e remoção do escape provisório de Monza, mantendo muros/grades contínuos e aberturas navegáveis de pit com 22 garagens opacas protegidas por collider traseiro. A Parte 2d e o Módulo 2 estão prontos; a Parte 3a está implementada e aguarda validação manual, enquanto 3b/3c ainda não foram iniciadas.
 
 ## Roadmap
 
@@ -77,9 +84,10 @@ Configure a URL base da API, incluindo o prefixo `/api` e sem adicionar `/health
 
 ```dotenv
 VITE_API_URL=http://localhost:8080/api
+VITE_WS_URL=ws://localhost:8080/ws
 ```
 
-A tela de diagnóstico consulta `${VITE_API_URL}/health`. Com o valor acima, a requisição será feita para `http://localhost:8080/api/health`.
+A tela de diagnóstico consulta `${VITE_API_URL}/health`. Com os valores acima, o lobby online usa `ws://localhost:8080/ws` para o WebSocket e a requisição de diagnóstico é feita para `http://localhost:8080/api/health`.
 
 ## Executando
 
@@ -118,7 +126,7 @@ O arquivo `vercel.json` já fixa o comando de instalação, o build, a pasta `di
    - **Install Command:** `npm ci`;
    - **Build Command:** `npm run build`;
    - **Output Directory:** `dist`.
-4. Em **Environment Variables**, crie `VITE_API_URL` com a URL pública base do backend, terminando em `/api`. Marque **Production**, **Preview** e **Development**.
+4. Em **Environment Variables**, crie `VITE_API_URL` com a URL pública base do backend, terminando em `/api`, e `VITE_WS_URL` com a URL WebSocket pública (por exemplo, `wss://api.example.com/ws`). Marque ambas em **Production**, **Preview** e **Development**.
 5. Clique em **Deploy** e aguarde o primeiro build.
 6. Depois do deploy, abra **Settings → Git** e confirme **Production Branch: `main`**. Mantenha os deployments automáticos habilitados; commits em outras branches gerarão apenas previews.
 7. Copie o domínio final da Vercel e permita essa origem na configuração CORS do backend. Se previews também precisarem consultar a API, permita os domínios de preview de forma controlada no backend.
