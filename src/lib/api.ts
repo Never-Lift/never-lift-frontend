@@ -312,7 +312,6 @@ export type RoomSettings = {
   botDifficulty: RoomBotDifficulty
   visibility: RoomVisibility
   settingsLocked: boolean
-  passwordRequired?: boolean
 }
 
 export type RoomSummary = {
@@ -327,7 +326,6 @@ export type RoomSummary = {
   participantCount: number
   limit: number
   state: RoomState
-  hasPassword: boolean
   settingsLocked: boolean
   settings?: RoomSettings
   players?: RoomParticipant[]
@@ -340,11 +338,6 @@ export type CreateRoomRequest = {
   botsEnabled?: boolean
   botDifficulty?: RoomBotDifficulty
   visibility: RoomVisibility
-  password?: string
-}
-
-export type JoinRoomRequest = {
-  password?: string
 }
 
 export type RoomSettingsUpdate = {
@@ -353,7 +346,6 @@ export type RoomSettingsUpdate = {
   botsEnabled?: boolean
   botDifficulty?: RoomBotDifficulty
   visibility?: RoomVisibility
-  password?: string
 }
 
 export type ConnectionTicketResponse = {
@@ -401,11 +393,10 @@ export const onlineApi = {
         body: JSON.stringify(request),
       }, token),
     ),
-  joinRoom: async (roomCode: string, request: JoinRoomRequest = {}, token?: string) =>
+  joinRoom: async (roomCode: string, token?: string) =>
     roomResponse(
       await apiRequest(`/rooms/${encodeURIComponent(roomCode)}/join`, {
         method: 'POST',
-        body: JSON.stringify(request),
       }, token),
     ),
   getRoom: async (roomCode: string, token?: string) =>
@@ -452,6 +443,12 @@ export const onlineApi = {
   startRoom: (roomCode: string, token?: string) =>
     apiRequest<RoomResponse>(
       `/rooms/${encodeURIComponent(roomCode)}/start`,
+      { method: 'POST' },
+      token,
+    ),
+  cancelQualification: (roomCode: string, token?: string) =>
+    apiRequest<RoomResponse>(
+      `/rooms/${encodeURIComponent(roomCode)}/cancel-qualification`,
       { method: 'POST' },
       token,
     ),

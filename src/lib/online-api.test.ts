@@ -79,4 +79,22 @@ describe('onlineApi', () => {
       expect.objectContaining({ method: 'POST' }),
     )
   })
+
+  it('joins without a password body and can cancel qualification', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ code: '1234', trackId: 'albert-park' }))
+      .mockResolvedValueOnce(jsonResponse({ code: '1234', trackId: 'albert-park', state: 'lobby' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await onlineApi.joinRoom('1234', 'user.jwt')
+    await onlineApi.cancelQualification('1234', 'user.jwt')
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/rooms/1234/join')
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: 'POST' }))
+    expect(fetchMock.mock.calls[0][1]).not.toHaveProperty('body')
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'http://localhost:8080/api/rooms/1234/cancel-qualification',
+    )
+  })
 })

@@ -38,9 +38,10 @@ describe('realtime protocol v2 lobby contract', () => {
         'state',
         'participantCount',
         'limit',
-        'hasPassword',
+        'hostName',
       ]),
     )
+    expect(roomPayload?.properties).not.toHaveProperty('hasPassword')
     expect(roomPlayers?.maxItems).toBe(22)
     expect(snapshotCars?.maxItems).toBe(22)
     expect(standings?.maxItems).toBe(22)

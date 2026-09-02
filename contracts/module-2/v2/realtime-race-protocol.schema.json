@@ -132,12 +132,13 @@
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["code", "name", "players", "hostId", "settings", "readyStates", "settingsLocked", "state", "participantCount", "limit", "hasPassword"],
+          "required": ["code", "name", "players", "hostId", "hostName", "settings", "readyStates", "settingsLocked", "state", "participantCount", "limit"],
           "properties": {
             "code": { "type": "string", "pattern": "^[0-9]{4}$" },
             "name": { "type": "string", "minLength": 1 },
             "players": { "type": "array", "maxItems": 22, "items": { "$ref": "#/$defs/player" } },
             "hostId": { "type": ["string", "null"], "minLength": 1 },
+            "hostName": { "type": ["string", "null"] },
             "settings": { "$ref": "#/$defs/roomSettings" },
             "readyStates": {
               "type": "object",
@@ -147,8 +148,7 @@
             "settingsLocked": { "type": "boolean" },
             "state": { "enum": ["lobby", "qualifying", "race", "closed"] },
             "participantCount": { "type": "integer", "minimum": 0, "maximum": 22 },
-            "limit": { "type": "integer", "minimum": 2, "maximum": 22 },
-            "hasPassword": { "type": "boolean" }
+            "limit": { "type": "integer", "minimum": 2, "maximum": 22 }
           }
         }
       }

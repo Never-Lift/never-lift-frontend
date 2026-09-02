@@ -123,7 +123,6 @@ export function roomFromPayload(
     participantCount: Number(nested.participantCount ?? players.length),
     limit: Number.isFinite(gridSize) ? gridSize : 22,
     state: normalizeState(nested.state ?? previous?.state),
-    hasPassword: nested.hasPassword === true || settingsSource.passwordRequired === true,
     settingsLocked,
     settings: {
       trackId,
@@ -147,8 +146,6 @@ export function roomFromPayload(
       ),
       visibility,
       settingsLocked,
-      passwordRequired:
-        nested.hasPassword === true || settingsSource.passwordRequired === true,
     },
     players,
   }
