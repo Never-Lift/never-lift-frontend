@@ -454,7 +454,7 @@ export function OnlineLobbyPage({
   }, [api, navigate, roomName, roomPassword, session, visibility])
 
   const handleSaveSettings = useCallback(async () => {
-    if (!room || !session || !isHost || room.settingsLocked) return
+    if (!room || !session || !isHost || room.state !== 'lobby') return
     const parsedGrid = Number(gridSize)
     if (!Number.isInteger(parsedGrid) || parsedGrid < 2 || parsedGrid > 22) {
       setError('O grid deve ter entre 2 e 22 carros.')
@@ -665,14 +665,14 @@ export function OnlineLobbyPage({
                   <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Bots</dt><dd className="font-bold">{room.settings?.botsEnabled ? `Ativos · ${room.settings.botDifficulty}` : 'Desativados'}</dd></div>
                   <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Host</dt><dd className="font-mono text-xs font-bold">{room.hostName ?? room.hostId.slice(0, 8)}</dd></div>
                 </dl>
-                {room.settingsLocked && (
+                {room.settingsLocked && room.state !== 'lobby' && (
                   <p className="mt-4 rounded-xl border border-warning/30 bg-warning/8 p-3 text-xs leading-5 text-warning">
-                    Configurações bloqueadas porque um piloto já confirmou pronto.
+                    Configurações bloqueadas porque a sala já saiu do lobby.
                   </p>
                 )}
               </section>
 
-              {isHost && room.state === 'lobby' && !room.settingsLocked && (
+              {isHost && room.state === 'lobby' && (
                 <section className="surface-panel p-5 sm:p-6">
                   <div className="mb-5 flex items-center gap-3"><Settings2 aria-hidden="true" className="size-5 text-primary" /><h2 className="font-display text-2xl font-black uppercase italic">Ajustes do host</h2></div>
                   <div className="space-y-4">

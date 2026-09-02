@@ -89,9 +89,11 @@ export function roomFromPayload(
       ? 'private'
       : 'public'
   const settingsLocked =
-    nested.settingsLocked === true ||
-    settingsSource.settingsLocked === true ||
-    previous?.settingsLocked === true
+    typeof nested.settingsLocked === 'boolean'
+      ? nested.settingsLocked
+      : typeof settingsSource.settingsLocked === 'boolean'
+        ? settingsSource.settingsLocked
+        : previous?.settingsLocked ?? false
 
   return {
     code,
