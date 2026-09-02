@@ -55,7 +55,7 @@ Nos snapshots, `x` e `y` são metros num plano cartesiano com `+X` para a direit
 
 `/` (menu, com guest ativo por padrão) · `/login` `/register` · `/account` · `/friends` · `/notifications` · `/records` · `/info` · `/race/setup?mode=solo|local|online` · `/race/lobby/:roomCode` · `/race/:roomCode` · `/championship/setup` · `/championship/:id`
 
-Guest autenticado por padrão ao abrir o app (feature 2): o lobby da Parte 3a aceita guest e usuário logado igualmente. Rotas online que exigirem conta (por exemplo, recursos sociais ou ações associadas a resultados) continuam sob `OnlineRoute` e redirecionam pra `/login` com mensagem "Faça login para liberar" quando a claim JWT for `role: guest`.
+Guest autenticado por padrão ao abrir o app (feature 2): a tela online exibe ao guest uma prévia escurecida das formas de entrada e um aviso para fazer login, sem consultar ou alterar salas. Lobby, ticket e WebSocket exigem `role: user`; demais rotas online que exigirem conta continuam sob `OnlineRoute`.
 
 ---
 
@@ -128,11 +128,11 @@ Mesma numeração e dependências do plano de backend.
 [`module-3-online-decisions.md`](module-3-online-decisions.md). Ele é normativo
 para a implementação, mas não altera o status: o Módulo 3 continua em andamento.
 
-**Estado da Parte 3a:** sala e protocolo implementados no frontend; a validação
+**Estado da Parte 3a:** sala e protocolo, incluindo o refinamento de acesso e configuração de 02/09/2026, implementados no frontend; a validação
 manual com dois navegadores ainda é necessária para declarar a parte pronta. A tela de
 `/race/setup?mode=online` lista e cria salas; `/race/lobby/:roomCode` mantém o
-lobby conectado por WebSocket. A criação define somente nome, visibilidade e senha;
-pista, grid e bots são configurados pelo host dentro da sala. A sessão WebSocket vive
+lobby conectado por WebSocket. A criação define somente nome e visibilidade;
+salas privadas usam apenas o código como segredo, sem senha. Pista, grid e bots são configurados pelo host dentro da sala e sincronizados automaticamente. A sessão WebSocket vive
 fora da página e permanece ativa durante a navegação; a saída normal ocorre somente
 pelo comando explícito com confirmação. O cliente obtém `POST /api/rooms/{code}/connection-ticket`
 antes do handshake, usa apenas o ticket temporário na URL, reconecta dentro da
@@ -141,7 +141,7 @@ janela de 30 s, e cobre pronto/permissões do host sem iniciar física. As Parte
 pendentes.
 **Escopo:**
 - Cliente WebSocket com reconexão automática (backoff simples), obtendo antes um ticket de uso único vinculado à sala/usuário (validade de 60 s) em vez de expor o JWT principal.
-- Lobby: lista pública e entrada por código, até 22 carros por sala (humanos e bots), grid configurável de 2 a 22, senha opcional, identificação visual do host, pronto reversível por jogador e host só pode iniciar quando todos os humanos estiverem `ready`. O host pode editar as configurações durante todo o lobby sem limpar o pronto já confirmado; elas travam somente ao iniciar a classificação. Bots ficam desativados por padrão e o host escolhe uma dificuldade única quando os habilitar. Host e participantes comuns podem sair explicitamente, inclusive após o avanço do lobby, com transferência automática do host quando necessário. Entrada, saída, remoção e configuração são propagadas imediatamente a todos; desconexão reserva a vaga somente durante a janela de reconexão.
+- Lobby: acesso restrito a contas; guest vê somente a prévia bloqueada. A lista pública mostra nome, host e ocupação e permite entrada direta; salas privadas são descobertas exclusivamente pelo código de quatro dígitos, sem senha. Cada sala aceita até 22 carros (humanos e bots), com grid de 2 a 22 normalizado no cliente e validado no servidor. O host não marca pronto e inicia quando todos os demais humanos estiverem `ready`; convidados podem confirmar ou retirar o pronto. O host edita pista por carrossel de traçados, grid, bots/dificuldade e visibilidade durante todo o lobby, sem botão de salvar e sem limpar confirmações, com propagação automática a todos. As configurações travam ao iniciar a classificação; o host pode cancelá-la e reabrir o lobby somente antes de qualquer carro começar a andar. Host e participantes comuns podem sair explicitamente, com transferência automática do host. Entrada, saída, remoção e configuração são propagadas imediatamente; desconexão reserva a vaga somente durante a janela de reconexão. Avisos e erros usam notificações no canto superior direito, expiram em 5 s e aceitam fechamento manual.
 - Classificação simultânea e isolada: uma tentativa de até 3 minutos por participante, com contagem sincronizada de 3 s, lançamento padronizado antes da linha, mesmas condições secas da corrida e ordenação do grid por tempo autoritativo. Voltas inválidas ficam no fim em ordem determinística.
 - Fluxo de corrida: três voltas, sentido oficial, sem entrada tardia, sem pausa ou reinício manual; após a chegada o carro vira `ghost`, os resultados ficam visíveis por confirmação ou no máximo 60 s e a sala retorna ao lobby.
 - **Predição:** ao apertar uma tecla, o `RaceEngine` do Módulo 2 já simula o carro do próprio jogador imediatamente e envia `input` pro servidor.

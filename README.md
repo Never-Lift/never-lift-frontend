@@ -26,7 +26,7 @@ Frontend web do Never Lift, um jogo de corrida 2D multiplayer top-down com simul
 - `/login` e `/register` autenticam o piloto; o cadastro aceita um dos oito avatares chibi originais do Never Lift.
 - `/account` permite trocar nome, avatar ou senha mediante confirmação da senha atual e excluir a conta por meio de um `AlertDialog` irreversível.
 - O backend atual devolve JWT no corpo. O frontend guarda esse token somente no estado em memória e o envia como `Authorization: Bearer`; nada é escrito em `localStorage` ou `sessionStorage`.
-- O lobby online da Parte 3a aceita guest e usuário logado. Rotas online que exigirem conta continuam aninhadas sob `OnlineRoute`, que direciona guest e visitante para `/login` com uma mensagem explicativa.
+- O lobby online exige uma conta. O guest enxerga uma prévia escurecida das formas de entrada em `/race/setup?mode=online`, acompanhada do aviso para fazer login, mas não consulta nem altera salas.
 
 Como a sessão fica exclusivamente em memória, recarregar a página remove o login atual e, ao voltar para `/`, uma nova sessão guest é criada. Esse comportamento é intencional enquanto o backend não adotar cookie `httpOnly`.
 
@@ -46,8 +46,10 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 
 ## Módulo 3 — Parte 3a: lobby online
 
-- `/race/setup?mode=online` lista salas públicas e cria a sala com nome, visibilidade e senha. Pista, grid de 2 a 22 e bots opcionais com dificuldade única são definidos pelo host já dentro do lobby.
-- `/race/lobby/:roomCode` mantém o estado do lobby por WebSocket: identifica o host, propaga presença e saída imediatamente, permite confirmar ou retirar o pronto, editar as configurações sem apagar confirmações existentes, remover participantes e iniciar a classificação somente quando houver pelo menos dois carros e todos os humanos estiverem prontos.
+- `/race/setup?mode=online` lista salas públicas com nome, host e ocupação; clicar em **Entrar** ingressa diretamente. Salas privadas não têm senha e usam o código numérico como único segredo. A criação solicita apenas nome e visibilidade.
+- `/race/lobby/:roomCode` mantém o estado do lobby por WebSocket: identifica o host, propaga presença e saída imediatamente e permite ao convidado confirmar ou retirar o pronto. O host não possui estado de pronto; ele configura pista, grid, bots e visibilidade, e inicia quando todos os demais humanos confirmarem.
+- Os ajustes do host são transmitidos automaticamente, sem botão de salvar. A pista é escolhida em um carrossel de traçados; o grid usa campo sem setas, botões `−`/`+` e normalização entre 2 e 22. Avisos temporários aparecem no canto superior direito por cinco segundos ou até serem fechados.
+- Depois de iniciar a classificação, o host pode cancelá-la e voltar ao lobby somente enquanto nenhum carro tiver começado a andar. Essa transição prepara o contrato da Parte 3c sem executar corrida na Parte 3a.
 - A conexão da sala permanece ativa ao navegar pelo app; o item **Online** volta à sala vigente. Host e participantes comuns podem sair por um botão próprio com confirmação, inclusive depois do avanço do lobby; a função de host é transferida quando necessário. Uma desconexão não recuperada libera a vaga depois da janela de reconexão.
 - Antes do handshake o frontend obtém `POST /api/rooms/{roomCode}/connection-ticket`. O ticket é temporário, vinculado à sala e usado sozinho na URL do WebSocket; o JWT principal nunca é exposto. Quedas de conexão usam backoff e reaproveitam o ticket durante a janela de reconexão.
 - A Parte 3a não executa física, classificação ou largada; isso permanece nas Partes 3b e 3c.

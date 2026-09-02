@@ -14,7 +14,6 @@ const room: RoomSummary = {
   participantCount: 1,
   limit: 22,
   state: 'lobby',
-  hasPassword: false,
   settingsLocked: false,
   players: [],
 }

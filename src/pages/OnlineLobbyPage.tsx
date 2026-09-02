@@ -1,11 +1,12 @@
 import {
   Check,
-  CircleAlert,
+  ChevronLeft,
+  ChevronRight,
   Crown,
   DoorOpen,
-  Globe2,
-  LockKeyhole,
   LoaderCircle,
+  Lock,
+  Minus,
   Plus,
   RefreshCw,
   Settings2,
@@ -13,6 +14,7 @@ import {
   ToggleLeft,
   ToggleRight,
   Trash2,
+  Unlock,
   UserRound,
   Users,
   Wifi,
@@ -22,27 +24,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  onlineApi,
-  raceApi,
-  type CreateRoomRequest,
-  type RoomBotDifficulty,
-  type RoomParticipant,
-  type RoomSettingsUpdate,
-  type RoomState,
-  type RoomSummary,
-  type RoomVisibility,
-  type TrackCatalog,
-} from '@/lib/api'
-import { getErrorMessage } from '@/lib/error-messages'
-import { OnlineRoomClient } from '@/online/OnlineRoomClient'
-import {
-  onlineRoomSession,
-  useOnlineRoomSession,
-} from '@/online/OnlineRoomSession'
-import { roomFromPayload } from '@/online/room-state'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +35,31 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { NotificationStack } from '@/components/ui/notification-stack'
+import { useNotifications } from '@/hooks/use-notifications'
+import {
+  onlineApi,
+  raceApi,
+  type CreateRoomRequest,
+  type RoomBotDifficulty,
+  type RoomParticipant,
+  type RoomSettingsUpdate,
+  type RoomState,
+  type RoomSummary,
+  type RoomVisibility,
+  type TrackCatalog,
+  type TrackCatalogEntry,
+  type TrackDefinition,
+} from '@/lib/api'
+import { getErrorMessage } from '@/lib/error-messages'
+import { OnlineRoomClient } from '@/online/OnlineRoomClient'
+import {
+  onlineRoomSession,
+  useOnlineRoomSession,
+} from '@/online/OnlineRoomSession'
+import { roomFromPayload } from '@/online/room-state'
 
 type LobbyApi = Pick<
   typeof onlineApi,
@@ -67,17 +73,22 @@ type LobbyApi = Pick<
   | 'leaveRoom'
   | 'closeRoom'
   | 'startRoom'
+  | 'cancelQualification'
 >
 
 type LobbyDependencies = {
   api?: LobbyApi
   getTracks?: typeof raceApi.getTracks
+  getTrack?: typeof raceApi.getTrack
   createClient?: (options: ConstructorParameters<typeof OnlineRoomClient>[0]) => OnlineRoomClient
 }
 
 const defaultClientFactory = (
   options: ConstructorParameters<typeof OnlineRoomClient>[0],
 ) => new OnlineRoomClient(options)
+
+const GRID_MIN = 2
+const GRID_MAX = 22
 
 function trackNameFor(catalog: TrackCatalog | null, trackId: string) {
   return catalog?.tracks.find((track) => track.id === trackId)?.name ?? trackId
@@ -90,28 +101,20 @@ function formatRoomState(state: RoomState) {
   return 'Lobby'
 }
 
-function GenericError({ message }: { message: string | null }) {
-  if (!message) return null
-  return (
-    <div
-      aria-live="polite"
-      className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4 text-sm"
-      role="alert"
-    >
-      <CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
-      <p className="leading-6 text-destructive">{message}</p>
-    </div>
-  )
+function formatDifficulty(value: RoomBotDifficulty) {
+  if (value === 'easy') return 'Fácil'
+  if (value === 'hard') return 'Difícil'
+  return 'Normal'
 }
 
 function RoomList({
   rooms,
-  trackCatalog,
   onJoin,
+  joining,
 }: {
   rooms: RoomSummary[]
-  trackCatalog: TrackCatalog | null
-  onJoin: (code: string, passwordRequired: boolean) => void
+  onJoin: (code: string) => void
+  joining: boolean
 }) {
   if (rooms.length === 0) {
     return (
@@ -120,6 +123,7 @@ function RoomList({
       </div>
     )
   }
+
   return (
     <div className="space-y-2">
       {rooms.map((room) => {
@@ -130,28 +134,19 @@ function RoomList({
             key={room.code}
           >
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="truncate font-extrabold">{room.name || 'Sala online'}</p>
-                {room.hasPassword ? (
-                  <LockKeyhole aria-label="Sala protegida por senha" className="size-3.5 text-warning" />
-                ) : (
-                  <Globe2 aria-label="Sala pública" className="size-3.5 text-success" />
-                )}
-              </div>
+              <p className="truncate font-extrabold">{room.name || 'Sala online'}</p>
               <p className="mt-1 text-xs font-semibold text-muted-foreground">
-                Código <span className="font-mono text-foreground">{room.code}</span> ·{' '}
-                Host {room.hostName ?? room.hostId.slice(0, 8)} ·{' '}
-                {trackNameFor(trackCatalog, room.trackId)} · {formatRoomState(room.state)}
+                Host <span className="text-foreground">{room.hostName ?? 'Piloto'}</span>
               </p>
             </div>
             <div className="flex items-center gap-3 text-xs font-bold text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5" aria-label="Capacidade de jogadores">
                 <Users aria-hidden="true" className="size-3.5" />
                 {room.participantCount}/{room.limit}
               </span>
               <Button
-                disabled={full || room.state !== 'lobby'}
-                onClick={() => onJoin(room.code, room.hasPassword)}
+                disabled={joining || full || room.state !== 'lobby'}
+                onClick={() => onJoin(room.code)}
                 size="sm"
                 variant="secondary"
               >
@@ -202,16 +197,22 @@ function LobbyPlayer({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] ${
-            player.ready
-              ? 'border-success/35 bg-success/10 text-success'
-              : 'border-border bg-muted/50 text-muted-foreground'
-          }`}
-        >
-          {player.ready && <Check aria-hidden="true" className="size-3" />}
-          {player.ready ? 'Pronto' : 'Aguardando'}
-        </span>
+        {participantIsHost ? (
+          <span className="rounded-full border border-warning/30 bg-warning/8 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-warning">
+            Controla a largada
+          </span>
+        ) : (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] ${
+              player.ready
+                ? 'border-success/35 bg-success/10 text-success'
+                : 'border-border bg-muted/50 text-muted-foreground'
+            }`}
+          >
+            {player.ready && <Check aria-hidden="true" className="size-3" />}
+            {player.ready ? 'Pronto' : 'Aguardando'}
+          </span>
+        )}
         {canRemove && !player.bot && !isCurrentPlayer && (
           <Button aria-label={`Remover ${label}`} onClick={onRemove} size="icon" variant="ghost">
             <Trash2 aria-hidden="true" className="size-4 text-destructive" />
@@ -222,85 +223,246 @@ function LobbyPlayer({
   )
 }
 
+function TrackSilhouette({ track, name }: { track?: TrackDefinition; name: string }) {
+  if (!track) {
+    return <div aria-label={`Carregando traçado ${name}`} className="h-20 animate-pulse rounded-lg bg-muted/60" />
+  }
+  const width = Math.max(1, track.bounds.maxX - track.bounds.minX)
+  const height = Math.max(1, track.bounds.maxY - track.bounds.minY)
+  const points = track.centerline.map((point) => `${point.x},${-point.y}`).join(' ')
+  return (
+    <svg
+      aria-label={`Traçado ${name}`}
+      className="h-20 w-full"
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      viewBox={`${track.bounds.minX - width * 0.08} ${-track.bounds.maxY - height * 0.08} ${width * 1.16} ${height * 1.16}`}
+    >
+      <polyline
+        fill="none"
+        points={points}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={Math.max(width, height) * 0.014}
+      />
+    </svg>
+  )
+}
+
+function TrackCarousel({
+  catalog,
+  selectedId,
+  disabled,
+  getTrack,
+  onSelect,
+  onLoadError,
+}: {
+  catalog: TrackCatalog | null
+  selectedId: string
+  disabled: boolean
+  getTrack: typeof raceApi.getTrack
+  onSelect: (trackId: string) => void
+  onLoadError: (message: string) => void
+}) {
+  const tracks = useMemo(() => catalog?.tracks ?? [], [catalog])
+  const [start, setStart] = useState(0)
+  const [definitions, setDefinitions] = useState<Record<string, TrackDefinition>>({})
+  const maximumStart = Math.max(0, tracks.length - 3)
+  const visible = useMemo(() => tracks.slice(start, start + 3), [start, tracks])
+  const visibleKey = visible.map((track) => track.id).join('|')
+
+  useEffect(() => {
+    const selectedIndex = tracks.findIndex((track) => track.id === selectedId)
+    if (selectedIndex < 0 || (selectedIndex >= start && selectedIndex < start + 3)) return
+    setStart(Math.min(maximumStart, Math.max(0, selectedIndex - 1)))
+  }, [maximumStart, selectedId, start, tracks])
+
+  useEffect(() => {
+    let cancelled = false
+    const missing = visible.filter((track) => !definitions[track.id])
+    if (missing.length === 0) return
+    Promise.all(missing.map(async (track) => [track.id, await getTrack(track.id)] as const))
+      .then((loaded) => {
+        if (!cancelled) setDefinitions((current) => ({ ...current, ...Object.fromEntries(loaded) }))
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) onLoadError(getErrorMessage(loadError))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [definitions, getTrack, onLoadError, visible, visibleKey])
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Pista</span>
+        <div className="flex gap-2">
+          <Button aria-label="Circuitos anteriores" disabled={disabled || start === 0} onClick={() => setStart((value) => Math.max(0, value - 1))} size="icon" variant="ghost">
+            <ChevronLeft aria-hidden="true" className="size-4" />
+          </Button>
+          <Button aria-label="Próximos circuitos" disabled={disabled || start >= maximumStart} onClick={() => setStart((value) => Math.min(maximumStart, value + 1))} size="icon" variant="ghost">
+            <ChevronRight aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2" role="listbox" aria-label="Selecionar pista">
+        {visible.map((track: TrackCatalogEntry) => {
+          const selected = track.id === selectedId
+          return (
+            <button
+              aria-label={`Selecionar ${track.name}`}
+              aria-selected={selected}
+              className={`min-w-0 rounded-xl border p-2 text-left transition ${selected ? 'border-info bg-info/10 text-info shadow-[0_0_0_1px_rgb(49_199_255/0.25)]' : 'border-border/70 bg-background/35 text-muted-foreground hover:border-info/45 hover:text-foreground'} disabled:cursor-not-allowed disabled:opacity-55`}
+              disabled={disabled}
+              key={track.id}
+              onClick={() => onSelect(track.id)}
+              role="option"
+              type="button"
+            >
+              <TrackSilhouette name={track.name} track={definitions[track.id]} />
+              <span className="mt-2 block truncate text-center text-[11px] font-extrabold text-foreground">{track.name}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function VisibilityToggle({
+  value,
+  disabled = false,
+  onChange,
+}: {
+  value: RoomVisibility
+  disabled?: boolean
+  onChange: (value: RoomVisibility) => void
+}) {
+  const isPublic = value === 'public'
+  return (
+    <Button
+      aria-label={isPublic ? 'Sala pública; tornar privada' : 'Sala privada; tornar pública'}
+      aria-pressed={!isPublic}
+      className={isPublic ? 'text-info' : 'text-warning'}
+      disabled={disabled}
+      onClick={() => onChange(isPublic ? 'private' : 'public')}
+      size="icon"
+      title={isPublic ? 'Sala pública' : 'Sala privada'}
+      type="button"
+      variant="secondary"
+    >
+      {isPublic ? <Unlock aria-hidden="true" className="size-4" /> : <Lock aria-hidden="true" className="size-4" />}
+    </Button>
+  )
+}
+
+function settingsSignature(settings: RoomSettingsUpdate) {
+  return JSON.stringify(settings)
+}
+
 export function OnlineLobbyPage({
   api = onlineApi,
   getTracks = raceApi.getTracks,
+  getTrack = raceApi.getTrack,
   createClient = defaultClientFactory,
 }: LobbyDependencies = {}) {
-  const { session, startGuestSession } = useAuth()
+  const { session, isGuest, isUser, startGuestSession } = useAuth()
   const navigate = useNavigate()
   const { roomCode: routeRoomCode } = useParams()
   const roomCode = routeRoomCode?.toUpperCase() ?? null
   const isLobby = Boolean(roomCode)
   const requestedGuest = useRef(false)
-  const lastSettingsSync = useRef('')
+  const settingsTimer = useRef<number | null>(null)
+  const lastSentSettings = useRef('')
   const onlineSession = useOnlineRoomSession()
   const room = onlineSession.roomCode === roomCode ? onlineSession.room : null
-  const clientStatus =
-    onlineSession.roomCode === roomCode ? onlineSession.status : 'idle'
+  const clientStatus = onlineSession.roomCode === roomCode ? onlineSession.status : 'idle'
+  const { notifications, notify, dismiss } = useNotifications()
 
   const [trackCatalog, setTrackCatalog] = useState<TrackCatalog | null>(null)
   const [rooms, setRooms] = useState<RoomSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [roomsRefreshing, setRoomsRefreshing] = useState(false)
   const [joinCode, setJoinCode] = useState('')
-  const [joinPassword, setJoinPassword] = useState('')
-  const [joinPasswordRequired, setJoinPasswordRequired] = useState(false)
   const [roomName, setRoomName] = useState('')
   const [gridSize, setGridSize] = useState('22')
-  const [createTrackId, setCreateTrackId] = useState('')
+  const [selectedTrackId, setSelectedTrackId] = useState('')
   const [botsEnabled, setBotsEnabled] = useState(false)
   const [botDifficulty, setBotDifficulty] = useState<RoomBotDifficulty>('normal')
   const [visibility, setVisibility] = useState<RoomVisibility>('public')
-  const [roomPassword, setRoomPassword] = useState('')
-  const [clearRoomPassword, setClearRoomPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [readyPending, setReadyPending] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
 
-  const genericEntryError = 'Não foi possível entrar nessa sala. Confira o código, a senha e a disponibilidade.'
+  const genericEntryError = 'Não foi possível entrar nessa sala. Confira o código e a disponibilidade.'
+  const gridError = 'O limite de carros deve estar entre 2 e 22.'
 
   const ensureSession = useCallback(() => {
     if (session || requestedGuest.current) return
     requestedGuest.current = true
     startGuestSession().catch((sessionError: unknown) => {
       requestedGuest.current = false
-      setError(getErrorMessage(sessionError))
+      notify(getErrorMessage(sessionError))
     })
-  }, [session, startGuestSession])
+  }, [notify, session, startGuestSession])
 
   useEffect(() => {
     ensureSession()
   }, [ensureSession])
 
-  const loadSetup = useCallback(async () => {
-    if (isLobby || !session) return
-    setLoading(true)
-    setError(null)
+  useEffect(() => {
+    if (!isGuest || !isLobby) return
+    navigate('/race/setup?mode=online', { replace: true })
+  }, [isGuest, isLobby, navigate])
+
+  const normalizeRooms = useCallback((payload: RoomSummary[]) => (
+    payload.map((item) => roomFromPayload(item, item.code)).filter((item): item is RoomSummary => item !== null)
+  ), [])
+
+  const refreshRooms = useCallback(async () => {
+    if (!session || !isUser || isLobby) return
+    setRoomsRefreshing(true)
     try {
-      const [catalog, publicRooms] = await Promise.all([
-        getTracks(),
-        api.listRooms(session.token),
-      ])
-      setTrackCatalog(catalog)
-      setCreateTrackId((current) => current || catalog.tracks[0]?.id || '')
-      setRooms(publicRooms.map((item) => roomFromPayload(item, item.code)).filter((item): item is RoomSummary => item !== null))
+      setRooms(normalizeRooms(await api.listRooms(session.token)))
     } catch (loadError: unknown) {
-      setError(getErrorMessage(loadError))
+      notify(getErrorMessage(loadError))
     } finally {
-      setLoading(false)
+      setRoomsRefreshing(false)
     }
-  }, [api, getTracks, isLobby, session])
+  }, [api, isLobby, isUser, normalizeRooms, notify, session])
 
   useEffect(() => {
-    void loadSetup()
-  }, [loadSetup])
-
-  useEffect(() => {
-    if (!isLobby || !roomCode || !session) return
+    if (isLobby || !session) return
+    if (!isUser) {
+      setLoading(false)
+      return
+    }
     let disposed = false
     setLoading(true)
-    setError(null)
+    Promise.all([getTracks(), api.listRooms(session.token)])
+      .then(([catalog, publicRooms]) => {
+        if (disposed) return
+        setTrackCatalog(catalog)
+        setSelectedTrackId((current) => current || catalog.tracks[0]?.id || '')
+        setRooms(normalizeRooms(publicRooms))
+      })
+      .catch((loadError: unknown) => {
+        if (!disposed) notify(getErrorMessage(loadError))
+      })
+      .finally(() => {
+        if (!disposed) setLoading(false)
+      })
+    return () => {
+      disposed = true
+    }
+  }, [api, getTracks, isLobby, isUser, normalizeRooms, notify, session])
+
+  useEffect(() => {
+    if (!isLobby || !roomCode || !session || !isUser) return
+    let disposed = false
+    setLoading(true)
     const loadLobby = async () => {
       try {
         const [catalog, initialRoom] = await Promise.all([
@@ -308,18 +470,21 @@ export function OnlineLobbyPage({
           api.getRoom(roomCode, session.token),
         ])
         if (disposed) return
-        setTrackCatalog(catalog)
         const normalized = roomFromPayload(initialRoom, roomCode)
-        if (normalized) {
-          setGridSize(String(normalized.limit))
-          setCreateTrackId(normalized.trackId)
-          setBotsEnabled(normalized.settings?.botsEnabled === true)
-          setBotDifficulty(normalized.settings?.botDifficulty ?? 'normal')
-          setVisibility(normalized.settings?.visibility ?? 'public')
-          setClearRoomPassword(false)
-        } else {
-          throw new Error('A resposta da sala é inválida.')
-        }
+        if (!normalized) throw new Error('A resposta da sala é inválida.')
+        setTrackCatalog(catalog)
+        setGridSize(String(normalized.limit))
+        setSelectedTrackId(normalized.trackId)
+        setBotsEnabled(normalized.settings?.botsEnabled === true)
+        setBotDifficulty(normalized.settings?.botDifficulty ?? 'normal')
+        setVisibility(normalized.settings?.visibility ?? 'public')
+        lastSentSettings.current = settingsSignature({
+          trackId: normalized.trackId,
+          gridSize: normalized.limit,
+          botsEnabled: normalized.settings?.botsEnabled === true,
+          botDifficulty: normalized.settings?.botDifficulty ?? 'normal',
+          visibility: normalized.settings?.visibility ?? 'public',
+        })
         await onlineRoomSession.connect({
           roomCode,
           initialRoom: normalized,
@@ -329,7 +494,7 @@ export function OnlineLobbyPage({
           createClient,
         })
       } catch {
-        if (!disposed) setError(genericEntryError)
+        if (!disposed) notify(genericEntryError)
       } finally {
         if (!disposed) setLoading(false)
       }
@@ -338,23 +503,24 @@ export function OnlineLobbyPage({
     return () => {
       disposed = true
     }
-  }, [api, createClient, genericEntryError, getTracks, isLobby, roomCode, session])
+  }, [api, createClient, genericEntryError, getTracks, isLobby, isUser, notify, roomCode, session])
 
   useEffect(() => {
     if (!isLobby || onlineSession.roomCode || !onlineSession.error) return
-    setError(
+    notify(
       onlineSession.error.code === 'removed_from_room'
         ? 'Você foi removido da sala pelo host.'
         : onlineSession.error.code === 'room_closed'
           ? 'A sala foi encerrada pelo host.'
           : genericEntryError,
     )
+    onlineRoomSession.clearError()
     navigate('/race/setup?mode=online', { replace: true })
-  }, [genericEntryError, isLobby, navigate, onlineSession.error, onlineSession.roomCode])
+  }, [genericEntryError, isLobby, navigate, notify, onlineSession.error, onlineSession.roomCode])
 
   useEffect(() => {
     if (isLobby || !onlineSession.error) return
-    setError(
+    notify(
       onlineSession.error.code === 'removed_from_room'
         ? 'Você foi removido da sala pelo host.'
         : onlineSession.error.code === 'room_closed'
@@ -362,25 +528,7 @@ export function OnlineLobbyPage({
           : onlineSession.error.message || genericEntryError,
     )
     onlineRoomSession.clearError()
-  }, [genericEntryError, isLobby, onlineSession.error])
-
-  useEffect(() => {
-    if (!room) return
-    const settingsSignature = JSON.stringify([
-      room.limit,
-      room.trackId,
-      room.settings?.botsEnabled,
-      room.settings?.botDifficulty,
-      room.settings?.visibility,
-    ])
-    if (lastSettingsSync.current === settingsSignature) return
-    lastSettingsSync.current = settingsSignature
-    setGridSize(String(room.limit))
-    setCreateTrackId(room.trackId)
-    setBotsEnabled(room.settings?.botsEnabled === true)
-    setBotDifficulty(room.settings?.botDifficulty ?? 'normal')
-    setVisibility(room.settings?.visibility ?? 'public')
-  }, [room])
+  }, [genericEntryError, isLobby, notify, onlineSession.error])
 
   const currentPlayer = useMemo(() => {
     if (!room || !session) return null
@@ -389,57 +537,101 @@ export function OnlineLobbyPage({
     ) ?? null
   }, [room, session])
   const isHost = Boolean(room && session && (room.hostId === session.subject || room.hostId === currentPlayer?.id))
-  const allHumansReady = Boolean(
-    room?.players?.filter((player) => !player.bot).every((player) => player.ready),
+
+  useEffect(() => {
+    if (!room || isHost) return
+    setGridSize(String(room.limit))
+    setSelectedTrackId(room.trackId)
+    setBotsEnabled(room.settings?.botsEnabled === true)
+    setBotDifficulty(room.settings?.botDifficulty ?? 'normal')
+    setVisibility(room.settings?.visibility ?? 'public')
+  }, [isHost, room])
+
+  const draftSettings = useMemo<RoomSettingsUpdate>(() => ({
+    trackId: selectedTrackId,
+    gridSize: Number(gridSize),
+    botsEnabled,
+    botDifficulty,
+    visibility,
+  }), [botDifficulty, botsEnabled, gridSize, selectedTrackId, visibility])
+
+  const persistSettings = useCallback(async (force = false) => {
+    if (!room || !session || !isHost || room.state !== 'lobby') return true
+    const parsedGrid = Number(gridSize)
+    if (!Number.isInteger(parsedGrid) || parsedGrid < GRID_MIN || parsedGrid > GRID_MAX) {
+      notify(gridError)
+      return false
+    }
+    const changes = { ...draftSettings, gridSize: parsedGrid }
+    const signature = settingsSignature(changes)
+    if (!force && lastSentSettings.current === signature) return true
+    lastSentSettings.current = signature
+    setSettingsSaving(true)
+    try {
+      const updated = await api.updateRoom(room.code, changes, session.token)
+      const normalized = roomFromPayload(updated, room.code, room)
+      if (normalized) onlineRoomSession.setRoom(normalized)
+      return true
+    } catch (saveError: unknown) {
+      lastSentSettings.current = ''
+      notify(getErrorMessage(saveError))
+      return false
+    } finally {
+      setSettingsSaving(false)
+    }
+  }, [api, draftSettings, gridError, gridSize, isHost, notify, room, session])
+
+  useEffect(() => {
+    if (!room || !isHost || room.state !== 'lobby') return
+    const signature = settingsSignature(draftSettings)
+    if (signature === lastSentSettings.current || !Number.isInteger(draftSettings.gridSize)) return
+    if (settingsTimer.current !== null) window.clearTimeout(settingsTimer.current)
+    settingsTimer.current = window.setTimeout(() => {
+      settingsTimer.current = null
+      void persistSettings()
+    }, 350)
+    return () => {
+      if (settingsTimer.current !== null) window.clearTimeout(settingsTimer.current)
+    }
+  }, [draftSettings, isHost, persistSettings, room])
+
+  const nonHostHumansReady = Boolean(
+    room?.players
+      ?.filter((player) => !player.bot && player.userId !== room.hostId && player.id !== room.hostId)
+      .every((player) => player.ready),
   )
   const minimumGridReached = Boolean(
-    room &&
-      (room.participantCount >= 2 ||
-        (room.settings?.botsEnabled === true &&
-          room.players?.some((player) => !player.bot))),
+    room && (room.participantCount >= 2 || room.settings?.botsEnabled === true),
   )
   const canStart = Boolean(
-    room && isHost && room.state === 'lobby' && minimumGridReached && allHumansReady,
+    room && isHost && room.state === 'lobby' && minimumGridReached && nonHostHumansReady && !settingsSaving,
   )
 
-  const handleJoin = useCallback(
-    async (code = joinCode, passwordRequired = joinPasswordRequired) => {
-      const normalizedCode = code.replace(/\D/g, '').slice(0, 4)
-      if (!/^\d{4}$/.test(normalizedCode)) {
-        setError(genericEntryError)
-        return
-      }
-      if (!session) return
-      setSubmitting(true)
-      setError(null)
-      try {
-        const joined = await api.joinRoom(
-          normalizedCode,
-          passwordRequired || joinPassword ? { password: joinPassword } : {},
-          session.token,
-        )
-        const target = roomFromPayload(joined, normalizedCode)?.code ?? normalizedCode
-        navigate(`/race/lobby/${target}`)
-      } catch {
-        setError(genericEntryError)
-      } finally {
-        setSubmitting(false)
-      }
-    }, [api, genericEntryError, joinCode, joinPassword, joinPasswordRequired, navigate, session],
-  )
-
-  const handleCreate = useCallback(async () => {
-    if (!session) return
-    if (roomPassword && roomPassword.length < 6) {
-      setError('A senha da sala precisa ter pelo menos 6 caracteres.')
+  const handleJoin = useCallback(async (code = joinCode) => {
+    const normalizedCode = code.replace(/\D/g, '').slice(0, 4)
+    if (!/^\d{4}$/.test(normalizedCode)) {
+      notify(genericEntryError)
       return
     }
+    if (!session || !isUser) return
     setSubmitting(true)
-    setError(null)
+    try {
+      const joined = await api.joinRoom(normalizedCode, session.token)
+      const target = roomFromPayload(joined, normalizedCode)?.code ?? normalizedCode
+      navigate(`/race/lobby/${target}`)
+    } catch {
+      notify(genericEntryError)
+    } finally {
+      setSubmitting(false)
+    }
+  }, [api, genericEntryError, isUser, joinCode, navigate, notify, session])
+
+  const handleCreate = useCallback(async () => {
+    if (!session || !isUser) return
+    setSubmitting(true)
     const request: CreateRoomRequest = {
       name: roomName.trim() || undefined,
       visibility,
-      password: roomPassword || undefined,
     }
     try {
       const created = await api.createRoom(request, session.token)
@@ -447,43 +639,34 @@ export function OnlineLobbyPage({
       if (!target) throw new Error('A resposta da sala não trouxe um código válido.')
       navigate(`/race/lobby/${target}`)
     } catch (createError: unknown) {
-      setError(getErrorMessage(createError))
+      notify(getErrorMessage(createError))
     } finally {
       setSubmitting(false)
     }
-  }, [api, navigate, roomName, roomPassword, session, visibility])
+  }, [api, isUser, navigate, notify, roomName, session, visibility])
 
-  const handleSaveSettings = useCallback(async () => {
-    if (!room || !session || !isHost || room.state !== 'lobby') return
-    const parsedGrid = Number(gridSize)
-    if (!Number.isInteger(parsedGrid) || parsedGrid < 2 || parsedGrid > 22) {
-      setError('O grid deve ter entre 2 e 22 carros.')
+  const handleGridChange = useCallback((rawValue: string) => {
+    const digits = rawValue.replace(/\D/g, '')
+    if (!digits) {
+      setGridSize('')
       return
     }
-    if (roomPassword && roomPassword.length < 6) {
-      setError('A senha da sala precisa ter pelo menos 6 caracteres.')
-      return
+    const value = Number(digits)
+    if (value > GRID_MAX) {
+      setGridSize(String(GRID_MAX))
+      notify(gridError)
+    } else if (value < GRID_MIN) {
+      setGridSize(String(GRID_MIN))
+      notify(gridError)
+    } else {
+      setGridSize(String(value))
     }
-    const changes: RoomSettingsUpdate = {
-      trackId: createTrackId,
-      gridSize: parsedGrid,
-      botsEnabled,
-      botDifficulty,
-      visibility,
-      password: clearRoomPassword ? '' : roomPassword || undefined,
-    }
-    setSettingsSaving(true)
-    setError(null)
-    try {
-      const updated = await api.updateRoom(room.code, changes, session.token)
-      const normalized = roomFromPayload(updated, room.code)
-      if (normalized) onlineRoomSession.setRoom(normalized)
-    } catch (saveError: unknown) {
-      setError(getErrorMessage(saveError))
-    } finally {
-      setSettingsSaving(false)
-    }
-  }, [api, botDifficulty, botsEnabled, clearRoomPassword, createTrackId, gridSize, isHost, room, roomPassword, session, visibility])
+  }, [gridError, notify])
+
+  const adjustGrid = useCallback((change: number) => {
+    const value = Math.min(GRID_MAX, Math.max(GRID_MIN, (Number(gridSize) || GRID_MIN) + change))
+    setGridSize(String(value))
+  }, [gridSize])
 
   const handleRemove = useCallback(async (playerId: string) => {
     if (!room || !session || !isHost) return
@@ -492,9 +675,9 @@ export function OnlineLobbyPage({
       const normalized = roomFromPayload(updated, room.code, room)
       if (normalized) onlineRoomSession.setRoom(normalized)
     } catch (removeError: unknown) {
-      setError(getErrorMessage(removeError))
+      notify(getErrorMessage(removeError))
     }
-  }, [api, isHost, room, session])
+  }, [api, isHost, notify, room, session])
 
   const handleClose = useCallback(async () => {
     if (!room || !session || !isHost) return
@@ -503,43 +686,59 @@ export function OnlineLobbyPage({
       onlineRoomSession.disconnect()
       navigate('/race/setup?mode=online', { replace: true })
     } catch (closeError: unknown) {
-      setError(getErrorMessage(closeError))
+      notify(getErrorMessage(closeError))
     }
-  }, [api, isHost, navigate, room, session])
+  }, [api, isHost, navigate, notify, room, session])
 
   const handleLeave = useCallback(async () => {
     if (!room || !session) return
     setSubmitting(true)
-    setError(null)
     try {
       await api.leaveRoom(room.code, session.token)
       onlineRoomSession.disconnect()
       navigate('/race/setup?mode=online', { replace: true })
     } catch (leaveError: unknown) {
-      setError(getErrorMessage(leaveError))
+      notify(getErrorMessage(leaveError))
     } finally {
       setSubmitting(false)
     }
-  }, [api, navigate, room, session])
+  }, [api, navigate, notify, room, session])
 
   const handleStart = useCallback(async () => {
     if (!room || !session || !isHost || !canStart) return
+    if (settingsTimer.current !== null) window.clearTimeout(settingsTimer.current)
     setSubmitting(true)
-    setError(null)
     try {
+      if (!(await persistSettings(true))) return
       const started = await api.startRoom(room.code, session.token)
       const normalized = roomFromPayload(started, room.code)
       if (normalized) onlineRoomSession.setRoom(normalized)
     } catch (startError: unknown) {
-      setError(getErrorMessage(startError))
+      notify(getErrorMessage(startError))
     } finally {
       setSubmitting(false)
     }
-  }, [api, canStart, isHost, room, session])
+  }, [api, canStart, isHost, notify, persistSettings, room, session])
+
+  const handleCancelQualification = useCallback(async () => {
+    if (!room || !session || !isHost || room.state !== 'qualifying') return
+    setSubmitting(true)
+    try {
+      const cancelled = await api.cancelQualification(room.code, session.token)
+      const normalized = roomFromPayload(cancelled, room.code)
+      if (normalized) onlineRoomSession.setRoom(normalized)
+      notify('Classificação cancelada. A sala voltou ao lobby.', 'success')
+    } catch (cancelError: unknown) {
+      notify(getErrorMessage(cancelError))
+    } finally {
+      setSubmitting(false)
+    }
+  }, [api, isHost, notify, room, session])
 
   if (!session || loading) {
     return (
       <AppShell moduleLabel="Lobby online">
+        <NotificationStack notifications={notifications} onDismiss={dismiss} />
         <div className="grid min-h-[50vh] place-items-center text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-3"><LoaderCircle aria-hidden="true" className="size-5 animate-spin text-info" /> Preparando conexão online…</span>
         </div>
@@ -549,14 +748,20 @@ export function OnlineLobbyPage({
 
   if (isLobby && room) {
     const players = room.players ?? []
+    const humanCount = players.filter((player) => !player.bot).length
+    const actualBotCount = players.filter((player) => player.bot).length
+    const configuredBotCount = room.settings?.botsEnabled ? Math.max(0, room.limit - humanCount) : 0
+    const botCount = Math.max(actualBotCount, configuredBotCount)
+    const settingsDisabled = room.state !== 'lobby'
     return (
       <AppShell moduleLabel={`Lobby // ${room.code}`}>
+        <NotificationStack notifications={notifications} onDismiss={dismiss} />
         <section className="space-y-7">
           <header className="flex flex-wrap items-end justify-between gap-5">
             <div>
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">Sala online · {room.code}</p>
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">Sala online</p>
               <h1 className="display-heading mt-3 text-6xl sm:text-8xl">{room.name}</h1>
-              <p className="mt-4 text-sm text-muted-foreground">{trackNameFor(trackCatalog, room.trackId)} · grid {room.limit} · {room.hasPassword ? 'protegida por senha' : 'sala pública'}</p>
+              <p className="mt-4 text-sm text-muted-foreground">{trackNameFor(trackCatalog, room.trackId)} · grid {room.limit}</p>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-border bg-card/70 px-3 py-2 text-xs font-bold">
               <span className={`size-2 rounded-full ${clientStatus === 'connected' ? 'bg-success shadow-[0_0_10px_var(--success)]' : clientStatus === 'reconnecting' ? 'bg-warning' : 'bg-muted-foreground'}`} />
@@ -564,16 +769,14 @@ export function OnlineLobbyPage({
             </div>
           </header>
 
-          <GenericError message={error} />
-
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.7fr)]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.78fr)]">
             <section className="surface-panel p-5 sm:p-7">
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-5">
                 <div>
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">Pilotos</p>
                   <h2 className="mt-1 font-display text-3xl font-black uppercase italic">{players.length}/{room.limit}</h2>
                 </div>
-                <span className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground"><Users aria-hidden="true" className="size-4 text-info" /> {allHumansReady ? 'Todos os humanos prontos' : 'Aguardando confirmações'}</span>
+                <span className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground"><Users aria-hidden="true" className="size-4 text-info" /> {nonHostHumansReady ? 'Convidados prontos' : 'Aguardando convidados'}</span>
               </div>
               <ul className="space-y-2">
                 {players.map((player) => (
@@ -582,109 +785,86 @@ export function OnlineLobbyPage({
                     isCurrentPlayer={player.id === currentPlayer?.id || player.userId === session.subject}
                     key={player.id}
                     onRemove={() => void handleRemove(player.id)}
-                    participantIsHost={
-                      player.userId === room.hostId || player.id === room.hostId
-                    }
+                    participantIsHost={player.userId === room.hostId || player.id === room.hostId}
                     player={player}
                   />
                 ))}
               </ul>
-              {players.length < 2 && <p className="mt-4 text-xs font-semibold text-warning">São necessários pelo menos dois carros para iniciar.</p>}
+              {players.length < 2 && !room.settings?.botsEnabled && <p className="mt-4 text-xs font-semibold text-warning">São necessários pelo menos dois carros para iniciar.</p>}
               <div className="mt-6 flex flex-wrap gap-3 border-t border-border/70 pt-5">
-                <Button
-                  disabled={!currentPlayer || readyPending || clientStatus !== 'connected' || room.state !== 'lobby'}
-                  onClick={() => {
-                    setReadyPending(true)
-                    onlineRoomSession.setReady(!currentPlayer?.ready)
-                    window.setTimeout(() => setReadyPending(false), 450)
-                  }}
-                  size="lg"
-                  variant={currentPlayer?.ready ? 'secondary' : 'default'}
-                >
-                  {currentPlayer?.ready ? (
-                    <ToggleRight aria-hidden="true" className="size-4" />
-                  ) : (
-                    <ToggleLeft aria-hidden="true" className="size-4" />
-                  )}
-                  {currentPlayer?.ready ? 'Retirar pronto' : 'Estou pronto'}
-                </Button>
-                {isHost && <Button disabled={!canStart || submitting} onClick={() => void handleStart()} size="lg"><Crown aria-hidden="true" className="size-4" /> Iniciar classificação</Button>}
+                {!isHost && (
+                  <Button
+                    disabled={!currentPlayer || readyPending || clientStatus !== 'connected' || room.state !== 'lobby'}
+                    onClick={() => {
+                      setReadyPending(true)
+                      onlineRoomSession.setReady(!currentPlayer?.ready)
+                      window.setTimeout(() => setReadyPending(false), 450)
+                    }}
+                    size="lg"
+                    variant={currentPlayer?.ready ? 'secondary' : 'default'}
+                  >
+                    {currentPlayer?.ready ? <ToggleRight aria-hidden="true" className="size-4" /> : <ToggleLeft aria-hidden="true" className="size-4" />}
+                    {currentPlayer?.ready ? 'Retirar pronto' : 'Estou pronto'}
+                  </Button>
+                )}
+                {isHost && room.state === 'lobby' && <Button disabled={!canStart || submitting} onClick={() => void handleStart()} size="lg"><Crown aria-hidden="true" className="size-4" /> Iniciar classificação</Button>}
+                {isHost && room.state === 'qualifying' && <Button disabled={submitting} onClick={() => void handleCancelQualification()} size="lg" variant="secondary"><RefreshCw aria-hidden="true" className="size-4" /> Cancelar classificação</Button>}
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button size="lg" variant="secondary">
-                      <DoorOpen aria-hidden="true" className="size-4" /> Sair da sala
-                    </Button>
-                  </AlertDialogTrigger>
+                  <AlertDialogTrigger asChild><Button size="lg" variant="secondary"><DoorOpen aria-hidden="true" className="size-4" /> Sair da sala</Button></AlertDialogTrigger>
                   <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Sair de {room.name}?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Deseja realmente sair da sala {room.name}? Sua vaga será liberada para outro piloto.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Continuar na sala</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => void handleLeave()}>
-                        Sair da sala
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
+                    <AlertDialogHeader><AlertDialogTitle>Sair de {room.name}?</AlertDialogTitle><AlertDialogDescription>Deseja realmente sair da sala {room.name}? Sua vaga será liberada para outro piloto.</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogFooter><AlertDialogCancel>Continuar na sala</AlertDialogCancel><AlertDialogAction onClick={() => void handleLeave()}>Sair da sala</AlertDialogAction></AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
                 {isHost && room.state === 'lobby' && (
                   <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="lg" variant="destructive">
-                        <Trash2 aria-hidden="true" className="size-4" /> Fechar sala
-                      </Button>
-                    </AlertDialogTrigger>
+                    <AlertDialogTrigger asChild><Button size="lg" variant="destructive"><Trash2 aria-hidden="true" className="size-4" /> Fechar sala</Button></AlertDialogTrigger>
                     <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Encerrar {room.name}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          A sala será fechada para todos os participantes. Se quiser apenas sair e transferir o host, use “Sair da sala”.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => void handleClose()}>
-                          Fechar sala para todos
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
+                      <AlertDialogHeader><AlertDialogTitle>Encerrar {room.name}?</AlertDialogTitle><AlertDialogDescription>A sala será fechada para todos. Se quiser transferir o host, use “Sair da sala”.</AlertDialogDescription></AlertDialogHeader>
+                      <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => void handleClose()}>Fechar sala para todos</AlertDialogAction></AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
                 )}
               </div>
             </section>
 
-            <aside className="space-y-5">
-              <section className="surface-panel p-5 sm:p-6">
-                <div className="mb-5 flex items-center gap-3"><Settings2 aria-hidden="true" className="size-5 text-info" /><div><p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Configuração</p><h2 className="font-display text-2xl font-black uppercase italic">Resumo da sala</h2></div></div>
-                <dl className="space-y-3 text-sm">
-                  <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Pista</dt><dd className="text-right font-bold">{trackNameFor(trackCatalog, room.trackId)}</dd></div>
-                  <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Estado</dt><dd className="font-bold">{formatRoomState(room.state)}</dd></div>
-                  <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Bots</dt><dd className="font-bold">{room.settings?.botsEnabled ? `Ativos · ${room.settings.botDifficulty}` : 'Desativados'}</dd></div>
-                  <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Host</dt><dd className="font-mono text-xs font-bold">{room.hostName ?? room.hostId.slice(0, 8)}</dd></div>
-                </dl>
-                {room.settingsLocked && room.state !== 'lobby' && (
-                  <p className="mt-4 rounded-xl border border-warning/30 bg-warning/8 p-3 text-xs leading-5 text-warning">
-                    Configurações bloqueadas porque a sala já saiu do lobby.
-                  </p>
-                )}
-              </section>
-
-              {isHost && room.state === 'lobby' && (
+            <aside>
+              {isHost ? (
                 <section className="surface-panel p-5 sm:p-6">
-                  <div className="mb-5 flex items-center gap-3"><Settings2 aria-hidden="true" className="size-5 text-primary" /><h2 className="font-display text-2xl font-black uppercase italic">Ajustes do host</h2></div>
-                  <div className="space-y-4">
-                    <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Pista<select className="mt-2 h-11 w-full rounded-[10px] border border-input bg-background/65 px-3 text-sm font-semibold text-foreground" onChange={(event) => setCreateTrackId(event.target.value)} value={createTrackId}>{trackCatalog?.tracks.map((track) => <option key={track.id} value={track.id}>{track.name}</option>)}</select></label>
-                    <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Limite de carros<Input max={22} min={2} onChange={(event) => setGridSize(event.target.value)} type="number" value={gridSize} /></label>
-                    <label className="flex items-center gap-3 text-sm font-semibold"><input checked={botsEnabled} onChange={(event) => setBotsEnabled(event.target.checked)} type="checkbox" /> Habilitar bots</label>
-                    {botsEnabled && <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Dificuldade<select className="mt-2 h-11 w-full rounded-[10px] border border-input bg-background/65 px-3 text-sm font-semibold text-foreground" onChange={(event) => setBotDifficulty(event.target.value as RoomBotDifficulty)} value={botDifficulty}><option value="easy">Fácil</option><option value="normal">Normal</option><option value="hard">Difícil</option></select></label>}
-                    <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Visibilidade<select className="mt-2 h-11 w-full rounded-[10px] border border-input bg-background/65 px-3 text-sm font-semibold text-foreground" onChange={(event) => setVisibility(event.target.value as RoomVisibility)} value={visibility}><option value="public">Pública</option><option value="private">Privada</option></select></label>
-                    <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Nova senha (opcional)<Input minLength={6} onChange={(event) => setRoomPassword(event.target.value)} placeholder="Mínimo de 6 caracteres" type="password" value={roomPassword} /></label>
-                    {room.hasPassword && <label className="flex items-center gap-3 text-sm font-semibold"><input checked={clearRoomPassword} onChange={(event) => setClearRoomPassword(event.target.checked)} type="checkbox" /> Remover senha</label>}
-                    <Button disabled={settingsSaving} onClick={() => void handleSaveSettings()} variant="secondary">{settingsSaving ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Check aria-hidden="true" className="size-4" />} Salvar ajustes</Button>
+                  <div className="mb-5 flex items-center justify-between gap-3 border-b border-border/70 pb-4">
+                    <div className="flex items-center gap-3"><Settings2 aria-hidden="true" className="size-5 text-primary" /><h2 className="font-display text-2xl font-black uppercase italic">Ajustes</h2></div>
+                    <span className="rounded-lg border border-info/30 bg-info/8 px-3 py-1.5 font-mono text-sm font-black tracking-[0.22em] text-info" aria-label={`Código da sala ${room.code}`}>{room.code}</span>
                   </div>
+                  <div className="space-y-5">
+                    <TrackCarousel catalog={trackCatalog} disabled={settingsDisabled} getTrack={getTrack} onLoadError={notify} onSelect={setSelectedTrackId} selectedId={selectedTrackId} />
+                    <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                      Limite de carros
+                      <div className="relative mt-2">
+                        <Input aria-label="Limite de carros" className="pr-24" disabled={settingsDisabled} inputMode="numeric" onBlur={() => { if (!gridSize) { setGridSize(String(GRID_MIN)); notify(gridError) } }} onChange={(event) => handleGridChange(event.target.value)} type="text" value={gridSize} />
+                        <div className="absolute inset-y-1 right-1 flex gap-1">
+                          <Button aria-label="Diminuir limite de carros" className="h-9 w-9 bg-info/70 hover:bg-info/85" disabled={settingsDisabled || Number(gridSize) <= GRID_MIN} onClick={() => adjustGrid(-1)} size="icon" type="button"><Minus aria-hidden="true" className="size-4" /></Button>
+                          <Button aria-label="Aumentar limite de carros" className="h-9 w-9 bg-info hover:bg-info/85" disabled={settingsDisabled || Number(gridSize) >= GRID_MAX} onClick={() => adjustGrid(1)} size="icon" type="button"><Plus aria-hidden="true" className="size-4" /></Button>
+                        </div>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-3 text-sm font-semibold"><input checked={botsEnabled} disabled={settingsDisabled} onChange={(event) => setBotsEnabled(event.target.checked)} type="checkbox" /> Habilitar bots</label>
+                    {botsEnabled && <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Dificuldade<select className="mt-2 h-11 w-full rounded-[10px] border border-input bg-background/65 px-3 text-sm font-semibold text-foreground disabled:opacity-50" disabled={settingsDisabled} onChange={(event) => setBotDifficulty(event.target.value as RoomBotDifficulty)} value={botDifficulty}><option value="easy">Fácil</option><option value="normal">Normal</option><option value="hard">Difícil</option></select></label>}
+                    <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Visibilidade</span><VisibilityToggle disabled={settingsDisabled} onChange={setVisibility} value={visibility} /></div>
+                    {settingsSaving && <p className="inline-flex items-center gap-2 text-xs font-semibold text-info"><LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> Sincronizando ajustes…</p>}
+                    {settingsDisabled && <p className="rounded-xl border border-warning/30 bg-warning/8 p-3 text-xs leading-5 text-warning">Os ajustes ficam bloqueados durante a classificação. Cancele antes do primeiro carro andar para voltar ao lobby.</p>}
+                  </div>
+                </section>
+              ) : (
+                <section className="surface-panel p-5 sm:p-6">
+                  <div className="mb-5 flex items-center justify-between gap-3 border-b border-border/70 pb-4">
+                    <div className="flex items-center gap-3"><Settings2 aria-hidden="true" className="size-5 text-info" /><h2 className="font-display text-2xl font-black uppercase italic">Resumo da sala</h2></div>
+                    <span className="rounded-lg border border-info/30 bg-info/8 px-3 py-1.5 font-mono text-sm font-black tracking-[0.22em] text-info" aria-label={`Código da sala ${room.code}`}>{room.code}</span>
+                  </div>
+                  <dl className="space-y-3 text-sm">
+                    <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Pista</dt><dd className="text-right font-bold">{trackNameFor(trackCatalog, room.trackId)}</dd></div>
+                    <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Estado</dt><dd className="font-bold">{formatRoomState(room.state)}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Bots</dt><dd className="text-right font-bold">{room.settings?.botsEnabled ? `Ativos · ${botCount} · ${formatDifficulty(room.settings.botDifficulty)}` : 'Inativos · 0'}</dd></div>
+                  </dl>
                 </section>
               )}
             </aside>
@@ -694,42 +874,53 @@ export function OnlineLobbyPage({
     )
   }
 
+  const setupContent = (
+    <section className="space-y-7">
+      <header className="max-w-3xl">
+        <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">Online // matchmaking</p>
+        <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Entre no lobby.</h1>
+        <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">Salas de até 22 pilotos, com a mesma pista e as mesmas regras para todos.</p>
+      </header>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+        <section className="surface-panel p-5 sm:p-7">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-5"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">Salas públicas</p><h2 className="mt-1 font-display text-3xl font-black uppercase italic">Encontrar corrida</h2></div><Button aria-label="Atualizar salas" disabled={roomsRefreshing} onClick={() => void refreshRooms()} size="icon" variant="ghost"><RefreshCw aria-hidden="true" className={`size-4 ${roomsRefreshing ? 'animate-spin' : ''}`} /></Button></div>
+          <RoomList joining={submitting} onJoin={(code) => void handleJoin(code)} rooms={rooms} />
+          <div className="mt-6 border-t border-border/70 pt-5">
+            <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Entrar em sala privada</p>
+            <div className="flex flex-wrap gap-2"><Input aria-label="Código de quatro dígitos" className="max-w-44 font-mono tracking-[0.35em]" inputMode="numeric" maxLength={4} onChange={(event) => setJoinCode(event.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="0000" value={joinCode} /><Button aria-label="Entrar na sala por código" disabled={submitting || joinCode.length !== 4} onClick={() => void handleJoin()}><DoorOpen aria-hidden="true" className="size-4" /> Entrar</Button></div>
+            <p className="mt-3 text-xs text-muted-foreground">O código de quatro dígitos é a chave de acesso. Código inválido e sala indisponível usam a mesma mensagem.</p>
+          </div>
+        </section>
+
+        <section className="surface-panel p-5 sm:p-7">
+          <div className="mb-5 flex items-center gap-3 border-b border-border/70 pb-5"><Plus aria-hidden="true" className="size-5 text-primary" /><div><p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Host</p><h2 className="mt-1 font-display text-3xl font-black uppercase italic">Criar sala</h2></div></div>
+          <div className="space-y-4">
+            <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Nome curto (opcional)<Input maxLength={40} onChange={(event) => setRoomName(event.target.value)} placeholder="Ex.: Treino de sexta" value={roomName} /></label>
+            <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Visibilidade</span><VisibilityToggle onChange={setVisibility} value={visibility} /></div>
+            <Button className="w-full" disabled={submitting} onClick={() => void handleCreate()} size="lg"><Plus aria-hidden="true" className="size-4" /> {submitting ? 'Criando sala…' : 'Criar sala'}</Button>
+          </div>
+        </section>
+      </div>
+      <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground"><ShieldAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /> Salas públicas permitem entrada direta; salas privadas são acessadas somente pelo código exibido dentro do lobby.</p>
+    </section>
+  )
+
   return (
     <AppShell moduleLabel="Lobby online">
-      <section className="space-y-7">
-        <header className="max-w-3xl">
-          <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-info">Online // matchmaking</p>
-          <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Entre no lobby.</h1>
-          <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">Salas de até 22 pilotos, com a mesma pista e as mesmas regras para todos. Guest e contas podem participar desta etapa.</p>
-        </header>
-        <GenericError message={error} />
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
-          <section className="surface-panel p-5 sm:p-7">
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-5"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">Salas públicas</p><h2 className="mt-1 font-display text-3xl font-black uppercase italic">Encontrar corrida</h2></div><Button aria-label="Atualizar salas" onClick={() => void loadSetup()} size="icon" variant="ghost"><RefreshCw aria-hidden="true" className="size-4" /></Button></div>
-            <RoomList onJoin={(code, passwordRequired) => { setJoinCode(code); setJoinPasswordRequired(passwordRequired); setError(null) }} rooms={rooms} trackCatalog={trackCatalog} />
-            <div className="mt-6 border-t border-border/70 pt-5">
-              <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Entrar por código</p>
-              <div className="flex flex-wrap gap-2"><Input aria-label="Código de quatro dígitos" className="max-w-44 font-mono tracking-[0.35em]" inputMode="numeric" maxLength={4} onChange={(event) => setJoinCode(event.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="0000" value={joinCode} /><Button aria-label="Entrar na sala por código" disabled={submitting || joinCode.length !== 4} onClick={() => void handleJoin()}><DoorOpen aria-hidden="true" className="size-4" /> Entrar</Button></div>
-              {(joinPasswordRequired || joinCode.length === 4) && <Input aria-label="Senha da sala" className="mt-3 max-w-sm" onChange={(event) => setJoinPassword(event.target.value)} placeholder="Senha, se a sala exigir" type="password" value={joinPassword} />}
-              <p className="mt-3 text-xs text-muted-foreground">Código inválido, sala cheia e senha incorreta usam a mesma mensagem por segurança.</p>
+      <NotificationStack notifications={notifications} onDismiss={dismiss} />
+      {isGuest ? (
+        <div className="relative min-h-[34rem]">
+          <div aria-hidden="true" className="pointer-events-none select-none opacity-35 blur-[2px]">{setupContent}</div>
+          <div className="absolute inset-0 z-10 grid place-items-start bg-background/20 pt-28 sm:place-items-center sm:pt-0">
+            <div className="surface-panel mx-4 max-w-md border-info/35 p-7 text-center shadow-2xl">
+              <Lock aria-hidden="true" className="mx-auto size-8 text-info" />
+              <h2 className="mt-4 font-display text-3xl font-black uppercase italic">Login necessário</h2>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">Você pode conhecer as formas de entrada, mas precisa entrar em uma conta para acessar o modo online.</p>
+              <Button className="mt-6" onClick={() => navigate('/login')} size="lg"><UserRound aria-hidden="true" className="size-4" /> Fazer login</Button>
             </div>
-          </section>
-
-          <section className="surface-panel p-5 sm:p-7">
-            <div className="mb-5 flex items-center gap-3 border-b border-border/70 pb-5"><Plus aria-hidden="true" className="size-5 text-primary" /><div><p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">Host</p><h2 className="mt-1 font-display text-3xl font-black uppercase italic">Criar sala</h2></div></div>
-            <div className="space-y-4">
-              <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Nome curto (opcional)<Input maxLength={40} onChange={(event) => setRoomName(event.target.value)} placeholder="Ex.: Treino de sexta" value={roomName} /></label>
-              <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Visibilidade<select className="mt-2 h-11 w-full rounded-[10px] border border-input bg-background/65 px-3 text-sm font-semibold text-foreground" onChange={(event) => setVisibility(event.target.value as RoomVisibility)} value={visibility}><option value="public">Pública</option><option value="private">Privada (somente por código)</option></select></label>
-              <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Senha (opcional)<Input minLength={6} onChange={(event) => setRoomPassword(event.target.value)} placeholder="Mínimo de 6 caracteres" type="password" value={roomPassword} /></label>
-              <p className="rounded-xl border border-info/25 bg-info/8 p-3 text-xs leading-5 text-muted-foreground">
-                Pista, tamanho do grid e bots são configurados pelo host dentro da sala.
-              </p>
-              <Button className="w-full" disabled={submitting} onClick={() => void handleCreate()} size="lg"><Plus aria-hidden="true" className="size-4" /> {submitting ? 'Criando sala…' : 'Criar sala'}</Button>
-            </div>
-          </section>
+          </div>
         </div>
-        <p className="flex items-start gap-2 text-xs leading-5 text-muted-foreground"><ShieldAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /> O ticket temporário de conexão é emitido antes do WebSocket e nunca expõe seu JWT na URL.</p>
-      </section>
+      ) : setupContent}
     </AppShell>
   )
 }

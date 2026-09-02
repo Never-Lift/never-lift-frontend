@@ -10,7 +10,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 2. **Composição da sala:** até 22 carros no total, misturando humanos e bots.
 3. **Tamanho do grid:** configurável de 2 a 22; preenchimento por bots opcional.
 4. **Entrada em salas:** código privado e lista pública de salas.
-5. **Prontidão:** o host inicia somente quando todos os humanos estiverem prontos; bots contam como prontos.
+5. **Prontidão:** o host não marca pronto e inicia somente quando todos os demais humanos estiverem prontos; bots contam como prontos.
 6. **Saída do host:** transferência automática para outro jogador elegível.
 7. **Desconexão durante a corrida:** janela aproximada de 30 s, com bot temporário no mesmo carro.
    - **7.1:** se o jogador não voltar, o bot continua e o resultado permanece contabilizado.
@@ -24,7 +24,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 15. **Fim da corrida:** quando todos terminarem ou o limite de segurança do servidor for atingido; demais recebem `DNF`.
 16. **Pós-corrida:** tela de resultados seguida de retorno ao lobby.
 17. **Configurações:** somente o host altera pista, grid e bots durante o lobby; confirmações de pronto não bloqueiam a edição nem são apagadas por uma alteração. As configurações travam somente quando a classificação começa.
-18. **Sala pública protegida:** senha opcional em salas públicas; salas privadas usam código.
+18. **Privacidade:** não existe senha; salas públicas aceitam entrada direta e salas privadas usam somente o código.
 19. **Bots:** uma dificuldade única para todos os bots da sala; dificuldade altera decisões, nunca a física.
 20. **Pinturas:** cores podem se repetir; número, gamertag e HUD identificam cada carro.
 21. **Número do carro:** servidor atribui números únicos de 1 a 22 por sala.
@@ -35,7 +35,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 26. **Inputs suspeitos:** resposta progressiva; descartar/registrar, limitar temporariamente e desconectar em reincidência.
 27. **Ticket:** uso único e validade de 60 s.
 28. **Snapshots:** transmissão a 20 Hz (aproximadamente a cada 50 ms).
-29. **Resultados:** persistir resultado online completo; usuários logados ficam associados, bots e guests não.
+29. **Resultados:** persistir resultado online completo; usuários participantes ficam associados e bots não; guest não acessa o online.
 30. **Mínimo:** pelo menos 2 carros para iniciar; dois humanos ou um humano e um bot quando habilitado.
 31. **Grid (decisão inicial substituída):** a opção aleatória foi superada pela classificação; a ordem final vem da quali definida nos tópicos seguintes.
 32. **Formato da classificação:** todos participam simultaneamente, cada um em sua própria simulação isolada.
@@ -44,7 +44,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 35. **Condições da quali:** exatamente as mesmas condições da corrida.
 36. **Transição quali/corrida:** tela curta de tempos e nova confirmação de pronto antes da corrida principal.
 37. **Visual da quali:** cada jogador vê somente o próprio carro.
-38. **Lista pública:** nome/código, host, pista, participantes, limite, estado e indicação de senha.
+38. **Lista pública:** somente nome da sala, nome de exibição do host e ocupação/capacidade; o código aparece apenas dentro da sala.
 39. **Nome da sala:** host pode definir nome curto; se omitir, servidor gera nome automático.
 40. **Salas vazias:** encerramento automático de salas sem jogadores.
    - **40.1:** expiração após 10 minutos.
@@ -57,7 +57,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 47. **Pausa:** não haverá pausa manual durante uma corrida online.
 48. **Formato do M3:** somente corridas avulsas; campeonatos ficam para o Módulo 6.
 49. **Reinício:** não haverá reinício manual após a largada.
-50. **Visibilidade padrão:** sala nova é pública por padrão; host pode torná-la privada/protegida.
+50. **Visibilidade padrão:** sala nova é pública por padrão; host pode torná-la privada.
 51. **Latência:** avisar o jogador e manter conexão enquanto o heartbeat funcionar; não expulsar somente por ping alto.
 52. **Desconexão na quali:** bot conclui a tentativa no mesmo slot; jogador pode reassumir ao reconectar.
 53. **Voltas padrão:** 3 voltas.
@@ -79,9 +79,9 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 69. **Código da sala:** 4 dígitos numéricos; limite de tentativas e bloqueio contra força bruta são obrigatórios.
 70. **Entrada inválida:** mensagem genérica, sem revelar existência da sala, com bloqueio progressivo.
 71. **Limite inicial:** 5 tentativas por minuto por usuário e origem.
-72. **Senha da sala:** opcional, mínimo de 6 caracteres e armazenada como hash.
+72. **Senha da sala:** removida; o código de quatro dígitos é o único segredo de uma sala privada.
 73. **Fechamento manual:** host pode fechar no lobby; durante a corrida só pode sair, sem cancelar a prova.
-74. **Alteração de visibilidade/senha:** permitida ao host somente no lobby; fica bloqueada no início da quali.
+74. **Alteração de visibilidade:** permitida ao host somente no lobby; fica bloqueada no início da quali.
 75. **Jogador inativo no lobby:** não remover automaticamente; host decide.
 76. **Grid de 22:** duas colunas alternadas em 11 fileiras, usando largura da pista e espaçamento do contrato.
 77. **Ordenação de `DNF`:** concluídos à frente; entre `DNF`, maior progresso válido, depois tempo do servidor.
@@ -91,11 +91,24 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 
 ## Refinamentos validados na Parte 3a
 
-- A criação inicial solicita somente nome, visibilidade e senha; pista, limite do grid e bots são escolhidos pelo host dentro da sala enquanto ela permanecer no lobby, inclusive depois de participantes confirmarem `ready`.
+- A criação inicial solicita somente nome e visibilidade; pista, limite do grid e bots são escolhidos pelo host dentro da sala enquanto ela permanecer no lobby, inclusive depois de participantes confirmarem `ready`.
 - O estado pronto é reversível no lobby e permanece intacto quando o host altera configurações. O payload normativo é `ready { ready: boolean }`.
 - A sessão WebSocket pertence ao app, não à página do lobby: navegar por Início, Jogar, Online ou Minha conta não remove o jogador. O item Online identifica e reabre a sala ativa.
 - A saída voluntária ocorre pelo botão **Sair da sala**, sempre com confirmação, tanto para o host quanto para participantes comuns e mesmo depois de o lobby avançar. Quando o host sai, a função é transferida automaticamente. Entrada, saída, remoção e alterações do host são publicadas imediatamente aos participantes restantes.
 - Uma queda preserva jogador e vaga durante a janela de reconexão de 30 s. Sem retorno após essa janela, o participante desconectado é removido e a vaga volta a ficar disponível. “Jogador inativo” na decisão 75 significa um cliente ainda conectado sem interagir e continua sem remoção automática.
+
+## Revisão de produto da Parte 3a — 02/09/2026
+
+Esta revisão é normativa e detalha as decisões atualizadas acima:
+
+- O online exige conta. Guest enxerga a composição da tela escurecida/desfocada e o aviso para entrar, mas não recebe lista de salas, ticket nem acesso WebSocket.
+- Senha de sala foi removida de ponta a ponta. Sala pública permite entrada direta pelo card; sala privada não aparece na lista e usa o código numérico de quatro dígitos como único segredo.
+- A lista pública expõe apenas nome da sala, nome de exibição do host e ocupação/capacidade. O código aparece somente dentro da sala, ao lado de **Ajustes** para o host e de **Resumo da sala** para convidados.
+- O host não possui estado `ready`. Todos os demais humanos podem confirmar ou retirar o pronto; o host inicia a classificação quando todos eles confirmarem e o grid mínimo estiver atendido.
+- Pista, grid, bots/dificuldade e visibilidade são ajustes vivos: não existe botão de salvar, e cada mudança válida é propagada aos demais participantes. O seletor de pista é um carrossel visual de traçados; o grid usa campo sem setas, botões `−`/`+` e normalização entre 2 e 22.
+- O resumo do convidado contém pista, estado e bots (ativo/inativo, quantidade e dificuldade). O host vê somente o card de ajustes.
+- Avisos e erros da tela são notificações no canto superior direito, expiram após cinco segundos e podem ser fechados manualmente.
+- O host pode cancelar a classificação e retornar ao lobby somente enquanto nenhum carro tiver começado a andar; bots adicionados para o grid são removidos e as configurações voltam a ser editáveis.
 
 ## Limites e dependências
 

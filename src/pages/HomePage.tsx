@@ -184,8 +184,8 @@ export function HomePage() {
                       className="mt-0.5 size-5 shrink-0 text-warning"
                     />
                     <p className="text-sm leading-6 text-muted-foreground">
-                      Você pode explorar como guest e entrar no lobby online. Recursos
-                      exclusivos de conta serão liberados quando fizer login.
+                      Você pode explorar o jogo como guest. Para entrar no lobby
+                      online, faça login em uma conta registrada.
                     </p>
                   </div>
                 )}
@@ -230,7 +230,8 @@ export function HomePage() {
                 </p>
                 <p className="mt-1 font-bold">Entre em uma sala</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Guest e contas podem participar do lobby. A corrida online será habilitada nas próximas partes.
+                  Contas registradas podem criar e entrar em salas. Como guest, você
+                  pode visualizar a prévia bloqueada antes de fazer login.
                 </p>
                 <Button asChild className="mt-4" size="sm" variant="secondary">
                   <Link to="/race/setup?mode=online">Abrir lobby</Link>
