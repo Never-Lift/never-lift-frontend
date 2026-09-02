@@ -14,7 +14,7 @@ const room: RoomSummary = {
   hostId: 'guest-1',
   trackId: 'albert-park',
   trackCatalogVersion: '2026.12',
-  physicsContractVersion: '2.0.0',
+  physicsContractVersion: '2.0.1',
   participantCount: 1,
   limit: 22,
   state: 'lobby',
