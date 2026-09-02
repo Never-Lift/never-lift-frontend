@@ -268,7 +268,7 @@ Regras:
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
 - A condução usa a mesma dinâmica F1 para todas as corridas e participantes; não existe seletor Normal/Drift nem troca de acerto durante a prova.
 - `Shift` não possui função. Boost/nitro não aparece na preparação, corrida, HUD ou configuração de controles.
-- Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa a intensidade física do contato (`impulso`/`delta-v`): fraco afeta direção, médio afeta motor, alto combina os dois e crítico causa perda total. Batidas menores repetidas também podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica um leve desvio persistente para a esquerda ou direita sem reduzir a capacidade de esterçar, e uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente, sem receber física privilegiada.
+- Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa a intensidade física do contato (`impulso`/`delta-v`). Na calibração `2.0.1`, contatos abaixo de `5 m/s` são ignorados; direção, motor, dano combinado e perda total direta começam respectivamente em `5`, `10`, `18` e `30 m/s`, e a vida perde `1,5` ponto por `m/s` de `delta-v`. Batidas menores repetidas ainda podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica apenas `0,5%` do esterço máximo como desvio persistente para a esquerda ou direita, perceptível sobretudo em retas longas, sem reduzir a capacidade de esterçar; uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente, sem receber física privilegiada.
 
 ### 9.3 Resultado e pódio
 
@@ -372,7 +372,7 @@ Os itens abaixo precisam de protótipo, mas não autorizam trocar a direção de
 - compressão e resolução final de sprites e imagens estáticas;
 - pequenos ajustes métricos de cada circuito para jogabilidade;
 - passo físico v2 congelado em `1/120 s`; CCD linear e angular permanece obrigatório nessa frequência;
-- massa, inércia, centro de gravidade, curva de potência, relações de marcha, `CdA`, `ClA` e coeficientes de pneu fundamentados e publicados no JSON executável do contrato `2.0.0`;
+- massa, inércia, centro de gravidade, curva de potência, relações de marcha, `CdA`, `ClA` e coeficientes de pneu fundamentados e publicados no JSON executável da linha `2.0.x`;
 - faixas de aceleração `0–100/200/300`, velocidade terminal emergente, frenagem em tempo/distância e raio mínimo de curva, validadas por cenários reproduzíveis;
 - rampas digitais de acelerador, freio e esterço, calibradas para teclado sem funcionar como controle de tração ou ABS;
 - tolerância final entre silhueta e collider dentro do limite aprovado de `2–5 cm` e ausência de contato invisível nas barreiras.

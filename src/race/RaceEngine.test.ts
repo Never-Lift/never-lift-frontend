@@ -532,8 +532,10 @@ describe('collisions and v2 cumulative mechanical damage', () => {
     expect(resolveVehicleCollision(first, second)).toBe(true)
     expect(first.velocity.x).toBeLessThan(18)
     expect(second.velocity.x).toBeGreaterThan(-18)
-    expect(first.damage.kind).toBe('total-loss')
-    expect(second.damage.kind).toBe('total-loss')
+    expect(first.damage.kind).toBe('engine-and-steering')
+    expect(second.damage.kind).toBe('engine-and-steering')
+    expect(first.damage.health).toBeGreaterThan(0)
+    expect(second.damage.health).toBeGreaterThan(0)
     expect(second.position.x - first.position.x).toBeGreaterThan(5.5)
   })
 
@@ -554,7 +556,7 @@ describe('collisions and v2 cumulative mechanical damage', () => {
       state.physicsState.gear = 5
       state.physicsState.engineRpm = 12_000
     }
-    recordImpactDamage(damaged, { x: -1, y: 0 }, 8)
+    recordImpactDamage(damaged, { x: -1, y: 0 }, 12)
 
     expect(damaged.damage.kind).toBe('engine')
     integrateFor(healthy, accelerationInput, 'asphalt', 240)
@@ -562,6 +564,23 @@ describe('collisions and v2 cumulative mechanical damage', () => {
 
     expect(damaged.velocity.x).toBeLessThan(healthy.velocity.x)
     expect(damaged.velocity.x).toBeGreaterThan(healthy.velocity.x * 0.9)
+  })
+
+  it('ignores low-speed contacts and applies the gentler cumulative damage calibration', () => {
+    const state = vehicle('gentler-damage')
+
+    recordImpactDamage(state, { x: -1, y: 0 }, 4.99)
+
+    expect(state.damage.kind).toBe('none')
+    expect(state.damage.health).toBe(100)
+    expect(state.damage.impactCount).toBe(0)
+
+    recordImpactDamage(state, { x: -1, y: 0 }, 6)
+
+    expect(state.damage.kind).toBe('steering')
+    expect(state.damage.health).toBe(91)
+    expect(PHYSICS_CONSTANTS.damage.thresholds.totalLossImpactSpeed).toBe(30)
+    expect(PHYSICS_CONSTANTS.damage.effects.steeringPullStrength).toBe(0.005)
   })
 
   it('applies a persistent slight steering pull without removing steering authority', () => {
@@ -572,7 +591,7 @@ describe('collisions and v2 cumulative mechanical damage', () => {
     }
     const healthy = vehicle('healthy-steering', { velocityX: 24 })
     const damaged = vehicle('damaged-steering', { velocityX: 24 })
-    recordImpactDamage(damaged, { x: 0, y: 1 }, 4)
+    recordImpactDamage(damaged, { x: 0, y: 1 }, 6)
 
     expect(damaged.damage.kind).toBe('steering')
     expect(Math.abs(damaged.damage.steeringPull)).toBe(1)
@@ -581,10 +600,21 @@ describe('collisions and v2 cumulative mechanical damage', () => {
 
     expect(Math.abs(healthy.yawRate)).toBeCloseTo(0, 6)
     expect(Math.abs(damaged.yawRate)).toBeGreaterThan(0)
+    expect(Math.abs(damaged.physicsState.steeringAngle)).toBeLessThanOrEqual(
+      VEHICLE_DYNAMICS.maximumSteeringAngleRadians * 0.005,
+    )
+
+    const longStraight = vehicle('damaged-long-straight', { velocityX: 24 })
+    recordImpactDamage(longStraight, { x: 0, y: 1 }, 6)
+    integrateFor(longStraight, neutralSteeringInput, 'asphalt', 480)
+
+    expect(Math.abs(longStraight.position.y)).toBeGreaterThan(
+      Math.abs(damaged.position.y),
+    )
 
     const healthyWithSteering = vehicle('healthy-full-steering', { velocityX: 24 })
     const damagedWithSteering = vehicle('damaged-full-steering', { velocityX: 24 })
-    recordImpactDamage(damagedWithSteering, { x: 0, y: 1 }, 4)
+    recordImpactDamage(damagedWithSteering, { x: 0, y: 1 }, 6)
     const fullSteeringInput = { ...neutralSteeringInput, steer: 1 }
     integrateFor(healthyWithSteering, fullSteeringInput, 'asphalt', 45)
     integrateFor(damagedWithSteering, fullSteeringInput, 'asphalt', 45)
@@ -596,9 +626,9 @@ describe('collisions and v2 cumulative mechanical damage', () => {
 
   it('keeps prior damage and combines engine and steering failures', () => {
     const state = vehicle('combined')
-    recordImpactDamage(state, { x: 0, y: 1 }, 4)
+    recordImpactDamage(state, { x: 0, y: 1 }, 6)
     const healthAfterWeakImpact = state.damage.health
-    recordImpactDamage(state, { x: -1, y: 0 }, 8)
+    recordImpactDamage(state, { x: -1, y: 0 }, 12)
 
     expect(state.damage.kind).toBe('engine-and-steering')
     expect(state.damage.engineDamaged).toBe(true)
@@ -608,7 +638,7 @@ describe('collisions and v2 cumulative mechanical damage', () => {
 
   it('classifies a high non-critical impact as combined damage', () => {
     const state = vehicle('high-impact')
-    recordImpactDamage(state, { x: -1, y: 0 }, 15)
+    recordImpactDamage(state, { x: -1, y: 0 }, 24)
 
     expect(state.damage.kind).toBe('engine-and-steering')
     expect(state.damage.health).toBeGreaterThan(0)
@@ -616,8 +646,8 @@ describe('collisions and v2 cumulative mechanical damage', () => {
 
   it('turns repeated weak impacts into cumulative total loss', () => {
     const state = vehicle('repeated-weak')
-    for (let impact = 0; impact < 9; impact += 1) {
-      recordImpactDamage(state, { x: 0, y: 1 }, 4)
+    for (let impact = 0; impact < 12; impact += 1) {
+      recordImpactDamage(state, { x: 0, y: 1 }, 6)
     }
 
     expect(state.damage.kind).toBe('total-loss')
@@ -626,7 +656,7 @@ describe('collisions and v2 cumulative mechanical damage', () => {
 
   it('disables driver input and coasts under the contracted total-loss drag', () => {
     const state = vehicle('totaled', { velocityX: 18 })
-    recordImpactDamage(state, { x: -1, y: 0 }, 30)
+    recordImpactDamage(state, { x: -1, y: 0 }, 36)
 
     expect(state.damage.kind).toBe('total-loss')
     integrateFor(
