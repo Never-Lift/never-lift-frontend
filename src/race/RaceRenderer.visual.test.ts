@@ -17,6 +17,7 @@ import { SHORT_TRACK } from '@/test/track-fixtures'
 type ClipRect = { x: number; y: number; width: number; height: number }
 type GradientVector = { fromX: number; fromY: number; toX: number; toY: number }
 type EllipseRecord = { x: number; y: number; radiusX: number; radiusY: number }
+type FillTextRecord = { text: string; x: number; y: number; maxWidth?: number }
 
 function createRecordingContext() {
   let currentClip: ClipRect | null = null
@@ -26,6 +27,8 @@ function createRecordingContext() {
   const linearGradientVectors: GradientVector[] = []
   const ellipses: EllipseRecord[] = []
   const fillRects: ClipRect[] = []
+  const fillTexts: FillTextRecord[] = []
+  const lineDashes: number[][] = []
   let pathClipCount = 0
   let pathMoveCount = 0
   const noOperation = vi.fn()
@@ -82,6 +85,14 @@ function createRecordingContext() {
             fillRects.push({ x, y, width, height })
           }
         }
+        if (property === 'fillText') {
+          return (text: string, x: number, y: number, maxWidth?: number) => {
+            fillTexts.push({ text, x, y, maxWidth })
+          }
+        }
+        if (property === 'setLineDash') {
+          return (segments: number[]) => lineDashes.push([...segments])
+        }
         if (property === 'createRadialGradient') {
           return () => ({ addColorStop: noOperation })
         }
@@ -93,6 +104,8 @@ function createRecordingContext() {
   return {
     context,
     fillRects,
+    fillTexts,
+    lineDashes,
     linearGradientClips,
     linearGradientVectors,
     ellipses,
@@ -176,6 +189,58 @@ function renderPreset(preset: TimeOfDayPreset) {
 }
 
 describe('RaceRenderer Module 2c visuals', () => {
+  it('shows driver names only while identification is enabled', () => {
+    const engine = createEngine(SHORT_TRACK)
+    const vehicle = engine.getInterpolatedVehicles()[0]
+    const transform: CameraTransform = {
+      position: { ...vehicle.renderPosition },
+      orientation: vehicle.renderAngle,
+      pixelsPerMeter: 4,
+      groundDepthScale: 0.55,
+      viewport: { x: 0, y: 0, width: 960, height: 640 },
+      anchor: { x: 480, y: 384 },
+    }
+    const { context, fillTexts } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK)
+    const rendererInternals = renderer as unknown as {
+      drawVehicle: (
+        currentVehicle: InterpolatedVehicleState,
+        currentTransform: CameraTransform,
+        showName: boolean,
+      ) => void
+    }
+
+    rendererInternals.drawVehicle(vehicle, transform, false)
+    expect(fillTexts.map((entry) => entry.text)).not.toContain('Player 1')
+
+    rendererInternals.drawVehicle(vehicle, transform, true)
+    expect(fillTexts.map((entry) => entry.text)).toContain('Player 1')
+  })
+
+  it('draws a finish marker and the circuit name in the enlarged minimap', () => {
+    const engine = createEngine(SHORT_TRACK)
+    const vehicles = engine.getInterpolatedVehicles()
+    const { context, fillTexts, lineDashes } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK)
+    const rendererInternals = renderer as unknown as {
+      drawMinimap: (
+        viewport: { x: number; y: number; width: number; height: number },
+        currentVehicles: InterpolatedVehicleState[],
+        focusedVehicle: InterpolatedVehicleState,
+      ) => void
+    }
+
+    rendererInternals.drawMinimap(
+      { x: 0, y: 0, width: 960, height: 640 },
+      vehicles,
+      vehicles[0],
+    )
+
+    expect(fillTexts.map((entry) => entry.text)).toContain(SHORT_TRACK.name)
+    expect(lineDashes).toContainEqual([3, 2])
+    expect(lineDashes.at(-1)).toEqual([])
+  })
+
   it('uses distinct directional shadows for each lighting preset', () => {
     expect(VEHICLE_SHADOW_SETTINGS.day.worldAngleRadians).not.toBe(
       VEHICLE_SHADOW_SETTINGS.sunset.worldAngleRadians,

@@ -548,6 +548,9 @@ export class RaceRenderer {
     overlayState?: LocalRaceOverlayState,
   ) {
     const context = this.context
+    const showDriverNames =
+      overlayState?.startLights.stage === 'sequence' ||
+      overlayState?.showDriverNames === true
     context.save()
     context.beginPath()
     context.rect(viewport.x, viewport.y, viewport.width, viewport.height)
@@ -634,7 +637,7 @@ export class RaceRenderer {
           transform,
         )
         for (const vehicle of vehiclesAtLayer) {
-          this.drawVehicle(vehicle, transform)
+          this.drawVehicle(vehicle, transform, showDriverNames)
         }
       }
       if (isFadedSuzukaUpperLayer) {
@@ -661,7 +664,6 @@ export class RaceRenderer {
       suzukaUpperLayerOpacity,
     )
     this.drawMinimap(viewport, vehicles, focusedVehicle)
-    this.drawDriverLabel(viewport, focusedVehicle.name)
     this.drawStartProcedure(viewport, focusedVehicle.id, overlayState)
     context.restore()
     return ambientParticleCount
@@ -3113,6 +3115,7 @@ export class RaceRenderer {
   private drawVehicle(
     vehicle: InterpolatedVehicleState,
     transform: CameraTransform,
+    showName: boolean,
   ) {
     const context = this.context
     const profile = PHYSICS_CONSTANTS.vehicleVisual
@@ -3152,10 +3155,12 @@ export class RaceRenderer {
       shadowOpacity: shadowSettings.opacity,
     })
 
-    context.fillStyle = '#f0f0fa'
-    context.font = `700 ${Math.max(9, 1.3 * transform.pixelsPerMeter)}px Barlow`
-    context.textAlign = 'center'
-    context.fillText(vehicle.name, point.x, point.y - width * 1.2)
+    if (showName) {
+      context.fillStyle = '#f0f0fa'
+      context.font = `700 ${Math.max(9, 1.3 * transform.pixelsPerMeter)}px Barlow`
+      context.textAlign = 'center'
+      context.fillText(vehicle.name, point.x, point.y - width * 1.2)
+    }
   }
 
   private drawMinimap(
@@ -3163,18 +3168,23 @@ export class RaceRenderer {
     vehicles: InterpolatedVehicleState[],
     focusedVehicle: InterpolatedVehicleState,
   ) {
-    const width = Math.min(viewport.width * 0.28, viewport.height * 0.32, 220)
-    const height = Math.min(viewport.height * 0.3, 170)
-    const minimapViewport = {
+    const width = Math.min(viewport.width * 0.34, viewport.height * 0.4, 280)
+    const height = Math.min(viewport.height * 0.38, 220)
+    const labelHeight = Math.min(32, Math.max(24, height * 0.16))
+    const panelViewport = {
       x: viewport.x + viewport.width - width - 12,
       y: viewport.y + 12,
       width,
       height,
     }
+    const minimapViewport = {
+      ...panelViewport,
+      height: height - labelHeight,
+    }
     const transform = createMinimapTransform(
       this.track.bounds,
       minimapViewport,
-      10,
+      12,
     )
     const context = this.context
     context.save()
@@ -3186,7 +3196,7 @@ export class RaceRenderer {
       minimapViewport.x,
       minimapViewport.y,
       minimapViewport.width,
-      minimapViewport.height,
+      panelViewport.height,
       10,
     )
     context.fill()
@@ -3203,6 +3213,36 @@ export class RaceRenderer {
     context.lineJoin = 'round'
     context.stroke()
 
+    const gate = this.track.startFinish
+    const lateral = { x: -gate.forward.y, y: gate.forward.x }
+    const startFrom = worldToMinimap(
+      {
+        x: gate.position.x - lateral.x * gate.halfWidthMeters,
+        y: gate.position.y - lateral.y * gate.halfWidthMeters,
+      },
+      transform,
+    )
+    const startTo = worldToMinimap(
+      {
+        x: gate.position.x + lateral.x * gate.halfWidthMeters,
+        y: gate.position.y + lateral.y * gate.halfWidthMeters,
+      },
+      transform,
+    )
+    context.beginPath()
+    context.setLineDash([3, 2])
+    context.moveTo(startFrom.x, startFrom.y)
+    context.lineTo(startTo.x, startTo.y)
+    context.strokeStyle = '#f0f0fa'
+    context.lineWidth = 2.5
+    context.stroke()
+    context.setLineDash([])
+    const startPoint = worldToMinimap(gate.position, transform)
+    context.beginPath()
+    context.arc(startPoint.x, startPoint.y, 3.5, 0, Math.PI * 2)
+    context.fillStyle = '#31c7ff'
+    context.fill()
+
     for (const vehicle of vehicles) {
       const point = worldToMinimap(vehicle.renderPosition, transform)
       const focused = vehicle.id === focusedVehicle.id
@@ -3216,16 +3256,16 @@ export class RaceRenderer {
         context.stroke()
       }
     }
+    context.fillStyle = '#f0f0fa'
+    context.font = '700 11px Barlow'
+    context.textAlign = 'center'
+    context.fillText(
+      this.track.name,
+      panelViewport.x + panelViewport.width / 2,
+      panelViewport.y + panelViewport.height - 10,
+      panelViewport.width - 20,
+    )
     context.restore()
-  }
-
-  private drawDriverLabel(viewport: Viewport, name: string) {
-    this.context.fillStyle = 'rgba(7, 11, 20, 0.78)'
-    this.context.fillRect(viewport.x + 12, viewport.y + 12, 112, 28)
-    this.context.fillStyle = '#f0f0fa'
-    this.context.font = '700 12px Barlow'
-    this.context.textAlign = 'left'
-    this.context.fillText(name, viewport.x + 22, viewport.y + 31)
   }
 
   private drawSplitDivider(viewports: Viewport[]) {

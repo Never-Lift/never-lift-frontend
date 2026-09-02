@@ -1,4 +1,4 @@
-import { Flag, Gauge, RotateCcw } from 'lucide-react'
+import { DoorOpen, Flag, Gauge, Keyboard } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -119,7 +119,6 @@ export function RaceCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const finishedRef = useRef(false)
   const onFinishedRef = useRef(onFinished)
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [telemetry, setTelemetry] = useState<DriverTelemetry[]>([])
   const [startAnnouncement, setStartAnnouncement] = useState('Semáforo apagado')
 
@@ -155,10 +154,13 @@ export function RaceCanvas({
           : {}),
       }
       session.advanceFrame(deltaSeconds, frameInputs)
-      renderer.render(engine, deltaSeconds, session.getOverlayState())
+      renderer.render(
+        engine,
+        deltaSeconds,
+        session.getOverlayState(controls.isIdentificationHeld()),
+      )
 
       if (timestamp - lastTelemetryUpdate >= 150) {
-        setElapsedSeconds(engine.getSimulationTimeSeconds())
         setTelemetry(
           humanIds.flatMap((racerId) => {
             const vehicle = engine.getVehicleState(racerId)
@@ -210,44 +212,13 @@ export function RaceCanvas({
   return (
     <section
       aria-label="Corrida local em andamento"
-      className="fixed inset-0 z-50 flex h-dvh min-h-0 flex-col overflow-hidden bg-background"
+      className="fixed inset-0 z-50 h-dvh min-h-0 overflow-hidden bg-background"
     >
-      <header className="relative z-20 flex h-20 shrink-0 items-center justify-between gap-4 border-b border-border/75 bg-background/94 px-4 backdrop-blur-xl sm:px-6">
-        <div className="flex min-w-0 items-center gap-4">
-          <Brand compact />
-          <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-info">
-              {engine.track.name} // {engine.lapCount} volta //{' '}
-              {timeOfDay === 'day'
-                ? 'Dia'
-                : timeOfDay === 'sunset'
-                  ? 'Entardecer'
-                  : 'Noite'}
-            </p>
-            <h1 className="mt-1 truncate font-display text-2xl font-black uppercase italic sm:text-3xl">
-              {mode === 'solo' ? 'Solo contra bots' : 'Duelo local'}
-            </h1>
-            <p className="hidden text-[10px] font-semibold text-muted-foreground xl:block">
-              {mode === 'solo' ? 'WASD ou setas' : 'P1: WASD · P2: setas ou IJKL'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="rounded-full border border-border bg-card/80 px-4 py-2 font-mono text-sm font-bold">
-            {elapsedSeconds.toFixed(1)}s
-          </span>
-          <Button onClick={onAbort} size="sm" variant="secondary">
-            <RotateCcw aria-hidden="true" className="size-4" />
-            Sair da corrida
-          </Button>
-        </div>
-      </header>
-
       <p aria-live="polite" className="sr-only">
         {startAnnouncement}
       </p>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-[#101b19]">
+      <div className="absolute inset-0 overflow-hidden bg-[#101b19]">
         <canvas
           aria-label={`Circuito ${engine.track.name} com carros em movimento`}
           className="absolute inset-0 block size-full"
@@ -273,6 +244,26 @@ export function RaceCanvas({
           ))}
         </div>
       </div>
+
+      <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-start gap-3 sm:left-4 sm:top-4">
+        <Brand compact />
+        <p className="inline-flex items-center gap-2 rounded-lg border border-border/70 bg-background/76 px-2.5 py-2 text-[10px] font-bold text-muted-foreground backdrop-blur-md">
+          <Keyboard aria-hidden="true" className="size-3.5 text-info" />
+          Segure <kbd className="text-foreground">ESPAÇO</kbd> para identificar pilotos
+        </p>
+      </div>
+
+      <Button
+        aria-label="Sair da corrida"
+        className="absolute bottom-4 right-4 z-30 size-11 shadow-xl"
+        onClick={onAbort}
+        size="icon"
+        title="Sair da corrida"
+        type="button"
+        variant="secondary"
+      >
+        <DoorOpen aria-hidden="true" className="size-5" />
+      </Button>
     </section>
   )
 }

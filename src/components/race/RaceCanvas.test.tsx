@@ -136,9 +136,15 @@ describe('RaceCanvas layout', () => {
       'absolute',
       'size-full',
     )
-    expect(
-      screen.getByText('P1: WASD · P2: setas ou IJKL').closest('header'),
-    ).not.toBeNull()
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.getByText(/para identificar pilotos/)).toHaveTextContent(
+      'Segure ESPAÇO para identificar pilotos',
+    )
+    expect(screen.getByRole('button', { name: 'Sair da corrida' })).toHaveClass(
+      'bottom-4',
+      'right-4',
+      'size-11',
+    )
     expect(rendererCapture.options).toHaveLength(1)
     expect(rendererCapture.options[0].splitScreenAspectRatio?.()).toBe(1.125)
   })

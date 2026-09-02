@@ -67,6 +67,14 @@ function release(session: LocalRaceSession, frameRate = 60, input = NEUTRAL_INPU
 }
 
 describe('LocalRaceSession start procedure', () => {
+  it('forwards the hold-to-identify state independently of the start lights', () => {
+    const { session } = createSession()
+
+    expect(session.getOverlayState().showDriverNames).toBe(false)
+    expect(session.getOverlayState(true).showDriverNames).toBe(true)
+    expect(session.getOverlayState(true).startLights.stage).toBe('sequence')
+  })
+
   it('derives every start-sequence duration from the published v2 contract', () => {
     expect(START_LIGHT_COUNT).toBe(PHYSICS_CONSTANTS.race.startLightCount)
     expect(START_LIGHT_TICKS).toBe(

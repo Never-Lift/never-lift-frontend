@@ -223,6 +223,9 @@ Regras:
 
 - Distribuição periférica; centro livre para a corrida.
 - Painéis pequenos, escuros e semitransparentes somente onde o contraste exigir.
+- Não existe cabeçalho permanente durante a corrida. A marca permanece compacta no canto superior esquerdo e a saída usa somente um botão quadrado com ícone no canto inferior direito.
+- O minimapa tem leitura prioritária, mostra a linha de chegada e mantém o nome do circuito imediatamente abaixo, sem alterar a orientação fixa.
+- Nomes sobre os carros aparecem durante a sequência de largada. Depois da largada, ficam ocultos e só voltam enquanto `Espaço` estiver pressionado; uma instrução curta e periférica comunica o atalho.
 - Elementos permanentes:
   - posição e total de competidores;
   - volta atual e total;
@@ -248,7 +251,7 @@ Regras:
 
 - Menu híbrido: navegação vertical compacta à esquerda, barra superior discreta, carro em destaque e no máximo dois cards contextuais.
 - Logo no topo da barra lateral; configurações e sair ficam próximos ao final.
-- Barra superior mostra perfil, notificações e estado online.
+- A barra superior mantém o contexto atual em azul e, quando autenticado, mostra um card de conta clicável à direita com avatar, nome de exibição em destaque e gamertag secundário. O acesso à conta não é duplicado na navegação lateral.
 - “Jogar” é a ação principal.
 - Atalho para continuar ou repetir a última atividade.
 - Garagem, Social, Perfil, Recordes e Configurações aparecem conforme seus módulos estiverem disponíveis; não mostrar entradas de módulos ainda não implementados.
@@ -260,10 +263,11 @@ Regras:
 - Seleção de modo: cards compactos com prévia maior e descrição.
 - Categorias fixas: Solo e local, Online e Competição.
 - Estrutura compartilhada entre solo, local e online, adaptando campos e permissões.
-- Escolhas principais visíveis; opções adicionais em área expansível.
-- Circuitos em lista compacta com prévia grande do traçado, país, comprimento e ambiente.
-- O F1 atual fica visível; “Personalizar” abre um painel compacto de pintura e capacete, sem seleção de modelo.
-- Painel lateral fixo resume pista, voltas, clima, horário, tipo de prova e pintura.
+- Em solo/local, todas as escolhas ficam visíveis num único painel de ajustes: modo, carros, circuito, bots, dificuldade, horário e ação de iniciar. Não há resumo duplicado nem área expansível.
+- Circuitos usam cards horizontais com silhueta e nome, busca por circuito/localidade e rolagem nativa, por botões ou arrastando. Selecionar um circuito não limita o fim da rolagem.
+- A prévia grande do traçado ocupa um painel de dimensões fixas, independentemente da proporção do circuito, e marca posição e sentido da largada.
+- O F1 atual fica visível e as três pinturas são escolhidas diretamente por amostras clicáveis, sem etapa de “Personalizar” ou “Concluir”.
+- Solo/local permite de zero bots até o limite de 22 carros somando humanos e bots. A dificuldade alterna entre fácil, médio e difícil por um botão de estado com ícone e cor, sem conceder física privilegiada.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
 - A condução usa a mesma dinâmica F1 para todas as corridas e participantes; não existe seletor Normal/Drift nem troca de acerto durante a prova.

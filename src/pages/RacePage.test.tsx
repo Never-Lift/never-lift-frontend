@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -18,7 +18,7 @@ function findStartButton() {
   return screen.findByRole('button', { name: /Iniciar corrida/ }, { timeout: 5_000 })
 }
 
-describe('Module 2b race setup', () => {
+describe('Module 2 local race setup', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api')
     vi.stubGlobal(
@@ -35,7 +35,13 @@ describe('Module 2b race setup', () => {
           return Promise.resolve(jsonResponse(albertParkDefinition))
         }
         if (url.endsWith('/tracks/monaco')) {
-          return Promise.resolve(jsonResponse(SHORT_TRACK))
+          return Promise.resolve(
+            jsonResponse({
+              ...SHORT_TRACK,
+              id: 'monaco',
+              name: 'Circuit de Monaco',
+            }),
+          )
         }
         return Promise.resolve(jsonResponse({}, 404))
       }),
@@ -48,60 +54,42 @@ describe('Module 2b race setup', () => {
     vi.unstubAllGlobals()
   })
 
-  it('prepares a guest session and exposes solo configuration', async () => {
-    const user = userEvent.setup()
+  it('groups every local setting in one panel without a redundant summary', async () => {
     renderApp('/race')
 
     expect(await findStartButton()).toBeEnabled()
-    expect(screen.getByRole('button', { name: /Solo contra bots/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /SoloUm jogador/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    expect(screen.getByText('Dificuldade dos bots')).toBeInTheDocument()
-    expect(screen.queryByText('Modo de condução da corrida')).not.toBeInTheDocument()
-    expect(screen.getByText('Horário da corrida')).toBeInTheDocument()
-    await user.click(screen.getByText('Opções adicionais'))
-    expect(screen.getByRole('button', { name: /Dia/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-    expect(
-      screen.getByText(/Todos os participantes usam o mesmo modelo/),
-    ).toBeInTheDocument()
-    expect(screen.getByText('24 circuitos')).toBeInTheDocument()
-    expect(
-      screen.getByRole('img', { name: 'Prévia do traçado Albert Park Circuit' }),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText('5.278 km').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Litoral').length).toBeGreaterThan(0)
-    expect(
-      screen.getByRole('complementary', { name: 'Resumo da corrida' }),
-    ).toHaveTextContent('1 volta')
-    expect(screen.getByRole('button', { name: 'Personalizar' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
+    expect(screen.getByRole('group', { name: 'Jogador 1' })).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Pesquisar circuitos' })).toBeInTheDocument()
+    expect(screen.getByLabelText('2 bots selecionados')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Fácil/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Dia' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('complementary', { name: 'Resumo da corrida' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Personalizar' })).not.toBeInTheDocument()
   })
 
-  it('switches to two players and exposes the second paint selection', async () => {
+  it('switches to two local players while preserving bot configuration', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
-    await user.click(screen.getByRole('button', { name: /Dois jogadores locais/ }))
 
-    expect(screen.getByText('Jogador 2')).toBeInTheDocument()
-    expect(screen.queryByText('Dificuldade dos bots')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /LocalDois jogadores/ }))
+
+    expect(screen.getByRole('group', { name: 'Jogador 2' })).toBeInTheDocument()
+    expect(screen.getByLabelText('2 bots selecionados')).toBeInTheDocument()
+    expect(screen.getByText('4/22 vagas ocupadas')).toBeInTheDocument()
   })
 
-  it('blocks a paint already used by the other local player', async () => {
+  it('shows paint choices directly and blocks the color used by the other player', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
-    await user.click(screen.getByRole('button', { name: /Dois jogadores locais/ }))
+    await user.click(screen.getByRole('button', { name: /LocalDois jogadores/ }))
 
     const playerTwo = screen.getByRole('group', { name: 'Jogador 2' })
-    await user.click(within(playerTwo).getByRole('button', { name: 'Personalizar' }))
-
     expect(
       within(playerTwo).getByRole('button', { name: 'Selecionar pintura Azul' }),
     ).toBeDisabled()
@@ -111,10 +99,8 @@ describe('Module 2b race setup', () => {
   })
 
   it('offers only the restrained red, blue and green paint presets', async () => {
-    const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
-    await user.click(screen.getByRole('button', { name: 'Personalizar' }))
 
     expect(screen.getByRole('button', { name: 'Selecionar pintura Vermelho' })).toHaveStyle({
       backgroundColor: '#a84448',
@@ -128,55 +114,77 @@ describe('Module 2b race setup', () => {
     expect(screen.getAllByRole('button', { name: /Selecionar pintura/ })).toHaveLength(3)
   })
 
-  it('fixes the selected visual preset before starting the race', async () => {
+  it('supports zero bots and cycles the three difficulty levels', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
 
-    await user.click(screen.getByText('Opções adicionais'))
-    await user.click(screen.getByRole('button', { name: /Noite/ }))
+    await user.click(screen.getByRole('button', { name: /Dificuldade dos bots: Fácil/ }))
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Médio/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Dificuldade dos bots: Médio/ }))
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Difícil/ })).toBeInTheDocument()
 
-    expect(screen.getByRole('button', { name: /Noite/ })).toHaveAttribute(
+    await user.click(screen.getByRole('button', { name: 'Diminuir quantidade de bots' }))
+    await user.click(screen.getByRole('button', { name: 'Diminuir quantidade de bots' }))
+    expect(screen.getByLabelText('0 bots selecionados')).toBeInTheDocument()
+    expect(screen.getByText('1/22 vagas ocupadas')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Difícil/ })).toBeDisabled()
+  })
+
+  it('caps the grid at 22 cars in both solo and local modes', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    await findStartButton()
+    const increase = screen.getByRole('button', { name: 'Aumentar quantidade de bots' })
+
+    for (let index = 0; index < 19; index += 1) fireEvent.click(increase)
+    expect(screen.getByLabelText('21 bots selecionados')).toBeInTheDocument()
+    expect(screen.getByText('22/22 vagas ocupadas')).toBeInTheDocument()
+    expect(increase).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /LocalDois jogadores/ }))
+    expect(screen.getByLabelText('20 bots selecionados')).toBeInTheDocument()
+    expect(screen.getByText('22/22 vagas ocupadas')).toBeInTheDocument()
+  })
+
+  it('keeps the time-of-day choices directly visible', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    await findStartButton()
+
+    await user.click(screen.getByRole('button', { name: 'Noite' }))
+
+    expect(screen.getByRole('button', { name: 'Noite' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    expect(
-      screen.getByRole('complementary', { name: 'Resumo da corrida' }),
-    ).toHaveTextContent('Noite')
   })
 
-  it('keeps the F1 visible and expands its compact paint chooser on demand', async () => {
+  it('filters the 24-card carousel without hiding the selected track label', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
 
-    expect(screen.getByText('F1 Never Lift')).toBeInTheDocument()
-    expect(screen.queryByText(/Supercarro|Drift/)).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Personalizar' }))
+    expect(screen.getByText('Albert Park Circuit', { selector: 'span.text-info' })).toBeInTheDocument()
+    await user.type(screen.getByRole('searchbox', { name: 'Pesquisar circuitos' }), 'monaco')
 
-    await user.click(screen.getByRole('button', { name: 'Selecionar pintura Vermelho' }))
-    expect(
-      screen.getByRole('complementary', { name: 'Resumo da corrida' }),
-    ).toHaveTextContent('Piloto 1 · F1')
+    expect(screen.getByRole('option', { name: 'Selecionar Circuit de Monaco' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Selecionar Albert Park Circuit' })).not.toBeInTheDocument()
   })
 
-  it('loads the selected track definition instead of keeping a fixed track id', async () => {
+  it('loads a selected circuit and exposes its start and race direction', async () => {
     const user = userEvent.setup()
     renderApp('/race')
     await findStartButton()
 
-    await user.click(
-      screen.getByRole('button', { name: /Circuit de Monaco/ }),
-    )
+    await user.click(screen.getByRole('option', { name: 'Selecionar Circuit de Monaco' }))
 
     expect(
-      await screen.findByRole('img', {
-        name: 'Prévia do traçado Circuit de Monaco',
-      }),
+      await screen.findByRole('img', { name: 'Prévia do traçado Circuit de Monaco' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /Circuit de Monaco/ }),
-    ).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getAllByText('3.337 km').length).toBeGreaterThan(0)
+      screen.getByRole('option', { name: 'Selecionar Circuit de Monaco' }),
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Largada e sentido da prova')).toBeInTheDocument()
   })
 })

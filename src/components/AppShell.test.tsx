@@ -35,6 +35,21 @@ const auth: AuthContextValue = {
   signOut: vi.fn(),
 }
 
+const userAuth: AuthContextValue = {
+  ...auth,
+  session: { role: 'user', token: 'user.jwt', subject: 'user-1' },
+  account: {
+    id: 'user-1',
+    displayName: 'Turbo Fox',
+    gamertag: 'turbo_fox',
+    avatarId: 'rookie-pilot',
+    preferredLanguage: 'pt-BR',
+    createdAt: '2026-08-01T00:00:00Z',
+  },
+  isGuest: false,
+  isUser: true,
+}
+
 describe('AppShell online navigation', () => {
   afterEach(() => {
     onlineRoomSession.resetForTests()
@@ -64,5 +79,26 @@ describe('AppShell online navigation', () => {
     await userEvent.click(screen.getByRole('link', { name: 'Início' }))
     expect(await screen.findAllByText('Início')).not.toHaveLength(0)
     expect(onlineRoomSession.getSnapshot().roomCode).toBe('1234')
+  })
+
+  it('moves the signed-in account to the top-right identity card', () => {
+    render(
+      <AuthContext.Provider value={userAuth}>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route
+              element={<AppShell moduleLabel="Início"><p>Conteúdo</p></AppShell>}
+              path="/"
+            />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    expect(screen.queryByText('Race control')).not.toBeInTheDocument()
+    expect(screen.getByText('@turbo_fox')).toHaveClass('text-muted-foreground')
+    expect(screen.getByText('Turbo Fox')).toHaveClass('text-foreground')
+    expect(screen.getAllByRole('link', { name: 'Minha conta' })).toHaveLength(2)
+    expect(screen.getByText('Início', { selector: 'span.text-info' })).toBeInTheDocument()
   })
 })

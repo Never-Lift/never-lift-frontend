@@ -1,13 +1,16 @@
 import {
+  Angry,
   Bot,
   CheckCircle2,
-  ChevronDown,
   CircleAlert,
-  Gamepad2,
   LoaderCircle,
-  MapPinned,
+  Meh,
+  Minus,
   Play,
+  Plus,
   RotateCcw,
+  Settings2,
+  Smile,
   Users,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -15,13 +18,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
 import { RaceCanvas } from '@/components/race/RaceCanvas'
+import { TrackCarousel } from '@/components/race/TrackCarousel'
 import { VehiclePreview } from '@/components/race/VehiclePreview'
 import { Button } from '@/components/ui/button'
 import {
   raceApi,
   type LocalRaceResultResponse,
   type TrackCatalog,
-  type TrackCatalogEntry,
   type TrackDefinition,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error-messages'
@@ -70,8 +73,20 @@ const timeOfDayOptions: Array<{
   },
 ]
 
-function timeOfDayLabel(timeOfDay: TimeOfDayPreset) {
-  return timeOfDayOptions.find((option) => option.id === timeOfDay)?.label ?? 'Dia'
+const difficultyOptions: Array<{
+  id: BotDifficulty
+  label: string
+  tone: string
+}> = [
+  { id: 'easy', label: 'Fácil', tone: 'text-success' },
+  { id: 'normal', label: 'Médio', tone: 'text-warning' },
+  { id: 'hard', label: 'Difícil', tone: 'text-destructive' },
+]
+
+function DifficultyIcon({ difficulty }: { difficulty: BotDifficulty }) {
+  if (difficulty === 'easy') return <Smile aria-hidden="true" className="size-5" />
+  if (difficulty === 'hard') return <Angry aria-hidden="true" className="size-5" />
+  return <Meh aria-hidden="true" className="size-5" />
 }
 
 const defaultPlayerOne: PlayerSelection = {
@@ -103,6 +118,25 @@ function formatTrackLength(lengthMeters: number) {
 function TrackPreview({ track }: { track: TrackDefinition }) {
   const width = Math.max(1, track.bounds.maxX - track.bounds.minX)
   const height = Math.max(1, track.bounds.maxY - track.bounds.minY)
+  const markerScale = Math.max(width, height)
+  const start = track.startFinish.position
+  const lateral = {
+    x: -track.startFinish.forward.y,
+    y: track.startFinish.forward.x,
+  }
+  const startLineFrom = {
+    x: start.x - lateral.x * track.startFinish.halfWidthMeters,
+    y: start.y - lateral.y * track.startFinish.halfWidthMeters,
+  }
+  const startLineTo = {
+    x: start.x + lateral.x * track.startFinish.halfWidthMeters,
+    y: start.y + lateral.y * track.startFinish.halfWidthMeters,
+  }
+  const directionLength = markerScale * 0.075
+  const directionEnd = {
+    x: start.x + track.startFinish.forward.x * directionLength,
+    y: start.y + track.startFinish.forward.y * directionLength,
+  }
   const points = track.centerline
     .map((point) => `${point.x},${-point.y}`)
     .join(' ')
@@ -110,11 +144,23 @@ function TrackPreview({ track }: { track: TrackDefinition }) {
   return (
     <svg
       aria-label={`Prévia do traçado ${track.name}`}
-      className="h-full min-h-52 w-full"
+      className="size-full"
       preserveAspectRatio="xMidYMid meet"
       role="img"
       viewBox={`${track.bounds.minX - width * 0.06} ${-track.bounds.maxY - height * 0.06} ${width * 1.12} ${height * 1.12}`}
     >
+      <defs>
+        <marker
+          id="track-direction-arrow"
+          markerHeight="7"
+          markerWidth="7"
+          orient="auto"
+          refX="5"
+          refY="3.5"
+        >
+          <path d="M0,0 L0,7 L6,3.5 z" fill="#31c7ff" />
+        </marker>
+      </defs>
       <polyline
         fill="none"
         points={points}
@@ -131,40 +177,35 @@ function TrackPreview({ track }: { track: TrackDefinition }) {
         strokeLinejoin="round"
         strokeWidth={Math.max(width, height) * 0.009}
       />
+      <line
+        stroke="#f0f0fa"
+        strokeDasharray={`${markerScale * 0.008} ${markerScale * 0.006}`}
+        strokeLinecap="round"
+        strokeWidth={markerScale * 0.012}
+        x1={startLineFrom.x}
+        x2={startLineTo.x}
+        y1={-startLineFrom.y}
+        y2={-startLineTo.y}
+      />
+      <circle
+        cx={start.x}
+        cy={-start.y}
+        fill="#31c7ff"
+        r={markerScale * 0.018}
+        stroke="#f0f0fa"
+        strokeWidth={markerScale * 0.005}
+      />
+      <line
+        markerEnd="url(#track-direction-arrow)"
+        stroke="#31c7ff"
+        strokeLinecap="round"
+        strokeWidth={markerScale * 0.012}
+        x1={start.x}
+        x2={directionEnd.x}
+        y1={-start.y}
+        y2={-directionEnd.y}
+      />
     </svg>
-  )
-}
-
-function TrackOption({
-  track,
-  selected,
-  onSelect,
-}: {
-  track: TrackCatalogEntry
-  selected: boolean
-  onSelect: () => void
-}) {
-  return (
-    <button
-      aria-pressed={selected}
-      className={`flex w-full items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition ${
-        selected
-          ? 'border-primary bg-primary/10'
-          : 'border-border/70 bg-background/35 hover:bg-muted/55'
-      }`}
-      onClick={onSelect}
-      type="button"
-    >
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-extrabold">{track.name}</span>
-        <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">
-          {track.countryName} · {track.locality}
-        </span>
-      </span>
-      <span className="shrink-0 font-mono text-xs font-bold text-info">
-        {formatTrackLength(track.lengthMeters)}
-      </span>
-    </button>
   )
 }
 
@@ -179,7 +220,6 @@ function PlayerConfigurator({
   otherSelection?: PlayerSelection
   onChange: (selection: PlayerSelection) => void
 }) {
-  const [isChanging, setIsChanging] = useState(false)
   const selectedColor = normalizeVehiclePaintColor(selection.color)
   const otherColor = otherSelection
     ? normalizeVehiclePaintColor(otherSelection.color)
@@ -187,74 +227,45 @@ function PlayerConfigurator({
   const duplicatesOther = (color: string) => otherColor === color
 
   return (
-    <fieldset className="surface-panel p-5 sm:p-6">
+    <fieldset className="rounded-xl border border-border/70 bg-background/35 p-3.5">
       <legend className="px-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-info">
         {label}
       </legend>
-      <div className="grid items-center gap-5 sm:grid-cols-[12rem_minmax(0,1fr)]">
+      <div className="grid items-center gap-3 sm:grid-cols-[7rem_minmax(0,1fr)]">
         <VehiclePreview
-          className="h-32 w-full"
+          className="h-20 w-full"
           color={selectedColor}
         />
-        <div>
+        <div className="min-w-0">
           <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
-            Carro atual
-          </p>
-          <p className="mt-1 font-display text-3xl font-black uppercase italic">
             F1 Never Lift
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Monoposto único com pintura personalizável
-          </p>
-          <Button
-            aria-expanded={isChanging}
-            className="mt-4"
-            onClick={() => setIsChanging((current) => !current)}
-            size="sm"
-            type="button"
-            variant="secondary"
-          >
-            {isChanging ? 'Concluir' : 'Personalizar'}
-          </Button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {VEHICLE_PAINT_OPTIONS.map((paint) => (
+              <button
+                aria-label={`Selecionar pintura ${paint.label}`}
+                aria-pressed={selectedColor === paint.color}
+                className={`size-8 rounded-full border-2 transition ${
+                  selectedColor === paint.color
+                    ? 'scale-110 border-foreground'
+                    : 'border-transparent opacity-75 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25'
+                }`}
+                disabled={duplicatesOther(paint.color)}
+                key={paint.id}
+                onClick={() => onChange({ ...selection, color: paint.color })}
+                style={{ backgroundColor: paint.color }}
+                title={paint.label}
+                type="button"
+              />
+            ))}
+          </div>
         </div>
       </div>
-
-      {isChanging && (
-        <div className="mt-5 border-t border-border/70 pt-5">
-          <div>
-            <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.17em] text-muted-foreground">
-              Cor do carro e capacete
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {VEHICLE_PAINT_OPTIONS.map((paint) => (
-                <button
-                  aria-label={`Selecionar pintura ${paint.label}`}
-                  aria-pressed={selectedColor === paint.color}
-                  className={`size-8 rounded-full border-2 transition ${
-                    selectedColor === paint.color
-                      ? 'scale-110 border-foreground'
-                      : 'border-transparent opacity-75 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-25'
-                  }`}
-                  disabled={duplicatesOther(paint.color)}
-                  key={paint.id}
-                  onClick={() => onChange({ ...selection, color: paint.color })}
-                  style={{ backgroundColor: paint.color }}
-                  title={paint.label}
-                  type="button"
-                />
-              ))}
-            </div>
-          </div>
-          {otherSelection && (
-            <p className="mt-4 text-xs font-semibold text-warning">
-              A pintura usada pelo outro jogador fica indisponível.
-            </p>
-          )}
-        </div>
+      {otherSelection && (
+        <p className="mt-2 text-[11px] font-semibold text-warning">
+          A pintura do outro jogador fica indisponível.
+        </p>
       )}
-      <p className="mt-3 text-xs font-semibold text-muted-foreground">
-        Todos os participantes usam o mesmo modelo e a mesma física.
-      </p>
     </fieldset>
   )
 }
@@ -272,13 +283,32 @@ export function RacePage() {
   const [tracksLoading, setTracksLoading] = useState(true)
   const [trackLoading, setTrackLoading] = useState(false)
   const [mode, setMode] = useState<RaceMode>('solo')
-  const [difficulty, setDifficulty] = useState<BotDifficulty>('normal')
+  const [difficulty, setDifficulty] = useState<BotDifficulty>('easy')
+  const [botCount, setBotCount] = useState(2)
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDayPreset>('day')
   const [playerOne, setPlayerOne] = useState(defaultPlayerOne)
   const [playerTwo, setPlayerTwo] = useState(defaultPlayerTwo)
   const [engine, setEngine] = useState<RaceEngine | null>(null)
   const [results, setResults] = useState<RaceResultEntry[] | null>(null)
   const [submission, setSubmission] = useState<SubmissionState>({ status: 'idle' })
+  const humanCount = mode === 'local' ? 2 : 1
+  const maximumBotCount = 22 - humanCount
+  const difficultyOption =
+    difficultyOptions.find((option) => option.id === difficulty) ??
+    difficultyOptions[0]
+
+  useEffect(() => {
+    setBotCount((current) => Math.min(current, maximumBotCount))
+  }, [maximumBotCount])
+
+  const cycleDifficulty = useCallback(() => {
+    setDifficulty((current) => {
+      const currentIndex = difficultyOptions.findIndex(
+        (option) => option.id === current,
+      )
+      return difficultyOptions[(currentIndex + 1) % difficultyOptions.length].id
+    })
+  }, [])
 
   const requestGuestSession = useCallback(() => {
     requestedGuest.current = true
@@ -369,24 +399,25 @@ export function RacePage() {
         kind: 'human',
         color: playerTwoColor,
       })
-    } else {
-      const botColors = getAlternativeVehiclePaintColors(playerOneColor)
-      racers.push(
-        {
-          id: 'bot-apex',
-          name: 'Bot Apex',
-          kind: 'bot',
-          color: botColors[0],
-          botDifficulty: difficulty,
-        },
-        {
-          id: 'bot-vector',
-          name: 'Bot Vector',
-          kind: 'bot',
-          color: botColors[1],
-          botDifficulty: difficulty,
-        },
-      )
+    }
+
+    const humanColors = new Set(
+      racers.filter((racer) => racer.kind === 'human').map((racer) => racer.color),
+    )
+    const botColors = [
+      ...VEHICLE_PAINT_OPTIONS.map((paint) => paint.color).filter(
+        (color) => !humanColors.has(color),
+      ),
+      ...VEHICLE_PAINT_OPTIONS.map((paint) => paint.color),
+    ]
+    for (let index = 0; index < botCount; index += 1) {
+      racers.push({
+        id: `bot-${index + 1}`,
+        name: `Bot ${String(index + 1).padStart(2, '0')}`,
+        kind: 'bot',
+        color: botColors[index % botColors.length],
+        botDifficulty: difficulty,
+      })
     }
 
     setResults(null)
@@ -402,6 +433,7 @@ export function RacePage() {
     )
   }, [
     account?.displayName,
+    botCount,
     difficulty,
     mode,
     playerOne,
@@ -547,50 +579,254 @@ export function RacePage() {
           </p>
           <h1 className="display-heading mt-3 text-6xl sm:text-8xl">Prepare a corrida</h1>
           <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">
-            Escolha circuito e pintura. O resumo acompanha as decisões até a largada.
+            Defina modo, pilotos, adversários e condições da prova antes da largada.
           </p>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
-          <div className="surface-panel min-w-0 p-4 sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
+        <section className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1.02fr)_minmax(24rem,0.98fr)]">
+          <section className="surface-panel min-w-0 p-5 sm:p-6 xl:h-[56rem] xl:overflow-y-auto">
+            <div className="mb-6 flex items-center gap-3 border-b border-border/70 pb-4">
+              <Settings2 aria-hidden="true" className="size-5 text-primary" />
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
-                  Temporada 2026
+                  Preparação local
                 </p>
-                <h2 className="mt-1 font-display text-2xl font-black uppercase italic">
-                  24 circuitos
+                <h2 className="font-display text-2xl font-black uppercase italic">
+                  Ajustes da prova
                 </h2>
               </div>
-              <MapPinned aria-hidden="true" className="size-6 text-info" />
             </div>
 
-            {tracksLoading && (
-              <div className="grid min-h-48 place-items-center text-sm text-muted-foreground">
-                <LoaderCircle aria-hidden="true" className="size-6 animate-spin text-info" />
-                Carregando circuitos…
-              </div>
-            )}
-            {!tracksLoading && trackCatalog && (
-              <div
-                aria-label="Circuitos disponíveis"
-                className="max-h-[28rem] space-y-2 overflow-y-auto pr-1"
-              >
-                {trackCatalog.tracks.map((track) => (
-                  <TrackOption
-                    key={track.id}
-                    onSelect={() => setSelectedTrackId(track.id)}
-                    selected={selectedTrackId === track.id}
-                    track={track}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+            <div className="space-y-6">
+              <fieldset>
+                <legend className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                  Modo de jogo
+                </legend>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button
+                    aria-pressed={mode === 'solo'}
+                    className={
+                      mode === 'solo'
+                        ? 'flex items-center gap-3 rounded-xl border border-primary/70 bg-primary/10 p-3.5 text-left transition'
+                        : 'flex items-center gap-3 rounded-xl border border-border/70 bg-background/35 p-3.5 text-left transition hover:bg-muted/55'
+                    }
+                    onClick={() => setMode('solo')}
+                    type="button"
+                  >
+                    <Bot aria-hidden="true" className="size-5 text-primary" />
+                    <span>
+                      <strong className="block text-sm">Solo</strong>
+                      <small className="text-muted-foreground">Um jogador</small>
+                    </span>
+                  </button>
+                  <button
+                    aria-pressed={mode === 'local'}
+                    className={
+                      mode === 'local'
+                        ? 'flex items-center gap-3 rounded-xl border border-primary/70 bg-primary/10 p-3.5 text-left transition'
+                        : 'flex items-center gap-3 rounded-xl border border-border/70 bg-background/35 p-3.5 text-left transition hover:bg-muted/55'
+                    }
+                    onClick={() => {
+                      setMode('local')
+                      if (
+                        normalizeVehiclePaintColor(playerTwo.color) ===
+                        normalizeVehiclePaintColor(playerOne.color)
+                      ) {
+                        setPlayerTwo({
+                          ...playerTwo,
+                          color:
+                            getAlternativeVehiclePaintColors(playerOne.color)[0] ??
+                            SECONDARY_VEHICLE_PAINT_COLOR,
+                        })
+                      }
+                    }}
+                    type="button"
+                  >
+                    <Users aria-hidden="true" className="size-5 text-info" />
+                    <span>
+                      <strong className="block text-sm">Local</strong>
+                      <small className="text-muted-foreground">Dois jogadores</small>
+                    </span>
+                  </button>
+                </div>
+              </fieldset>
 
-          <div className="surface-panel min-h-[28rem] min-w-0 overflow-hidden p-5 sm:p-6">
+              <section aria-labelledby="vehicle-settings-title">
+                <h3
+                  className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground"
+                  id="vehicle-settings-title"
+                >
+                  Carros
+                </h3>
+                <div className="mt-3 space-y-3">
+                  <PlayerConfigurator
+                    label="Jogador 1"
+                    onChange={setPlayerOne}
+                    otherSelection={mode === 'local' ? playerTwo : undefined}
+                    selection={playerOne}
+                  />
+                  {mode === 'local' && (
+                    <PlayerConfigurator
+                      label="Jogador 2"
+                      onChange={setPlayerTwo}
+                      otherSelection={playerOne}
+                      selection={playerTwo}
+                    />
+                  )}
+                </div>
+              </section>
+
+              {tracksLoading ? (
+                <div className="grid min-h-48 place-items-center gap-2 text-sm text-muted-foreground">
+                  <LoaderCircle aria-hidden="true" className="size-6 animate-spin text-info" />
+                  Carregando circuitos…
+                </div>
+              ) : (
+                <TrackCarousel
+                  catalog={trackCatalog}
+                  getTrack={raceApi.getTrack}
+                  onLoadError={setTrackError}
+                  onSelect={setSelectedTrackId}
+                  selectedId={selectedTrackId}
+                />
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                    Quantidade de bots
+                  </p>
+                  <div className="mt-2 flex h-11 items-center justify-between rounded-[10px] border border-border bg-background/45 p-1">
+                    <Button
+                      aria-label="Diminuir quantidade de bots"
+                      disabled={botCount === 0}
+                      onClick={() => setBotCount((current) => Math.max(0, current - 1))}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Minus aria-hidden="true" className="size-4" />
+                    </Button>
+                    <span
+                      aria-label={botCount + ' bots selecionados'}
+                      className="font-mono text-base font-black text-foreground"
+                    >
+                      {botCount}
+                    </span>
+                    <Button
+                      aria-label="Aumentar quantidade de bots"
+                      disabled={botCount >= maximumBotCount}
+                      onClick={() =>
+                        setBotCount((current) =>
+                          Math.min(maximumBotCount, current + 1),
+                        )
+                      }
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Plus aria-hidden="true" className="size-4" />
+                    </Button>
+                  </div>
+                  <p className="mt-1.5 text-[10px] font-semibold text-muted-foreground">
+                    {humanCount + botCount}/22 vagas ocupadas
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                    Dificuldade
+                  </p>
+                  <Button
+                    aria-label={
+                      'Dificuldade dos bots: ' +
+                      difficultyOption.label +
+                      '; clique para alterar'
+                    }
+                    className={'mt-2 size-11 ' + difficultyOption.tone}
+                    disabled={botCount === 0}
+                    onClick={cycleDifficulty}
+                    size="icon"
+                    title={'Bots no ' + difficultyOption.label.toLocaleLowerCase('pt-BR')}
+                    type="button"
+                    variant="secondary"
+                  >
+                    <DifficultyIcon difficulty={difficulty} />
+                  </Button>
+                </div>
+              </div>
+
+              <fieldset>
+                <legend className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                  Horário da corrida
+                </legend>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {timeOfDayOptions.map((option) => (
+                    <button
+                      aria-pressed={timeOfDay === option.id}
+                      className={
+                        timeOfDay === option.id
+                          ? 'rounded-xl border border-primary bg-primary/12 px-3 py-3 text-center text-sm font-extrabold text-foreground transition'
+                          : 'rounded-xl border border-border bg-background/45 px-3 py-3 text-center text-sm font-extrabold text-muted-foreground transition hover:bg-muted/65'
+                      }
+                      key={option.id}
+                      onClick={() => setTimeOfDay(option.id)}
+                      title={option.description}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              {trackError && (
+                <div
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4"
+                  role="alert"
+                >
+                  <p className="text-sm text-destructive">{trackError}</p>
+                  <Button onClick={loadTrackCatalog} size="sm" variant="secondary">
+                    <RotateCcw aria-hidden="true" className="size-4" />
+                    Recarregar pistas
+                  </Button>
+                </div>
+              )}
+
+              {sessionError && (
+                <div
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4"
+                  role="alert"
+                >
+                  <p className="text-sm text-destructive">{sessionError}</p>
+                  <Button onClick={requestGuestSession} size="sm" variant="secondary">
+                    Tentar sessão novamente
+                  </Button>
+                </div>
+              )}
+
+              <Button
+                className="w-full"
+                disabled={!session || !selectedTrack || trackLoading}
+                onClick={startRace}
+                size="lg"
+              >
+                {session && selectedTrack ? (
+                  <Play aria-hidden="true" className="size-4" />
+                ) : (
+                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                )}
+                {session && selectedTrack ? 'Iniciar corrida' : 'Preparando corrida'}
+              </Button>
+            </div>
+          </section>
+
+          <section
+            aria-label="Mapa do circuito selecionado"
+            className="surface-panel min-h-[40rem] min-w-0 overflow-hidden p-5 sm:p-6 xl:h-[56rem]"
+          >
             {trackLoading && (
-              <div className="grid h-full min-h-[24rem] place-items-center text-sm font-semibold text-muted-foreground">
+              <div className="grid h-full min-h-[36rem] place-items-center text-sm font-semibold text-muted-foreground">
                 <LoaderCircle aria-hidden="true" className="size-7 animate-spin text-info" />
                 Preparando pista…
               </div>
@@ -615,270 +851,26 @@ export function RacePage() {
                     </span>
                   </div>
                 </div>
-                <div className="mt-5 flex-1 rounded-xl border border-border/70 bg-[#07101a] p-4">
+                <div className="mt-5 min-h-0 flex-1 rounded-xl border border-border/70 bg-[#07101a] p-5">
                   <TrackPreview track={selectedTrack} />
                 </div>
-                <p className="mt-4 text-xs font-semibold text-muted-foreground">
-                  Traçado completo disponível durante a corrida
-                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-2 text-muted-foreground">
+                    <span className="size-2.5 rounded-full bg-info ring-2 ring-foreground/80" />
+                    Largada e sentido da prova
+                  </span>
+                  <span className="text-muted-foreground">
+                    Traçado completo durante a corrida
+                  </span>
+                </div>
               </div>
             )}
             {!trackLoading && !selectedTrack && !trackError && (
-              <div className="grid h-full min-h-[24rem] place-items-center text-sm text-muted-foreground">
+              <div className="grid h-full min-h-[36rem] place-items-center text-sm text-muted-foreground">
                 Selecione um circuito para carregar a prévia.
               </div>
             )}
-          </div>
-        </section>
-
-        {trackError && (
-          <div
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4"
-            role="alert"
-          >
-            <p className="text-sm text-destructive">{trackError}</p>
-            <Button onClick={loadTrackCatalog} size="sm" variant="secondary">
-              <RotateCcw aria-hidden="true" className="size-4" />
-              Recarregar pistas
-            </Button>
-          </div>
-        )}
-
-        <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
-          <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                aria-pressed={mode === 'solo'}
-                className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'solo' ? 'border-primary/70 bg-primary/8' : ''}`}
-                onClick={() => setMode('solo')}
-                type="button"
-              >
-                <Bot aria-hidden="true" className="size-7 text-primary" />
-                <span>
-                  <strong className="block">Solo contra bots</strong>
-                  <small className="text-muted-foreground">
-                    Um piloto contra dois adversários
-                  </small>
-                </span>
-              </button>
-              <button
-                aria-pressed={mode === 'local'}
-                className={`surface-panel flex items-center gap-4 p-5 text-left transition ${mode === 'local' ? 'border-primary/70 bg-primary/8' : ''}`}
-                onClick={() => {
-                  setMode('local')
-                  if (
-                    normalizeVehiclePaintColor(playerTwo.color) ===
-                    normalizeVehiclePaintColor(playerOne.color)
-                  ) {
-                    setPlayerTwo({
-                      ...playerTwo,
-                      color:
-                        getAlternativeVehiclePaintColors(playerOne.color)[0] ??
-                        SECONDARY_VEHICLE_PAINT_COLOR,
-                    })
-                  }
-                }}
-                type="button"
-              >
-                <Users aria-hidden="true" className="size-7 text-accent" />
-                <span>
-                  <strong className="block">Dois jogadores locais</strong>
-                  <small className="text-muted-foreground">
-                    WASD contra setas em split-screen
-                  </small>
-                </span>
-              </button>
-            </div>
-
-            <PlayerConfigurator
-              label="Jogador 1"
-              onChange={setPlayerOne}
-              otherSelection={mode === 'local' ? playerTwo : undefined}
-              selection={playerOne}
-            />
-            {mode === 'local' && (
-              <PlayerConfigurator
-                label="Jogador 2"
-                onChange={setPlayerTwo}
-                otherSelection={playerOne}
-                selection={playerTwo}
-              />
-            )}
-
-            <details className="group rounded-2xl border border-border bg-card/55 p-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-extrabold marker:content-none">
-                <span>
-                  <span className="block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-                    Ajustes da prova
-                  </span>
-                  <span className="mt-1 block">Opções adicionais</span>
-                </span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="size-5 text-info transition-transform group-open:rotate-180"
-                />
-              </summary>
-
-              <div className="mt-5 space-y-5 border-t border-border/70 pt-5">
-                <fieldset>
-                  <legend className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                    Horário da corrida
-                  </legend>
-                  <p className="mb-3 mt-2 text-sm text-muted-foreground">
-                    O preset visual permanece fixo da largada até a bandeirada.
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {timeOfDayOptions.map((option) => (
-                      <button
-                        aria-pressed={timeOfDay === option.id}
-                        className={`rounded-xl border p-4 text-left transition ${
-                          timeOfDay === option.id
-                            ? 'border-primary bg-primary/12'
-                            : 'border-border bg-background/45 hover:bg-muted/65'
-                        }`}
-                        key={option.id}
-                        onClick={() => setTimeOfDay(option.id)}
-                        type="button"
-                      >
-                        <span className="font-extrabold">{option.label}</span>
-                        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                          {option.description}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-
-                {mode === 'solo' && (
-                  <fieldset>
-                    <legend className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                      Dificuldade dos bots
-                    </legend>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(['easy', 'normal', 'hard'] as const).map((option) => (
-                        <Button
-                          key={option}
-                          onClick={() => setDifficulty(option)}
-                          type="button"
-                          variant={difficulty === option ? 'default' : 'secondary'}
-                        >
-                          {option === 'easy'
-                            ? 'Fácil'
-                            : option === 'normal'
-                              ? 'Normal'
-                              : 'Difícil'}
-                        </Button>
-                      ))}
-                    </div>
-                  </fieldset>
-                )}
-              </div>
-            </details>
-
-            {sessionError && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 p-4" role="alert">
-                <p className="text-sm text-destructive">{sessionError}</p>
-                <Button onClick={requestGuestSession} size="sm" variant="secondary">
-                  Tentar sessão novamente
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <aside
-            aria-label="Resumo da corrida"
-            className="surface-panel overflow-hidden lg:sticky lg:top-24"
-          >
-            <div className="border-b border-border/70 bg-primary/8 p-5">
-              <div className="flex items-center gap-3">
-                <Gamepad2 aria-hidden="true" className="size-5 text-info" />
-                <div>
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                    Configuração atual
-                  </p>
-                  <h2 className="font-display text-2xl font-black uppercase italic">
-                    Resumo da corrida
-                  </h2>
-                </div>
-              </div>
-            </div>
-
-            <dl className="space-y-3 p-5 text-sm">
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  Pista
-                </dt>
-                <dd className="mt-1 font-extrabold">
-                  {selectedTrack?.name ?? 'Carregando pista…'}
-                </dd>
-                {selectedTrack && (
-                  <dd className="mt-0.5 text-xs text-muted-foreground">
-                    {formatTrackLength(selectedTrack.lengthMeters)} ·{' '}
-                    {environmentLabels[selectedTrack.sceneryLayout.preset]}
-                  </dd>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3 border-t border-border/60 pt-3">
-                <div>
-                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Modo
-                  </dt>
-                  <dd className="mt-1 font-bold">{mode === 'solo' ? 'Solo' : 'Local'}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Carro
-                  </dt>
-                  <dd className="mt-1 font-bold">F1</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Voltas
-                  </dt>
-                  <dd className="mt-1 font-bold">1 volta</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    Horário
-                  </dt>
-                  <dd className="mt-1 font-bold">{timeOfDayLabel(timeOfDay)}</dd>
-                </div>
-              </div>
-              <div className="border-t border-border/60 pt-3">
-                <dt className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  Pinturas
-                </dt>
-                {[playerOne, ...(mode === 'local' ? [playerTwo] : [])].map((player) => (
-                  <dd className="mt-2 flex items-center gap-2 font-bold" key={player.name}>
-                    <span
-                      aria-hidden="true"
-                      className="size-3 rounded-full border border-foreground/25"
-                      style={{
-                        backgroundColor: normalizeVehiclePaintColor(player.color),
-                      }}
-                    />
-                    {player.name} · F1
-                  </dd>
-                ))}
-              </div>
-            </dl>
-
-            <div className="border-t border-border/70 p-5">
-              <Button
-                className="w-full"
-                disabled={!session || !selectedTrack || trackLoading}
-                onClick={startRace}
-                size="lg"
-              >
-                {session && selectedTrack ? (
-                  <Play aria-hidden="true" className="size-4" />
-                ) : (
-                  <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                )}
-                {session && selectedTrack ? 'Iniciar corrida' : 'Preparando corrida'}
-              </Button>
-            </div>
-          </aside>
+          </section>
         </section>
       </section>
     </AppShell>
