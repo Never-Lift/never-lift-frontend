@@ -64,9 +64,9 @@ const room = (overrides: Partial<RoomSummary> = {}): RoomSummary => ({
   ...overrides,
 })
 
-function authValue(): AuthContextValue {
+function authValue(subject = 'user-1'): AuthContextValue {
   return {
-    session: { role: 'user', token: 'jwt', subject: 'user-1' },
+    session: { role: 'user', token: 'jwt', subject },
     account: null,
     isGuest: false,
     isUser: true,
@@ -343,6 +343,115 @@ describe('OnlineLobbyPage', () => {
     const leaveButtons = screen.getAllByRole('button', { name: /^sair da sala$/i })
     await user.click(leaveButtons.at(-1)!)
     await waitFor(() => expect(api.leaveRoom).toHaveBeenCalledWith('1234', 'jwt'))
+    expect(await screen.findByText('online setup')).toBeInTheDocument()
+  })
+
+  it('keeps host settings editable without clearing ready and lets a regular player leave after lobby', async () => {
+    const readyHost = {
+      id: 'user-1',
+      userId: 'user-1',
+      displayName: 'Host',
+      bot: false,
+      ready: true,
+      connected: true,
+    }
+    const regularPlayer = {
+      id: 'user-2',
+      userId: 'user-2',
+      displayName: 'Segundo piloto',
+      bot: false,
+      ready: true,
+      connected: true,
+    }
+    const lobby = room({
+      participantCount: 2,
+      settingsLocked: true,
+      players: [readyHost, regularPlayer],
+    })
+    const client = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn(),
+      setReady: vi.fn(),
+      startRace: vi.fn(),
+    } as unknown as OnlineRoomClient
+    const hostApi = {
+      getRoom: vi.fn().mockResolvedValue(lobby),
+      getConnectionTicket: vi.fn(),
+      updateRoom: vi.fn().mockResolvedValue({
+        ...lobby,
+        limit: 10,
+        settingsLocked: false,
+      }),
+    }
+    const hostView = render(
+      <AuthContext.Provider value={authValue()}>
+        <MemoryRouter initialEntries={['/race/lobby/1234']}>
+          <Routes>
+            <Route
+              element={
+                <OnlineLobbyPage
+                  api={hostApi as never}
+                  createClient={() => client}
+                  getTracks={vi.fn().mockResolvedValue(catalog)}
+                />
+              }
+              path="/race/lobby/:roomCode"
+            />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    const user = userEvent.setup()
+    const grid = await screen.findByLabelText('Limite de carros')
+    await user.clear(grid)
+    await user.type(grid, '10')
+    await user.click(screen.getByRole('button', { name: /salvar ajustes/i }))
+    await waitFor(() => expect(hostApi.updateRoom).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: /retirar pronto/i })).toBeInTheDocument()
+
+    hostView.unmount()
+    onlineRoomSession.resetForTests()
+
+    const startedRoom = room({
+      participantCount: 2,
+      state: 'qualifying',
+      settingsLocked: true,
+      players: [readyHost, regularPlayer],
+    })
+    const playerApi = {
+      getRoom: vi.fn().mockResolvedValue(startedRoom),
+      getConnectionTicket: vi.fn(),
+      leaveRoom: vi.fn().mockResolvedValue({
+        ...startedRoom,
+        participantCount: 1,
+        players: [readyHost],
+      }),
+    }
+    render(
+      <AuthContext.Provider value={authValue('user-2')}>
+        <MemoryRouter initialEntries={['/race/lobby/1234']}>
+          <Routes>
+            <Route
+              element={
+                <OnlineLobbyPage
+                  api={playerApi as never}
+                  createClient={() => client}
+                  getTracks={vi.fn().mockResolvedValue(catalog)}
+                />
+              }
+              path="/race/lobby/:roomCode"
+            />
+            <Route element={<p>online setup</p>} path="/race/setup" />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    await user.click(await screen.findByRole('button', { name: /^sair da sala$/i }))
+    const leaveButtons = screen.getAllByRole('button', { name: /^sair da sala$/i })
+    await user.click(leaveButtons.at(-1)!)
+    await waitFor(() => expect(playerApi.leaveRoom).toHaveBeenCalledWith('1234', 'jwt'))
     expect(await screen.findByText('online setup')).toBeInTheDocument()
   })
 })

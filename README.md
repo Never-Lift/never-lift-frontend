@@ -47,8 +47,8 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 ## Módulo 3 — Parte 3a: lobby online
 
 - `/race/setup?mode=online` lista salas públicas e cria a sala com nome, visibilidade e senha. Pista, grid de 2 a 22 e bots opcionais com dificuldade única são definidos pelo host já dentro do lobby.
-- `/race/lobby/:roomCode` mantém o estado do lobby por WebSocket: identifica o host, propaga presença e saída imediatamente, permite confirmar ou retirar o pronto, remover participantes e iniciar a classificação somente quando houver pelo menos dois carros e todos os humanos estiverem prontos.
-- A conexão da sala permanece ativa ao navegar pelo app; o item **Online** volta à sala vigente. A saída usa um botão próprio com confirmação e uma desconexão não recuperada libera a vaga depois da janela de reconexão.
+- `/race/lobby/:roomCode` mantém o estado do lobby por WebSocket: identifica o host, propaga presença e saída imediatamente, permite confirmar ou retirar o pronto, editar as configurações sem apagar confirmações existentes, remover participantes e iniciar a classificação somente quando houver pelo menos dois carros e todos os humanos estiverem prontos.
+- A conexão da sala permanece ativa ao navegar pelo app; o item **Online** volta à sala vigente. Host e participantes comuns podem sair por um botão próprio com confirmação, inclusive depois do avanço do lobby; a função de host é transferida quando necessário. Uma desconexão não recuperada libera a vaga depois da janela de reconexão.
 - Antes do handshake o frontend obtém `POST /api/rooms/{roomCode}/connection-ticket`. O ticket é temporário, vinculado à sala e usado sozinho na URL do WebSocket; o JWT principal nunca é exposto. Quedas de conexão usam backoff e reaproveitam o ticket durante a janela de reconexão.
 - A Parte 3a não executa física, classificação ou largada; isso permanece nas Partes 3b e 3c.
 

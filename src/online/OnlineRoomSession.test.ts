@@ -97,4 +97,31 @@ describe('OnlineRoomSession', () => {
       expect.objectContaining({ roomCode: null, room: null, status: 'closed' }),
     )
   })
+
+  it('accepts an explicit settings unlock instead of keeping a previous lock sticky', async () => {
+    let options: OnlineRoomClientOptions | undefined
+    const client = {
+      connect: vi.fn().mockImplementation(async () => options?.onStatus?.('connected')),
+      disconnect: vi.fn(),
+      setReady: vi.fn(),
+    }
+    await onlineRoomSession.connect({
+      roomCode: '1234',
+      initialRoom: { ...room, settingsLocked: true },
+      trackCatalogVersion: '2026.12',
+      physicsContractVersion: '2.0.0',
+      getTicket: vi.fn(),
+      createClient: (clientOptions) => {
+        options = clientOptions
+        return client as never
+      },
+    })
+
+    options?.onEnvelope?.({
+      type: 'room_state',
+      payload: { ...room, settingsLocked: false },
+    })
+
+    expect(onlineRoomSession.getSnapshot().room?.settingsLocked).toBe(false)
+  })
 })
