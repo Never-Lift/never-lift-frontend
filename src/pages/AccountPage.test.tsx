@@ -58,7 +58,7 @@ describe('AccountPage', () => {
     )
     await user.click(screen.getByRole('link', { name: /Never Lift/ }))
     expect(await screen.findByText('Piloto autenticado')).toBeInTheDocument()
-    expect(screen.getByText('Turbo Fox')).toBeInTheDocument()
+    expect(screen.getAllByText('Turbo Fox').length).toBeGreaterThanOrEqual(2)
     expect(screen.queryByText('Changed Name')).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
@@ -95,7 +95,7 @@ describe('AccountPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
     await user.click(screen.getByRole('link', { name: /Never Lift/ }))
     expect(await screen.findByText('Piloto autenticado')).toBeInTheDocument()
-    expect(screen.getByText('Turbo Fox')).toBeInTheDocument()
+    expect(screen.getAllByText('Turbo Fox').length).toBeGreaterThanOrEqual(2)
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 

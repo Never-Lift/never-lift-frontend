@@ -49,7 +49,7 @@ describe('Module 1 authentication flows', () => {
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
 
     expect(await screen.findByText('Piloto autenticado')).toBeInTheDocument()
-    expect(screen.getByText('Turbo Fox')).toBeInTheDocument()
+    expect(screen.getAllByText('Turbo Fox').length).toBeGreaterThanOrEqual(2)
   })
 
   it('registers with an optional avatar and returns to the main menu', async () => {

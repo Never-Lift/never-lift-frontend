@@ -29,6 +29,7 @@ export type DriverStartPenalty = {
 export type LocalRaceOverlayState = {
   startLights: StartLightState
   penalties: Record<string, DriverStartPenalty>
+  showDriverNames: boolean
 }
 
 const NEUTRAL_INPUT: DriverInput = {
@@ -128,9 +129,10 @@ export class LocalRaceSession {
       : { jumpStarted: false, throttleLockTicksRemaining: 0 }
   }
 
-  getOverlayState(): LocalRaceOverlayState {
+  getOverlayState(showDriverNames = false): LocalRaceOverlayState {
     return {
       startLights: this.getStartLightState(),
+      showDriverNames,
       penalties: Object.fromEntries(
         [...this.penalties].map(([racerId, penalty]) => [
           racerId,

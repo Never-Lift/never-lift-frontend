@@ -14,6 +14,7 @@ const CONTROL_KEYS = new Set([
   'KeyJ',
   'KeyK',
   'KeyL',
+  'Space',
 ])
 
 const PLAYER_TWO_ALTERNATIVE = {
@@ -110,6 +111,10 @@ export class KeyboardControls {
 
   getPressedCodes() {
     return [...this.pressed].sort()
+  }
+
+  isIdentificationHeld() {
+    return this.isPressed('Space')
   }
 
   getPlayerOneInput(mode: RaceMode): DriverInput {

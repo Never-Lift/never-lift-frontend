@@ -67,6 +67,22 @@ describe('KeyboardControls', () => {
     })
   })
 
+  it('uses Space only as the hold-to-identify shortcut', () => {
+    controls = new KeyboardControls()
+    const space = key('keydown', 'Space')
+
+    expect(space.defaultPrevented).toBe(true)
+    expect(controls.isIdentificationHeld()).toBe(true)
+    expect(controls.getPlayerOneInput('local')).toEqual({
+      throttle: 0,
+      brake: 0,
+      steer: 0,
+    })
+
+    key('keyup', 'Space')
+    expect(controls.isIdentificationHeld()).toBe(false)
+  })
+
   it('keeps every independent key when both local players use multiple controls', () => {
     controls = new KeyboardControls()
     for (const code of ['KeyW', 'KeyA', 'ArrowUp', 'ArrowRight']) {

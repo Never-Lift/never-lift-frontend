@@ -1,7 +1,5 @@
 import {
   Check,
-  ChevronLeft,
-  ChevronRight,
   Crown,
   DoorOpen,
   LoaderCircle,
@@ -24,6 +22,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
+import { TrackCarousel } from '@/components/race/TrackCarousel'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,8 +49,6 @@ import {
   type RoomSummary,
   type RoomVisibility,
   type TrackCatalog,
-  type TrackCatalogEntry,
-  type TrackDefinition,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error-messages'
 import { OnlineRoomClient } from '@/online/OnlineRoomClient'
@@ -220,114 +217,6 @@ function LobbyPlayer({
         )}
       </div>
     </li>
-  )
-}
-
-function TrackSilhouette({ track, name }: { track?: TrackDefinition; name: string }) {
-  if (!track) {
-    return <div aria-label={`Carregando traçado ${name}`} className="h-20 animate-pulse rounded-lg bg-muted/60" />
-  }
-  const width = Math.max(1, track.bounds.maxX - track.bounds.minX)
-  const height = Math.max(1, track.bounds.maxY - track.bounds.minY)
-  const points = track.centerline.map((point) => `${point.x},${-point.y}`).join(' ')
-  return (
-    <svg
-      aria-label={`Traçado ${name}`}
-      className="h-20 w-full"
-      preserveAspectRatio="xMidYMid meet"
-      role="img"
-      viewBox={`${track.bounds.minX - width * 0.08} ${-track.bounds.maxY - height * 0.08} ${width * 1.16} ${height * 1.16}`}
-    >
-      <polyline
-        fill="none"
-        points={points}
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={Math.max(width, height) * 0.014}
-      />
-    </svg>
-  )
-}
-
-function TrackCarousel({
-  catalog,
-  selectedId,
-  disabled,
-  getTrack,
-  onSelect,
-  onLoadError,
-}: {
-  catalog: TrackCatalog | null
-  selectedId: string
-  disabled: boolean
-  getTrack: typeof raceApi.getTrack
-  onSelect: (trackId: string) => void
-  onLoadError: (message: string) => void
-}) {
-  const tracks = useMemo(() => catalog?.tracks ?? [], [catalog])
-  const [start, setStart] = useState(0)
-  const [definitions, setDefinitions] = useState<Record<string, TrackDefinition>>({})
-  const maximumStart = Math.max(0, tracks.length - 3)
-  const visible = useMemo(() => tracks.slice(start, start + 3), [start, tracks])
-  const visibleKey = visible.map((track) => track.id).join('|')
-
-  useEffect(() => {
-    const selectedIndex = tracks.findIndex((track) => track.id === selectedId)
-    if (selectedIndex < 0 || (selectedIndex >= start && selectedIndex < start + 3)) return
-    setStart(Math.min(maximumStart, Math.max(0, selectedIndex - 1)))
-  }, [maximumStart, selectedId, start, tracks])
-
-  useEffect(() => {
-    let cancelled = false
-    const missing = visible.filter((track) => !definitions[track.id])
-    if (missing.length === 0) return
-    Promise.all(missing.map(async (track) => [track.id, await getTrack(track.id)] as const))
-      .then((loaded) => {
-        if (!cancelled) setDefinitions((current) => ({ ...current, ...Object.fromEntries(loaded) }))
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) onLoadError(getErrorMessage(loadError))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [definitions, getTrack, onLoadError, visible, visibleKey])
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Pista</span>
-        <div className="flex gap-2">
-          <Button aria-label="Circuitos anteriores" disabled={disabled || start === 0} onClick={() => setStart((value) => Math.max(0, value - 1))} size="icon" variant="ghost">
-            <ChevronLeft aria-hidden="true" className="size-4" />
-          </Button>
-          <Button aria-label="Próximos circuitos" disabled={disabled || start >= maximumStart} onClick={() => setStart((value) => Math.min(maximumStart, value + 1))} size="icon" variant="ghost">
-            <ChevronRight aria-hidden="true" className="size-4" />
-          </Button>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-2" role="listbox" aria-label="Selecionar pista">
-        {visible.map((track: TrackCatalogEntry) => {
-          const selected = track.id === selectedId
-          return (
-            <button
-              aria-label={`Selecionar ${track.name}`}
-              aria-selected={selected}
-              className={`min-w-0 rounded-xl border p-2 text-left transition ${selected ? 'border-info bg-info/10 text-info shadow-[0_0_0_1px_rgb(49_199_255/0.25)]' : 'border-border/70 bg-background/35 text-muted-foreground hover:border-info/45 hover:text-foreground'} disabled:cursor-not-allowed disabled:opacity-55`}
-              disabled={disabled}
-              key={track.id}
-              onClick={() => onSelect(track.id)}
-              role="option"
-              type="button"
-            >
-              <TrackSilhouette name={track.name} track={definitions[track.id]} />
-              <span className="mt-2 block truncate text-center text-[11px] font-extrabold text-foreground">{track.name}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
   )
 }
 

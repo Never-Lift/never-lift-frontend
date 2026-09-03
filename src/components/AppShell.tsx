@@ -5,6 +5,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/auth-context'
 import { Brand } from '@/components/Brand'
 import { Button } from '@/components/ui/button'
+import { getAvatar } from '@/lib/avatars'
 import { cn } from '@/lib/utils'
 import { useOnlineRoomSession } from '@/online/OnlineRoomSession'
 
@@ -23,6 +24,7 @@ export function AppShell({
   const navigate = useNavigate()
   const location = useLocation()
   const onlineSession = useOnlineRoomSession()
+  const avatar = getAvatar(account?.avatarId)
   const onlineTarget = onlineSession.roomCode
     ? `/race/lobby/${onlineSession.roomCode}`
     : '/race/setup?mode=online'
@@ -39,7 +41,7 @@ export function AppShell({
 
       <aside className="relative z-20 flex h-20 items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-6 lg:py-7">
         <Link className="shrink-0" to="/">
-          <Brand tagline="Race control" />
+          <Brand />
         </Link>
 
         <nav
@@ -98,32 +100,15 @@ export function AppShell({
           </NavLink>
 
           {isUser ? (
-            <>
-              <NavLink
-                aria-label="Minha conta"
-                className={({ isActive }) =>
-                  cn(
-                    navItemClass,
-                    isActive &&
-                      'border-primary/30 bg-primary/10 text-foreground shadow-[inset_3px_0_0_var(--primary)]',
-                  )
-                }
-                to="/account"
-              >
-                <UserRound aria-hidden="true" className="size-4 text-primary" />
-                <span className="hidden lg:inline">Minha conta</span>
-              </NavLink>
-
-              <button
-                aria-label="Sair"
-                className={cn(navItemClass, 'lg:mt-auto')}
-                onClick={handleSignOut}
-                type="button"
-              >
-                <LogOut aria-hidden="true" className="size-4" />
-                <span className="hidden lg:inline">Sair</span>
-              </button>
-            </>
+            <button
+              aria-label="Sair"
+              className={cn(navItemClass, 'lg:mt-auto')}
+              onClick={handleSignOut}
+              type="button"
+            >
+              <LogOut aria-hidden="true" className="size-4" />
+              <span className="hidden lg:inline">Sair</span>
+            </button>
           ) : (
             <Button asChild className="ml-1 lg:mt-auto lg:ml-0" size="sm">
               <Link aria-label="Entrar" to="/login">
@@ -134,26 +119,63 @@ export function AppShell({
           )}
         </nav>
 
+        {isUser && (
+          <Link
+            aria-label="Minha conta"
+            className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-card transition hover:border-primary lg:hidden"
+            to="/account"
+          >
+            {avatar ? (
+              <img alt="" className="size-full object-cover" src={avatar.image} />
+            ) : (
+              <UserRound aria-hidden="true" className="size-5 text-primary" />
+            )}
+          </Link>
+        )}
+
         <div className="hidden border-t border-border/70 pt-5 lg:block">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
             <span className="size-1.5 rounded-full bg-success shadow-[0_0_12px_var(--success)]" />
             Base de pilotos ativa
           </div>
-          <p className="mt-2 truncate text-sm font-semibold text-foreground">
-            {isUser ? `@${account?.gamertag ?? 'piloto'}` : 'Sessão visitante'}
-          </p>
+          {!isUser && (
+            <p className="mt-2 truncate text-sm font-semibold text-foreground">
+              Sessão visitante
+            </p>
+          )}
         </div>
       </aside>
 
       <div className="relative z-10 min-w-0">
         <header className="hidden h-[72px] items-center justify-between border-b border-border/60 px-8 lg:flex xl:px-12">
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            Race control <span className="mx-2 text-border">/</span>{' '}
             <span className="text-info">{moduleLabel}</span>
           </p>
-          <p className="text-xs font-semibold text-muted-foreground">
-            {isUser ? `@${account?.gamertag ?? 'piloto'}` : 'Acesso guest'}
-          </p>
+          {isUser ? (
+            <Link
+              aria-label="Minha conta"
+              className="flex min-w-56 items-center justify-end gap-3 rounded-xl border border-border/70 bg-card/55 px-3 py-2 text-right transition hover:border-primary/55 hover:bg-primary/8"
+              to="/account"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[10px] font-bold text-muted-foreground">
+                  @{account?.gamertag ?? 'piloto'}
+                </span>
+                <span className="mt-0.5 block truncate text-sm font-extrabold text-foreground">
+                  {account?.displayName ?? 'Piloto'}
+                </span>
+              </span>
+              <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full border border-primary/30 bg-primary/10">
+                {avatar ? (
+                  <img alt="" className="size-full object-cover" src={avatar.image} />
+                ) : (
+                  <UserRound aria-hidden="true" className="size-5 text-primary" />
+                )}
+              </span>
+            </Link>
+          ) : (
+            <p className="text-xs font-semibold text-muted-foreground">Acesso guest</p>
+          )}
         </header>
 
         <main className="mx-auto w-full max-w-[1400px] px-5 py-10 sm:px-8 sm:py-12 lg:px-10 xl:px-14">
