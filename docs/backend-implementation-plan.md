@@ -130,7 +130,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Depende de:** Módulos 1 e 2, com a Parte 2d do frontend validada e os cenários físicos v2 congelados.
 **Cobre features:** 4 (modos online — lobby, configuração de sala), 8, parte de 6 (física básica compartilhada), parte de 5 (colisão).
 **Este é o módulo de maior risco do projeto — é onde a lição sobre servidor autoritativo se aplica.**
-**Estado da Parte 3a:** sala, ticket e lobby, incluindo o refinamento de acesso/configuração de 02/09/2026, implementados; nova validação manual integrada em dois navegadores pendente. As Partes 3b/3c permanecem pendentes.
+**Estado da Parte 3a:** sala, ticket e lobby, incluindo o refinamento de acesso/configuração de 02/09/2026, implementados e validados manualmente em dois navegadores em 03/09/2026; a Parte 3a está pronta. As Partes 3b/3c permanecem pendentes.
 **Escopo:**
 - Sessão WebSocket por conexão (`/ws`), autenticada por ticket de uso único de 60 s vinculado à sala e ao usuário; o JWT principal não vai na URL.
 - `RoomManager`: cria/lista salas públicas e privadas por código numérico de 4 dígitos, atribui `hostId`/`hostName` e suporta até 22 humanos/bots. Não existe senha de sala: públicas aceitam entrada direta e privadas dependem exclusivamente do código. A criação recebe somente nome e visibilidade; pista, grid de 2 a 22 e bots são configurados pelo host dentro do lobby. Todos os endpoints de sala e ticket exigem `role: user`.
