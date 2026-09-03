@@ -34,6 +34,10 @@ const NEUTRAL_INPUT: DriverInput = {
   brake: 0,
   steer: 0,
 }
+export const MAX_RACE_PARTICIPANTS = 22
+const GRID_ROW_SPACING_METERS = 8
+const GRID_LATERAL_OFFSET_METERS = 2.2
+
 function cloneVehicle(vehicle: VehicleState): VehicleState {
   return {
     ...vehicle,
@@ -50,8 +54,24 @@ function createVehicle(
   index: number,
   geometry: TrackGeometry,
 ): VehicleState {
-  const gridSlot = geometry.definition.gridSlots[index]
-  if (!gridSlot) throw new Error('A pista não possui posições suficientes no grid.')
+  const publishedGridSlot = geometry.definition.gridSlots[index]
+  const row = Math.floor(index / 2) + 1
+  const gridDistanceMeters =
+    geometry.definition.lengthMeters - row * GRID_ROW_SPACING_METERS
+  const centerlinePoint = geometry.getCenterlinePoint(gridDistanceMeters)
+  const tangent = geometry.getCenterlineTangent(gridDistanceMeters)
+  const lateralOffset =
+    index % 2 === 0
+      ? -GRID_LATERAL_OFFSET_METERS
+      : GRID_LATERAL_OFFSET_METERS
+  const generatedGridSlot = {
+    position: {
+      x: centerlinePoint.x - tangent.y * lateralOffset,
+      y: centerlinePoint.y + tangent.x * lateralOffset,
+    },
+    angle: Math.atan2(tangent.y, tangent.x),
+  }
+  const gridSlot = publishedGridSlot ?? generatedGridSlot
   const position = { ...gridSlot.position }
   const startAngle = normalizeAngle(gridSlot.angle)
 
@@ -101,8 +121,13 @@ export class RaceEngine {
   private readonly inputs = new Map<string, DriverInput>()
 
   constructor(options: RaceEngineOptions) {
-    if (options.racers.length < 2 || options.racers.length > 4) {
-      throw new Error('A corrida precisa ter entre 2 e 4 competidores.')
+    if (
+      options.racers.length < 1 ||
+      options.racers.length > MAX_RACE_PARTICIPANTS
+    ) {
+      throw new Error(
+        `A corrida precisa ter entre 1 e ${MAX_RACE_PARTICIPANTS} competidores.`,
+      )
     }
 
     this.track = options.track

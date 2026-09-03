@@ -220,7 +220,6 @@ export function TrackCarousel({
       originScrollLeft: scroller.scrollLeft,
       moved: false,
     }
-    scroller.setPointerCapture?.(event.pointerId)
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
@@ -228,7 +227,10 @@ export function TrackCarousel({
     const scroller = scrollerRef.current
     if (!drag || !scroller || drag.pointerId !== event.pointerId) return
     const distance = event.clientX - drag.originX
-    if (Math.abs(distance) > 5) drag.moved = true
+    if (Math.abs(distance) > 5 && !drag.moved) {
+      drag.moved = true
+      scroller.setPointerCapture?.(event.pointerId)
+    }
     if (drag.moved) scroller.scrollLeft = drag.originScrollLeft - distance
   }
 
@@ -299,7 +301,7 @@ export function TrackCarousel({
 
       <div
         aria-label="Selecionar pista"
-        className="flex touch-pan-y snap-x snap-mandatory gap-2 overflow-x-auto pb-3 pr-8 select-none [scrollbar-width:thin] cursor-grab active:cursor-grabbing"
+        className="flex touch-pan-y snap-x snap-mandatory gap-2 overflow-x-auto pb-3 pr-8 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing"
         onClickCapture={(event) => {
           if (suppressClickRef.current) {
             event.preventDefault()

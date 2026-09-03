@@ -28,7 +28,7 @@ import {
   type TrackDefinition,
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error-messages'
-import { RaceEngine } from '@/race/RaceEngine'
+import { MAX_RACE_PARTICIPANTS, RaceEngine } from '@/race/RaceEngine'
 import type {
   BotDifficulty,
   RaceMode,
@@ -292,7 +292,7 @@ export function RacePage() {
   const [results, setResults] = useState<RaceResultEntry[] | null>(null)
   const [submission, setSubmission] = useState<SubmissionState>({ status: 'idle' })
   const humanCount = mode === 'local' ? 2 : 1
-  const maximumBotCount = 22 - humanCount
+  const maximumBotCount = MAX_RACE_PARTICIPANTS - humanCount
   const difficultyOption =
     difficultyOptions.find((option) => option.id === difficulty) ??
     difficultyOptions[0]
@@ -729,7 +729,7 @@ export function RacePage() {
                     </Button>
                   </div>
                   <p className="mt-1.5 text-[10px] font-semibold text-muted-foreground">
-                    {humanCount + botCount}/22 vagas ocupadas
+                    {humanCount + botCount}/{MAX_RACE_PARTICIPANTS} vagas ocupadas
                   </p>
                 </div>
 

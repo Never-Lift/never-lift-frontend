@@ -436,7 +436,7 @@ function isBetterProjection(
   )
 }
 
-function pointAtDistance<T extends TrackRacingPoint>(
+function pointAtDistance<T extends TrackRacingPoint | TrackPathPoint>(
   path: T[],
   distanceMeters: number,
   trackLengthMeters: number,
@@ -456,17 +456,30 @@ function pointAtDistance<T extends TrackRacingPoint>(
   const to = path[toIndex]
   const span = Math.max(Number.EPSILON, to.distanceMeters - from.distanceMeters)
   const alpha = clamp((normalizedDistance - from.distanceMeters) / span, 0, 1)
-  return {
+  const interpolated = {
     ...from,
     x: lerp(from.x, to.x, alpha),
     y: lerp(from.y, to.y, alpha),
     distanceMeters: normalizedDistance,
-    targetSpeedFactor: lerp(
-      from.targetSpeedFactor,
-      to.targetSpeedFactor,
-      alpha,
-    ),
   }
+  if ('targetSpeedFactor' in from && 'targetSpeedFactor' in to) {
+    return {
+      ...interpolated,
+      targetSpeedFactor: lerp(
+        from.targetSpeedFactor,
+        to.targetSpeedFactor,
+        alpha,
+      ),
+    } as T
+  }
+  if ('halfWidthMeters' in from && 'halfWidthMeters' in to) {
+    return {
+      ...interpolated,
+      halfWidthMeters: lerp(from.halfWidthMeters, to.halfWidthMeters, alpha),
+      elevationLayer: alpha < 0.5 ? from.elevationLayer : to.elevationLayer,
+    } as T
+  }
+  return interpolated as T
 }
 
 export function crossesGate(
@@ -895,6 +908,14 @@ export class TrackGeometry {
   getRacingLinePoint(distanceMeters: number) {
     return pointAtDistance(
       this.definition.racingLine,
+      distanceMeters,
+      this.definition.lengthMeters,
+    )
+  }
+
+  getCenterlinePoint(distanceMeters: number) {
+    return pointAtDistance(
+      this.definition.centerline,
       distanceMeters,
       this.definition.lengthMeters,
     )

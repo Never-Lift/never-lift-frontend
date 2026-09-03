@@ -2,6 +2,19 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { RaceEngine } from '@/race/RaceEngine'
+
+const raceCanvasCapture = vi.hoisted(() => ({
+  engine: null as RaceEngine | null,
+}))
+
+vi.mock('@/components/race/RaceCanvas', () => ({
+  RaceCanvas: ({ engine }: { engine: RaceEngine }) => {
+    raceCanvasCapture.engine = engine
+    return <section aria-label="Corrida de teste iniciada" />
+  },
+}))
+
 import trackCatalog from '../../contracts/module-2/v2/catalog.json'
 import { jsonResponse, renderApp } from '@/test/render-app'
 import { SHORT_TRACK } from '@/test/track-fixtures'
@@ -20,6 +33,7 @@ function findStartButton() {
 
 describe('Module 2 local race setup', () => {
   beforeEach(() => {
+    raceCanvasCapture.engine = null
     vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api')
     vi.stubGlobal(
       'fetch',
@@ -145,6 +159,27 @@ describe('Module 2 local race setup', () => {
     await user.click(screen.getByRole('button', { name: /LocalDois jogadores/ }))
     expect(screen.getByLabelText('20 bots selecionados')).toBeInTheDocument()
     expect(screen.getByText('22/22 vagas ocupadas')).toBeInTheDocument()
+  })
+
+  it('starts the race with a complete grid of 21 active bots', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    const startButton = await findStartButton()
+    const increase = screen.getByRole('button', {
+      name: 'Aumentar quantidade de bots',
+    })
+    for (let index = 0; index < 19; index += 1) fireEvent.click(increase)
+
+    await user.click(startButton)
+
+    expect(
+      screen.getByRole('region', { name: 'Corrida de teste iniciada' }),
+    ).toBeInTheDocument()
+    const engine = raceCanvasCapture.engine
+    expect(engine).not.toBeNull()
+    const vehicles = engine?.getInterpolatedVehicles() ?? []
+    expect(vehicles).toHaveLength(22)
+    expect(vehicles.filter((vehicle) => vehicle.kind === 'bot')).toHaveLength(21)
   })
 
   it('keeps the time-of-day choices directly visible', async () => {
