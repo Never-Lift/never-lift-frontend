@@ -52,4 +52,44 @@ describe('TrackCarousel', () => {
     expect(scroller.scrollLeft).toBe(220)
     expect(onSelect).not.toHaveBeenCalled()
   })
+
+  it('keeps a pointer click available to select a circuit', () => {
+    const onSelect = vi.fn()
+    render(
+      <TrackCarousel
+        catalog={catalog}
+        getTrack={vi.fn().mockResolvedValue(SHORT_TRACK)}
+        onLoadError={vi.fn()}
+        onSelect={onSelect}
+        selectedId="albert-park"
+      />,
+    )
+    const option = screen.getByRole('option', {
+      name: 'Selecionar Shanghai International Circuit',
+    })
+
+    fireEvent.pointerDown(option, { button: 0, clientX: 200, pointerId: 7 })
+    fireEvent.pointerUp(option, { clientX: 200, pointerId: 7 })
+    fireEvent.click(option)
+
+    expect(onSelect).toHaveBeenCalledOnce()
+    expect(onSelect).toHaveBeenCalledWith('shanghai')
+  })
+
+  it('hides the native scrollbar without removing horizontal scrolling', () => {
+    render(
+      <TrackCarousel
+        catalog={catalog}
+        getTrack={vi.fn().mockResolvedValue(SHORT_TRACK)}
+        onLoadError={vi.fn()}
+        onSelect={vi.fn()}
+        selectedId="albert-park"
+      />,
+    )
+
+    expect(screen.getByRole('listbox', { name: 'Selecionar pista' })).toHaveClass(
+      '[scrollbar-width:none]',
+      'overflow-x-auto',
+    )
+  })
 })

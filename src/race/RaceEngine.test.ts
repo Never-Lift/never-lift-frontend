@@ -154,6 +154,68 @@ function trackInput(state: VehicleState, geometry: TrackGeometry): DriverInput {
 }
 
 describe('RaceEngine fixed-step simulation', () => {
+  it('supports a full 22-car grid and advances every bot through the same physics', () => {
+    const racers: VehicleSetup[] = [
+      setup('player-1'),
+      ...Array.from({ length: 21 }, (_, index) => ({
+        ...setup(`bot-${index + 1}`, 'bot'),
+        botDifficulty: 'hard' as const,
+      })),
+    ]
+    const engine = new RaceEngine({
+      track: SHORT_TRACK,
+      mode: 'solo',
+      racers,
+    })
+
+    const initialVehicles = engine.getInterpolatedVehicles()
+    expect(initialVehicles).toHaveLength(22)
+    expect(
+      new Set(
+        initialVehicles.map(
+          (vehicle) =>
+            `${vehicle.position.x.toFixed(4)}:${vehicle.position.y.toFixed(4)}`,
+        ),
+      ).size,
+    ).toBe(22)
+
+    const initialBotPositions = new Map(
+      initialVehicles
+        .filter((vehicle) => vehicle.kind === 'bot')
+        .map((vehicle) => [vehicle.id, { ...vehicle.position }]),
+    )
+    for (let step = 0; step < 30; step += 1) engine.stepFixed()
+
+    const bots = engine
+      .getInterpolatedVehicles()
+      .filter((vehicle) => vehicle.kind === 'bot')
+    expect(bots).toHaveLength(21)
+    expect(bots.every((bot) => bot.botDifficulty === 'hard')).toBe(true)
+    expect(bots.every((bot) => bot.physicsState.appliedThrottle > 0)).toBe(true)
+    expect(
+      bots.every((bot) => {
+        const initial = initialBotPositions.get(bot.id)
+        return (
+          initial !== undefined &&
+          Math.hypot(
+            bot.position.x - initial.x,
+            bot.position.y - initial.y,
+          ) > 0.001
+        )
+      }),
+    ).toBe(true)
+  })
+
+  it('allows a solo race without bots', () => {
+    const engine = new RaceEngine({
+      track: SHORT_TRACK,
+      mode: 'solo',
+      racers: [setup('player-1')],
+    })
+
+    expect(engine.getInterpolatedVehicles()).toHaveLength(1)
+  })
+
   it('derives the default race timeout from the published v2 contract', () => {
     const lapCount = 3
     const durationTrack = structuredClone(SHORT_TRACK)
