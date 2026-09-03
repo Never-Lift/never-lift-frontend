@@ -1,12 +1,12 @@
 # Contratos compartilhados do Módulo 2 — v2
 
-Esta linha publica o contrato incompatível `2.0.0` da Parte 2d. Ela substitui a
+Esta linha publica o contrato incompatível `2.0.x` da Parte 2d. Ela substitui a
 física cinemática da v1 por uma dinâmica determinística de monoposto e torna a
 face visível de cada barreira a geometria canônica de colisão.
 
 ## Versões ativas
 
-- contrato físico e schema de pista: `2.0.0`;
+- contrato físico: `2.0.1`; schema de pista: `2.0.0`;
 - catálogo: `2026.12`;
 - unidade de mundo: metro; tempo: segundo; ângulo: radiano anti-horário desde `+x`.
 
@@ -69,5 +69,5 @@ cópia das pistas em produção.
 ## Compatibilidade
 
 `GET /api/tracks` e `GET /api/tracks/{id}` publicam esta linha. O cliente deve
-enviar `trackCatalogVersion=2026.12` e `physicsContractVersion=2.0.0` ao persistir
+enviar `trackCatalogVersion=2026.12` e `physicsContractVersion=2.0.1` ao persistir
 resultado ou entrar em sala. Divergência é rejeitada, nunca convertida.

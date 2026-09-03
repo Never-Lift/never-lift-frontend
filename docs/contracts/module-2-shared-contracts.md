@@ -20,7 +20,7 @@ As issues frontend #90 e backend #72 publicaram esta revisão incompatível de f
 
 O `v1.3.0` também contém uma reserva histórica de nitro/Shift que nunca ganhou efeito no Módulo 2. Essa decisão foi revogada para o sucessor, mas os arquivos dentro de `contracts/module-2/v1/` não serão reescritos silenciosamente.
 
-## Linha executável — Parte 2d e contrato 2.0.0
+## Linha executável — Parte 2d e contrato 2.0.x
 
 A Parte 2d substituiu o integrador arcade por uma simulação acessível de F1 e removeu boost/nitro integralmente antes do Módulo 3. A especificação normativa e suas fontes estão em [`module-2-physics-v2-proposal.md`](module-2-physics-v2-proposal.md). A implementação automatizada está concluída; a validação manual permanece pendente.
 
@@ -117,9 +117,9 @@ O frontend M2 deve:
 
 O backend M3 deve reproduzir os mesmos cenários dentro das tolerâncias declaradas. Divergência é bug.
 
-O contrato físico histórico `1.3.0` definiu um único F1, uma única condução e limiares simples de impacto, vida e dano. Ele permanece somente para interpretar resultados antigos; o runtime atual usa o contrato `2.0.0` descrito abaixo.
+O contrato físico histórico `1.3.0` definiu um único F1, uma única condução e limiares simples de impacto, vida e dano. Ele permanece somente para interpretar resultados antigos; o runtime atual usa o contrato `2.0.1` descrito abaixo. Essa revisão preserva todas as fórmulas da linha `2.0.0` e recalibra somente os limiares de dano, a perda cumulativa de vida e o desvio causado por falha de direção.
 
-O contrato `2.0.0` não reaproveita aceleração/frenagem constantes, hard cap de velocidade, correção linear de aderência, `targetYawRate` nem `collisionRadiusMeters`. Ele publica equações, ordem de integração, propriedades de massa/geometria, controles, powertrain, freios, pneus, aerodinâmica, superfícies, solver e tolerâncias. Cenários cobrem aceleração, coast-down, frenagem/travamento, curva constante, subesterço/sobresterço, power-oversteer, transições de superfície, impactos excêntricos, folga em muros e CCD. O TypeScript congela os estados esperados; o Java deverá reproduzi-los dentro das tolerâncias no Módulo 3.
+O contrato `2.0.x` não reaproveita aceleração/frenagem constantes, hard cap de velocidade, correção linear de aderência, `targetYawRate` nem `collisionRadiusMeters`. Ele publica equações, ordem de integração, propriedades de massa/geometria, controles, powertrain, freios, pneus, aerodinâmica, superfícies, solver e tolerâncias. Cenários cobrem aceleração, coast-down, frenagem/travamento, curva constante, subesterço/sobresterço, power-oversteer, transições de superfície, impactos excêntricos, folga em muros e CCD. O TypeScript congela os estados esperados; o Java deverá reproduzi-los dentro das tolerâncias no Módulo 3.
 
 ## Resultado local e segurança
 

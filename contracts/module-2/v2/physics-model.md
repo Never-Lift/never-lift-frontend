@@ -1,4 +1,4 @@
-# Modelo físico canônico 2.0.0
+# Modelo físico canônico 2.0.1
 
 Este documento faz parte do contrato executável. Implementações TypeScript e
 Java devem preservar fórmulas, sinais, ordem de cálculo e passo fixo. Pequenas
@@ -138,6 +138,14 @@ rearAxleRotationalInertiaKgM2 =
     velocidade absoluta.
 
 ## Dano e perda total
+
+A calibração `2.0.1` ignora contatos abaixo de `5 m/s` de `delta-v`, classifica
+dano de direção a partir de `5 m/s`, dano de motor a partir de `10 m/s`, dano
+combinado a partir de `18 m/s` e perda total direta a partir de `30 m/s`. Cada
+impacto relevante reduz a vida em `delta-v * 1,5`; impactos distintos continuam
+cumulativos. O desvio persistente usa somente `0,005` do comando máximo de
+esterço, para permanecer discreto em trechos curtos e acumular uma correção
+perceptível principalmente em retas longas.
 
 Dano de motor multiplica separadamente o teto de torque por
 `engineTorqueMultiplier` e o teto de potência por `enginePowerMultiplier` antes

@@ -6,7 +6,7 @@ import type {
 } from '@/lib/api'
 
 export const DEFAULT_TRACK_CATALOG_VERSION = '2026.12'
-export const DEFAULT_PHYSICS_CONTRACT_VERSION = '2.0.0'
+export const DEFAULT_PHYSICS_CONTRACT_VERSION = '2.0.1'
 
 function normalizeState(value: unknown): RoomState {
   const state = String(value ?? 'lobby').toLowerCase()

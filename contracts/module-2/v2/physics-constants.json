@@ -1,6 +1,6 @@
 {
   "$schema": "./physics-constants.schema.json",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "calibrationStatus": "initial",
   "units": {
     "distance": "meter",
@@ -148,15 +148,15 @@
     "maximumContactPoints": 2
   },
   "damage": {
-    "minimumDeltaVMetersPerSecond": 3,
-    "mediumDeltaVMetersPerSecond": 7,
-    "combinedDeltaVMetersPerSecond": 11,
-    "totalLossDeltaVMetersPerSecond": 16,
+    "minimumDeltaVMetersPerSecond": 5,
+    "mediumDeltaVMetersPerSecond": 10,
+    "combinedDeltaVMetersPerSecond": 18,
+    "totalLossDeltaVMetersPerSecond": 30,
     "maximumHealth": 100,
-    "healthDamagePerDeltaV": 3,
+    "healthDamagePerDeltaV": 1.5,
     "engineTorqueMultiplier": 0.86,
     "enginePowerMultiplier": 0.9,
-    "steeringPullStrength": 0.08,
+    "steeringPullStrength": 0.005,
     "totalLossDragMultiplier": 3,
     "totalLossLinearDragNewtonSecondsPerMeter": 900
   },
