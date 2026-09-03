@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const rendererCapture = vi.hoisted(() => ({
@@ -124,6 +124,7 @@ describe('RaceCanvas layout', () => {
         mode="local"
         onAbort={vi.fn()}
         onFinished={vi.fn()}
+        onRestart={vi.fn()}
         timeOfDay="day"
       />,
     )
@@ -138,14 +139,53 @@ describe('RaceCanvas layout', () => {
     )
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
     expect(screen.getByText(/para identificar pilotos/)).toHaveTextContent(
-      'Segure ESPAÇO para identificar pilotos',
+      'Segure ESPAÇO para identificar pilotos•R reinicia',
     )
-    expect(screen.getByRole('button', { name: 'Sair da corrida' })).toHaveClass(
-      'bottom-4',
-      'right-4',
-      'size-11',
+    expect(screen.getByRole('button', { name: 'Reiniciar corrida' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'R',
     )
+    expect(screen.getByRole('button', { name: 'Sair da corrida' })).toHaveClass('size-11')
     expect(rendererCapture.options).toHaveLength(1)
     expect(rendererCapture.options[0].splitScreenAspectRatio?.()).toBe(1.125)
   })
+
+  it.each(['solo', 'local'] as const)(
+    'restarts a %s race immediately from the button or the R key',
+    (mode) => {
+      vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+      vi.stubGlobal('cancelAnimationFrame', vi.fn())
+      const onRestart = vi.fn()
+      const engine = new RaceEngine({
+        track: SHORT_TRACK,
+        mode,
+        racers: [
+          {
+            id: 'player-1',
+            name: 'Piloto 1',
+            kind: 'human',
+            color: '#2d7dff',
+          },
+        ],
+      })
+
+      render(
+        <RaceCanvas
+          engine={engine}
+          mode={mode}
+          onAbort={vi.fn()}
+          onFinished={vi.fn()}
+          onRestart={onRestart}
+          timeOfDay="day"
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reiniciar corrida' }))
+      fireEvent.keyDown(window, { code: 'KeyR', key: 'r', repeat: false })
+      fireEvent.keyDown(window, { code: 'KeyR', key: 'r', repeat: true })
+
+      expect(onRestart).toHaveBeenCalledTimes(2)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    },
+  )
 })
