@@ -113,7 +113,7 @@ Esta revisão é normativa e detalha as decisões atualizadas acima:
 ## Limites e dependências
 
 - Estas decisões não tornam o Módulo 3 completo: o Módulo 2 está pronto, a
-  Parte 3a está implementada e aguarda a nova validação manual integrada, e as
+  Parte 3a foi validada manualmente em dois navegadores e está pronta desde 03/09/2026, e as
   Partes 3b/3c permanecem pendentes.
 - O M3 precisa reproduzir o contrato físico v2 e os cenários congelados antes de aceitar partidas online.
 - O limite de velocidade e os serviços de pit permanecem deliberadamente fora do M3; entram no Módulo 5 conforme o plano.
