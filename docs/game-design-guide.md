@@ -272,6 +272,7 @@ Regras:
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.
 - A condução usa a mesma dinâmica F1 para todas as corridas e participantes; não existe seletor Normal/Drift nem troca de acerto durante a prova.
 - `Shift` não possui função. Boost/nitro não aparece na preparação, corrida, HUD ou configuração de controles.
+- Corridas solo e local possuem reinício imediato pelo botão compacto ou pela tecla `R`, sem confirmação; a ação recria a prova com a mesma configuração e não se aplica ao online.
 - Dano no Módulo 2 é cumulativo, reduz uma barra de vida e usa a intensidade física do contato (`impulso`/`delta-v`). Na calibração `2.0.1`, contatos abaixo de `5 m/s` são ignorados; direção, motor, dano combinado e perda total direta começam respectivamente em `5`, `10`, `18` e `30 m/s`, e a vida perde `1,5` ponto por `m/s` de `delta-v`. Batidas menores repetidas ainda podem causar perda total. Motor reduz desempenho de forma moderada; direção aplica apenas `0,5%` do esterço máximo como desvio persistente para a esquerda ou direita, perceptível sobretudo em retas longas, sem reduzir a capacidade de esterçar; uma nova batida fraca pode redefinir o lado. O Módulo 5 acrescenta reparo em pits e o tratamento visual completo. Bots mais difíceis melhoram ritmo, frenagem, trajetória, recuperação e consistência simultaneamente, sem receber física privilegiada.
 
 ### 9.3 Resultado e pódio

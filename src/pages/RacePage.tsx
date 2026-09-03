@@ -495,6 +495,7 @@ export function RacePage() {
         timeOfDay={timeOfDay}
         onAbort={() => setEngine(null)}
         onFinished={finishRace}
+        onRestart={startRace}
       />
     )
   }

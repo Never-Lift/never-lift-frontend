@@ -1,4 +1,4 @@
-import { DoorOpen, Flag, Gauge, Keyboard } from 'lucide-react'
+import { DoorOpen, Flag, Gauge, Keyboard, RotateCcw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ type RaceCanvasProps = {
   timeOfDay: TimeOfDayPreset
   onAbort: () => void
   onFinished: (results: RaceResultEntry[]) => void
+  onRestart: () => void
 }
 export type DriverTelemetry = {
   name: string
@@ -115,16 +116,33 @@ export function RaceCanvas({
   timeOfDay,
   onAbort,
   onFinished,
+  onRestart,
 }: RaceCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const finishedRef = useRef(false)
   const onFinishedRef = useRef(onFinished)
+  const onRestartRef = useRef(onRestart)
   const [telemetry, setTelemetry] = useState<DriverTelemetry[]>([])
   const [startAnnouncement, setStartAnnouncement] = useState('Semáforo apagado')
 
   useEffect(() => {
     onFinishedRef.current = onFinished
   }, [onFinished])
+
+  useEffect(() => {
+    onRestartRef.current = onRestart
+  }, [onRestart])
+
+  useEffect(() => {
+    const handleQuickRestart = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyR' || event.repeat) return
+      event.preventDefault()
+      onRestartRef.current()
+    }
+
+    window.addEventListener('keydown', handleQuickRestart)
+    return () => window.removeEventListener('keydown', handleQuickRestart)
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -250,20 +268,35 @@ export function RaceCanvas({
         <p className="inline-flex items-center gap-2 rounded-lg border border-border/70 bg-background/76 px-2.5 py-2 text-[10px] font-bold text-muted-foreground backdrop-blur-md">
           <Keyboard aria-hidden="true" className="size-3.5 text-info" />
           Segure <kbd className="text-foreground">ESPAÇO</kbd> para identificar pilotos
+          <span aria-hidden="true">•</span>
+          <kbd className="text-foreground">R</kbd> reinicia
         </p>
       </div>
 
-      <Button
-        aria-label="Sair da corrida"
-        className="absolute bottom-4 right-4 z-30 size-11 shadow-xl"
-        onClick={onAbort}
-        size="icon"
-        title="Sair da corrida"
-        type="button"
-        variant="secondary"
-      >
-        <DoorOpen aria-hidden="true" className="size-5" />
-      </Button>
+      <div className="absolute bottom-4 right-4 z-30 flex gap-2">
+        <Button
+          aria-keyshortcuts="R"
+          aria-label="Reiniciar corrida"
+          className="size-11 shadow-xl"
+          onClick={onRestart}
+          size="icon"
+          title="Reiniciar corrida (R)"
+          type="button"
+        >
+          <RotateCcw aria-hidden="true" className="size-5" />
+        </Button>
+        <Button
+          aria-label="Sair da corrida"
+          className="size-11 shadow-xl"
+          onClick={onAbort}
+          size="icon"
+          title="Sair da corrida"
+          type="button"
+          variant="secondary"
+        >
+          <DoorOpen aria-hidden="true" className="size-5" />
+        </Button>
+      </div>
     </section>
   )
 }
