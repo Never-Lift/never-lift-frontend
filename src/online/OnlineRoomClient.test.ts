@@ -37,6 +37,25 @@ afterEach(() => {
 })
 
 describe('OnlineRoomClient', () => {
+  it('stops reconnecting and reports a physical-contract version mismatch', async () => {
+    vi.useFakeTimers()
+    const socket = new FakeSocket()
+    const createSocket = vi.fn(() => socket)
+    const onEnvelope = vi.fn()
+    const client = new OnlineRoomClient({
+      roomCode: '1234', trackCatalogVersion: '2026.12', physicsContractVersion: '2.0.2',
+      getTicket: vi.fn().mockResolvedValue(ticket()), wsUrl: 'ws://localhost/ws',
+      webSocketFactory: createSocket, onEnvelope,
+      now: () => Date.parse('2026-09-01T12:00:00.000Z'),
+    })
+    await client.connect()
+    socket.open()
+    socket.onmessage?.({ data: JSON.stringify({ type: 'race_event', payload: { type: 'version_mismatch' } }) })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(client.getStatus()).toBe('failed')
+    expect(createSocket).toHaveBeenCalledTimes(1)
+    expect(onEnvelope).toHaveBeenCalledWith({ type: 'error', payload: expect.objectContaining({ code: 'version_mismatch' }) })
+  })
   it('obtains a ticket before connecting and never places the JWT in the WebSocket URL', async () => {
     const sockets: FakeSocket[] = []
     const getTicket = vi.fn().mockResolvedValue(ticket())
@@ -44,7 +63,7 @@ describe('OnlineRoomClient', () => {
     const client = new OnlineRoomClient({
       roomCode: '1234',
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.1',
+      physicsContractVersion: '2.0.2',
       getTicket,
       now: () => Date.parse('2026-09-01T12:00:00.000Z'),
       wsUrl: 'wss://race.example/ws',
@@ -66,7 +85,7 @@ describe('OnlineRoomClient', () => {
       payload: {
         roomCode: '1234',
         trackCatalogVersion: '2026.12',
-        physicsContractVersion: '2.0.1',
+        physicsContractVersion: '2.0.2',
       },
     })
 
@@ -82,7 +101,7 @@ describe('OnlineRoomClient', () => {
     const client = new OnlineRoomClient({
       roomCode: '1234',
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.1',
+      physicsContractVersion: '2.0.2',
       getTicket,
       wsUrl: 'ws://localhost/ws',
       now: () => now,
@@ -127,7 +146,7 @@ describe('OnlineRoomClient', () => {
     const client = new OnlineRoomClient({
       roomCode: '1234',
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.1',
+      physicsContractVersion: '2.0.2',
       getTicket: vi.fn().mockResolvedValue(ticket()),
       wsUrl: 'ws://localhost/ws',
       now: () => now,
@@ -156,7 +175,7 @@ describe('OnlineRoomClient', () => {
       new OnlineRoomClient({
         roomCode: '1234',
         trackCatalogVersion: '2026.12',
-        physicsContractVersion: '2.0.1',
+        physicsContractVersion: '2.0.2',
         getTicket: vi.fn().mockResolvedValue({ ...ticket(), ticket: `ticket-${sockets.length + 1}` }),
         wsUrl: 'ws://localhost/ws',
         webSocketFactory: () => {

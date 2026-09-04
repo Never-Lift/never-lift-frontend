@@ -147,7 +147,7 @@ export function createTrackFixture(
   return {
     schemaVersion: '2.0.0',
     catalogVersion: '2026.12',
-    physicsContractVersion: '2.0.1',
+    physicsContractVersion: '2.0.2',
     id,
     name: id === 'monaco' ? 'Circuit de Monaco' : 'Circuit de Spa-Francorchamps',
     countryCode: id === 'monaco' ? 'MC' : 'BE',

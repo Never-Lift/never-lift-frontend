@@ -1,6 +1,6 @@
 {
   "$schema": "./physics-constants.schema.json",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "calibrationStatus": "initial",
   "units": {
     "distance": "meter",

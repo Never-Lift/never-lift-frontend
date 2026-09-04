@@ -134,12 +134,12 @@ function recordPairDamage(
   recordImpactDamage(
     first,
     { x: -primary.normal.x, y: -primary.normal.y },
-    resolution.firstDeltaVelocityMetersPerSecond,
+    resolution.firstNormalDeltaVelocityMetersPerSecond,
   )
   recordImpactDamage(
     second,
     primary.normal,
-    resolution.secondDeltaVelocityMetersPerSecond,
+    resolution.secondNormalDeltaVelocityMetersPerSecond,
   )
 }
 
@@ -294,7 +294,7 @@ export function resolveVehicleAgainstStaticColliders(
     recordImpactDamage(
       vehicle,
       { x: -primary.normal.x, y: -primary.normal.y },
-      resolution.firstDeltaVelocityMetersPerSecond,
+      resolution.firstNormalDeltaVelocityMetersPerSecond,
     )
     return true
   }
@@ -379,7 +379,7 @@ export function resolveVehicleAgainstStaticColliders(
         recordImpactDamage(
           vehicle,
           { x: -primary.normal.x, y: -primary.normal.y },
-          resolution.firstDeltaVelocityMetersPerSecond,
+          resolution.firstNormalDeltaVelocityMetersPerSecond,
         )
         collided = true
       }
@@ -420,7 +420,7 @@ export function resolveVehicleAgainstStaticColliders(
     recordImpactDamage(
       vehicle,
       { x: -primary.normal.x, y: -primary.normal.y },
-      resolution.firstDeltaVelocityMetersPerSecond,
+      resolution.firstNormalDeltaVelocityMetersPerSecond,
     )
     collided = true
     travelVelocity = { ...body.velocity }

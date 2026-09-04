@@ -539,7 +539,7 @@ describe('track API compatibility guard', () => {
         jsonResponse({
           schemaVersion: '2.0.0',
           catalogVersion: '2026.6',
-          physicsContractVersion: '2.0.1',
+          physicsContractVersion: '2.0.2',
           seasonReference: 2026,
           tracks: Array.from({ length: 24 }, () => ({})),
         }),
@@ -558,7 +558,7 @@ describe('track API compatibility guard', () => {
         jsonResponse({
           schemaVersion: '2.0.0',
           catalogVersion: '2026.12',
-          physicsContractVersion: '2.0.1',
+          physicsContractVersion: '2.0.2',
           seasonReference: 2026,
           calendarPolicy: 'original-24-round-freeze',
           tracks: Array.from({ length: 24 }, (_, index) => ({

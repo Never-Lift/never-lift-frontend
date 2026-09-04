@@ -10,7 +10,7 @@ const room: RoomSummary = {
   hostId: 'user-1',
   trackId: 'albert-park',
   trackCatalogVersion: '2026.12',
-  physicsContractVersion: '2.0.1',
+  physicsContractVersion: '2.0.2',
   participantCount: 1,
   limit: 22,
   state: 'lobby',
@@ -36,7 +36,7 @@ describe('OnlineRoomSession', () => {
       roomCode: '1234',
       initialRoom: room,
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.1',
+      physicsContractVersion: '2.0.2',
       getTicket: vi.fn(),
       createClient: (clientOptions) => {
         options = clientOptions
@@ -66,7 +66,7 @@ describe('OnlineRoomSession', () => {
       roomCode: '1234',
       initialRoom: room,
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.1',
+      physicsContractVersion: '2.0.2',
       getTicket: vi.fn(),
       createClient: (clientOptions) => {
         options = clientOptions
@@ -108,7 +108,7 @@ describe('OnlineRoomSession', () => {
       roomCode: '1234',
       initialRoom: { ...room, settingsLocked: true },
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.1',
+      physicsContractVersion: '2.0.2',
       getTicket: vi.fn(),
       createClient: (clientOptions) => {
         options = clientOptions

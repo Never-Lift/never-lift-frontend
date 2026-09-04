@@ -1,7 +1,7 @@
 {
   "$schema": "./physics-reference-scenarios.schema.json",
   "contractVersion": "2.0.0",
-  "physicsConstantsVersion": "2.0.1",
+  "physicsConstantsVersion": "2.0.2",
   "physicsStepSeconds": 0.008333333333333333,
   "tolerance": {
     "positionMeters": 0.03,

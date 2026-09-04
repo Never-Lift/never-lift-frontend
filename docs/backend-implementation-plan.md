@@ -48,7 +48,7 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 | `join_room` | `{ roomCode, trackCatalogVersion, physicsContractVersion }` | ao entrar numa sala; rejeita geometria ou física incompatível antes da corrida |
 | `select_loadout` | `{ color }` | antes de ficar ready; o modelo é sempre F1 e a condução é fixa |
 | `ready` | `{ ready }` | jogador confirma ou retira o pronto durante o lobby |
-| `input` | `{ throttle, brake, steer, clientSeq, clientTimestamp }` | a cada mudança de input (não a cada frame); boost/nitro não existe |
+| `input` | `{ throttle, brake, steer, clientSeq, clientTimestamp }` | renovado a 30 Hz, mesmo sem mudança; boost/nitro não existe |
 
 **Importante:** o cliente nunca envia posição — só intenção (`input`). Isso é o que torna o servidor a única fonte de verdade.
 
@@ -112,7 +112,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
-**Contrato de entrada atual:** `contracts/module-2/v2/` contém o schema de pista `2.0.0`, catálogo `2026.12`, contrato físico `2.0.1`, faces canônicas de barreira, aberturas físicas de entrada/saída do pit, placas métricas de frenagem, perfis visuais métricos de infraestrutura e as 24 definições geradas de forma reproduzível. `contracts/module-2/v1/` permanece histórico e imutável.
+**Contrato de entrada atual:** `contracts/module-2/v2/` contém o schema de pista `2.0.0`, catálogo `2026.12`, contrato físico `2.0.2`, faces canônicas de barreira, aberturas físicas de entrada/saída do pit, placas métricas de frenagem, perfis visuais métricos de infraestrutura e as 24 definições geradas de forma reproduzível. `contracts/module-2/v1/` permanece histórico e imutável.
 **Estado da Parte 2d:** implementação e validação manual integrada concluídas em 31/08/2026 para a física `2.0.0`. A revisão `2.0.1` recalibra somente dano e desvio de direção, tem validação automatizada e aguarda confirmação manual. O backend publica/importa o catálogo v2, empacota os artefatos comuns byte a byte, persiste `physicsContractVersion` e audita zebras, proteções contínuas, placas regressivas, largadas/orientações corrigidas, aberturas de `pit-entry`/`pit-exit` e 22 vagas visuais opacas. O catálogo `2026.12` remove o corredor provisório de escape do Rettifilo de Monza, reposiciona a largada oficial de Silverstone e orienta Marina Bay no sentido anti-horário. O Módulo 2 permanece pronto; o Módulo 3 está em andamento.
 **Simplificação implementada em 24/08/2026 (backend #72 / frontend #90):** o produto tem somente o F1 e uma configuração fixa de condução baseada nos valores do antigo perfil Normal. `carModel`, `handlingMode`/`driftMode`, os perfis Supercarro/Drift e as dimensões de recorde associadas foram removidos do contrato físico `1.3.0`, publicado de forma sincronizada nos dois repositórios.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
@@ -141,6 +141,26 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 - Colisão é resolvida somente no servidor com colliders convexos compostos, faces canônicas de barreira, broadphase, CCD, manifold, impulso no ponto de contato, torque e solver iterativo determinístico. Dano cumulativo usa impulso/energia ou `delta-v` do contato.
 - Broadcast de `state_snapshot` a cada ~50ms (20/s) pra todos da sala.
 **Critério de pronto:** o Java reproduz todos os cenários físicos TypeScript dentro das tolerâncias; dois clientes compatíveis convergem em trajetória, perda de aderência e colisões; um cliente com versão incompatível é recusado; contatos no bico, roda ou muro não atravessam, enroscam nem acontecem antes da geometria visível.
+
+
+
+### Transporte da Parte 3b — revisão 2.0.2
+
+O detalhamento implementado está em [module-3b-authoritative-physics.md](module-3b-authoritative-physics.md).
+O loop executa 30 ticks/s com quatro subpassos de 1/120 s; um agendamento independente
+publica snapshots a 20 Hz. Inputs são renovados a 30 Hz, mantidos por 200 ms e depois
+neutralizados pelas rampas do contrato. A correção aprovada 2.0.2 calcula dano pelo
+delta-v normal, preservando os limiares de resistência/direção de 2.0.1.
+
+O snapshot inclui `trackId`, `trackCatalogVersion`, `physicsContractVersion`,
+`tick`, `serverTime` e carros com estado completo. `physicsState` inclui também
+`longitudinalAcceleration` do subpasso anterior; `damageState` inclui `kind`,
+`impactCount` e `lastImpactSpeed`. Cada carro transmite `trackDistanceMeters`,
+`trackLayer` e `lastProcessedClientSeq` (-1 antes do primeiro comando ou para bots).
+`lap`, `isGhost` e `inPit` são opcionais no schema e só serão produzidos na 3c.
+Incompatibilidade envia `race_event type=version_mismatch` e fecha o socket (1008).
+A sessão técnica de física da 3b não implementa classificação, largada, voltas,
+resultado, predição ou reconciliação da 3c. Backend e frontend devem promover 2.0.2 juntos.
 
 ### Módulo 4 — Ambiente e modo caos
 **Depende de:** Módulo 3.

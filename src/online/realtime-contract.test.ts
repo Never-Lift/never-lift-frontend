@@ -14,6 +14,13 @@ function definition(name: string) {
 }
 
 describe('realtime protocol v2 lobby contract', () => {
+  it('publishes complete 3b state without inventing 3c race rules', () => {
+    expect(definition('physicsState').required).toContain('longitudinalAcceleration')
+    expect(definition('damageState').required).toEqual(expect.arrayContaining(['kind', 'impactCount', 'lastImpactSpeed']))
+    expect(definition('carSnapshot').required).toEqual(expect.arrayContaining(['trackLayer', 'trackDistanceMeters', 'lastProcessedClientSeq']))
+    expect(definition('carSnapshot').required).not.toContain('lap')
+    expect(definition('versionMismatchEvent').properties?.type).toEqual({ const: 'version_mismatch' })
+  })
   it('keeps the numeric room code, reversible ready, full room state and 22-car limits', () => {
     const joinPayload = definition('joinRoomEnvelope').properties?.payload
     const readyPayload = definition('readyEnvelope').properties?.payload
