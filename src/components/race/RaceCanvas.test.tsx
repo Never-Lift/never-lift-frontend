@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const rendererCapture = vi.hoisted(() => ({
-  options: [] as Array<{ splitScreenAspectRatio?: () => number }>,
+  options: [] as Array<{ splitScreenAspectRatio?: () => number; quality?: string; pixelRatioCap?: number }>,
 }))
 
 vi.mock('@/race/RaceRenderer', () => ({
@@ -96,6 +96,23 @@ describe('DriverTelemetryCard', () => {
 })
 
 describe('RaceCanvas layout', () => {
+  it('applies the dense-grid renderer profile when a solo race has 22 cars', () => {
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const engine = new RaceEngine({
+      track: SHORT_TRACK,
+      mode: 'solo',
+      racers: Array.from({ length: 22 }, (_, index) => ({
+        id: index === 0 ? 'player-1' : `bot-${index}`,
+        name: `Driver ${index}`,
+        kind: index === 0 ? 'human' : 'bot',
+        color: '#2d7dff',
+      })),
+    })
+    render(<RaceCanvas engine={engine} mode="solo" timeOfDay="day" onAbort={vi.fn()} onRestart={vi.fn()} onFinished={vi.fn()} />)
+    expect(rendererCapture.options[0]).toMatchObject({ quality: 'low', pixelRatioCap: 1 })
+  })
+
   it.each(['solo', 'local'] as const)('exits %s with Esc and cleans up the shortcut on unmount', (mode) => {
     vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
@@ -214,6 +231,7 @@ describe('RaceCanvas layout', () => {
     expect(screen.getByRole('button', { name: 'Sair da corrida' })).toHaveClass('size-11')
     expect(rendererCapture.options).toHaveLength(1)
     expect(rendererCapture.options[0].splitScreenAspectRatio?.()).toBe(1.125)
+    expect(rendererCapture.options[0]).toMatchObject({ quality: 'low', pixelRatioCap: 1 })
   })
 
   it.each(['solo', 'local'] as const)(

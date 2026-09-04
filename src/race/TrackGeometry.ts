@@ -82,6 +82,13 @@ type BarrierColliderRecord = {
   bounds: ColliderBounds
 }
 
+type CenterlineProjectionBlock = {
+  indexes: number[]
+  bounds: TrackBounds
+}
+
+const CENTERLINE_PROJECTION_BLOCK_SEGMENTS = 32
+
 export function trackSideEnvironmentWidth(environment: TrackSideEnvironment) {
   return environment.zones.reduce((sum, zone) => sum + zone.widthMeters, 0)
 }
@@ -525,12 +532,38 @@ export class TrackGeometry {
   private readonly barrierColliderRecords: BarrierColliderRecord[]
   private readonly barrierRecordsByCell = new Map<string, BarrierColliderRecord[]>()
   private readonly expandedChunkBounds = new Map<number, TrackBounds>()
+  private readonly centerlineProjectionBlocks: CenterlineProjectionBlock[]
 
   constructor(definition: TrackDefinition) {
     if (definition.centerline.length < 2 || definition.racingLine.length < 2) {
       throw new Error('A definição da pista não possui geometria suficiente.')
     }
     this.definition = definition
+    this.centerlineProjectionBlocks = []
+    for (
+      let firstIndex = 0;
+      firstIndex < definition.centerline.length - 1;
+      firstIndex += CENTERLINE_PROJECTION_BLOCK_SEGMENTS
+    ) {
+      const lastIndex = Math.min(
+        definition.centerline.length - 2,
+        firstIndex + CENTERLINE_PROJECTION_BLOCK_SEGMENTS - 1,
+      )
+      const indexes = Array.from(
+        { length: lastIndex - firstIndex + 1 },
+        (_, offset) => firstIndex + offset,
+      )
+      const points = definition.centerline.slice(firstIndex, lastIndex + 2)
+      this.centerlineProjectionBlocks.push({
+        indexes,
+        bounds: {
+          minX: Math.min(...points.map((point) => point.x)),
+          minY: Math.min(...points.map((point) => point.y)),
+          maxX: Math.max(...points.map((point) => point.x)),
+          maxY: Math.max(...points.map((point) => point.y)),
+        },
+      })
+    }
     this.barrierFaces = definition.barrierGeometry.segments
     if (this.barrierFaces.length === 0) {
       throw new Error('A definição v2 não possui faces canônicas de barreira.')
@@ -639,8 +672,9 @@ export class TrackGeometry {
     const projectIndexes = (
       indexes: readonly number[],
       maximumPreferredDifferenceMeters?: number,
+      initialBest: ProjectionCandidate | null = null,
     ) => {
-      let best: ProjectionCandidate | null = null
+      let best: ProjectionCandidate | null = initialBest
       for (const index of indexes) {
         const from = path[index]
         const to = path[index + 1]
@@ -712,9 +746,36 @@ export class TrackGeometry {
       }
     }
 
-    const globalBest = projectIndexes(
-      Array.from({ length: path.length - 1 }, (_, index) => index),
-    )
+    let globalBest: ProjectionCandidate | null = null
+    // Keep canonical segment order: the tolerance-based tie break is order
+    // sensitive. Bounds may skip impossible candidates, never reorder them.
+    for (const block of this.centerlineProjectionBlocks) {
+      const deltaX = Math.max(
+        block.bounds.minX - point.x,
+        0,
+        point.x - block.bounds.maxX,
+      )
+      const deltaY = Math.max(
+        block.bounds.minY - point.y,
+        0,
+        point.y - block.bounds.maxY,
+      )
+      const minimumDistance = PortableMath.hypot(deltaX, deltaY)
+      if (
+        globalBest &&
+        minimumDistance >
+          globalBest.distanceFromCenterMeters +
+            PROJECTION_DISTANCE_TOLERANCE_METERS +
+            Number.EPSILON
+      ) {
+        continue
+      }
+      globalBest = projectIndexes(
+        block.indexes,
+        undefined,
+        globalBest,
+      )
+    }
     if (!globalBest) {
       throw new Error('Não foi possível projetar a posição na pista.')
     }
@@ -926,13 +987,23 @@ export class TrackGeometry {
   private getTrackLimitSegment(distanceMeters: number): TrackLimitSegment {
     const length = this.definition.lengthMeters
     const normalizedDistance = ((distanceMeters % length) + length) % length
-    return (
-      this.definition.trackLimits.segments.find(
-        (segment) =>
-          normalizedDistance >= segment.fromDistanceMeters &&
-          normalizedDistance < segment.toDistanceMeters,
-      ) ?? this.definition.trackLimits.segments.at(-1)!
-    )
+    const segments = this.definition.trackLimits.segments
+    let low = 0
+    let high = segments.length
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2)
+      if (segments[middle].fromDistanceMeters <= normalizedDistance) {
+        low = middle + 1
+      } else {
+        high = middle
+      }
+    }
+    const candidate = segments[Math.max(0, low - 1)]
+    return candidate &&
+      normalizedDistance >= candidate.fromDistanceMeters &&
+      normalizedDistance < candidate.toDistanceMeters
+      ? candidate
+      : segments.at(-1)!
   }
 
   getCenterlineTangent(distanceMeters: number) {

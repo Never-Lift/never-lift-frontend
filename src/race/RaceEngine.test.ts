@@ -154,17 +154,18 @@ function trackInput(state: VehicleState, geometry: TrackGeometry): DriverInput {
 }
 
 describe('RaceEngine fixed-step simulation', () => {
-  it('supports a full 22-car grid and advances every bot through the same physics', () => {
+  it.each(['solo', 'local'] as const)('supports a full 22-car %s grid and advances every bot through the same physics', (mode) => {
+    const humanCount = mode === 'local' ? 2 : 1
     const racers: VehicleSetup[] = [
-      setup('player-1'),
-      ...Array.from({ length: 21 }, (_, index) => ({
+      ...Array.from({ length: humanCount }, (_, index) => setup(`player-${index + 1}`)),
+      ...Array.from({ length: 22 - humanCount }, (_, index) => ({
         ...setup(`bot-${index + 1}`, 'bot'),
         botDifficulty: 'hard' as const,
       })),
     ]
     const engine = new RaceEngine({
       track: SHORT_TRACK,
-      mode: 'solo',
+      mode,
       racers,
     })
 
@@ -189,7 +190,7 @@ describe('RaceEngine fixed-step simulation', () => {
     const bots = engine
       .getInterpolatedVehicles()
       .filter((vehicle) => vehicle.kind === 'bot')
-    expect(bots).toHaveLength(21)
+    expect(bots).toHaveLength(22 - humanCount)
     expect(bots.every((bot) => bot.botDifficulty === 'hard')).toBe(true)
     expect(bots.every((bot) => bot.physicsState.appliedThrottle > 0)).toBe(true)
     expect(

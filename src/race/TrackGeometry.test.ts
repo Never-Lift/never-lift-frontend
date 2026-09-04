@@ -23,6 +23,23 @@ function rectangle(
 }
 
 describe('TrackGeometry', () => {
+  it.each([SHORT_TRACK, LONG_TRACK])('indexed projection preserves full-scan results and canonical ties in $id', (definition) => {
+    const indexed = new TrackGeometry(definition)
+    const fullScan = new TrackGeometry(definition)
+    // Exercise the exact same projection/ranking against one unprunable block.
+    Object.assign(fullScan, { centerlineProjectionBlocks: [{
+      indexes: Array.from({ length: definition.centerline.length - 1 }, (_, i) => i),
+      bounds: { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity },
+    }] })
+    const radius = definition.lengthMeters / (Math.PI * 2)
+    for (let i = 0; i < 120; i++) {
+      const angle = i * Math.PI / 60
+      const point = { x: Math.cos(angle) * radius * (i % 3), y: Math.sin(angle) * radius * (i % 3) }
+      for (const preferred of [undefined, definition.lengthMeters * .25]) {
+        expect(indexed.project(point, preferred)).toEqual(fullScan.project(point, preferred))
+      }
+    }
+  })
   const walledGeometry = new TrackGeometry(SHORT_TRACK)
   const runoffGeometry = new TrackGeometry(LONG_TRACK)
   const walledRadius = SHORT_TRACK.lengthMeters / (Math.PI * 2)

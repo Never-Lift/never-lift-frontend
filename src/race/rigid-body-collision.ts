@@ -1,4 +1,5 @@
 import physicsConstants from '../../contracts/module-2/v2/physics-constants.json'
+import { polygonGeometry } from '@/race/polygon-cache'
 
 import {
   add,
@@ -74,15 +75,18 @@ function compareColliderIds(first: string, second: string) {
 }
 
 export type ColliderBounds = {
-  minX: number
-  minY: number
-  maxX: number
-  maxY: number
+  readonly minX: number
+  readonly minY: number
+  readonly maxX: number
+  readonly maxY: number
 }
+
 
 export function colliderBounds(
   collider: WorldConvexCollider,
 ): ColliderBounds {
+  const cached = polygonGeometry(collider.vertices)
+  if (cached.bounds) return cached.bounds
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
   let maxX = Number.NEGATIVE_INFINITY
@@ -93,7 +97,9 @@ export function colliderBounds(
     maxX = Math.max(maxX, vertex.x)
     maxY = Math.max(maxY, vertex.y)
   }
-  return { minX, minY, maxX, maxY }
+  const bounds = { minX, minY, maxX, maxY }
+  cached.bounds = bounds
+  return bounds
 }
 
 export function colliderBoundsIntersect(
@@ -112,8 +118,9 @@ function compoundBounds(
   colliders: readonly WorldConvexCollider[],
 ): ColliderBounds | null {
   if (colliders.length === 0) return null
-  const bounds = colliderBounds(colliders[0])
-  for (const collider of colliders.slice(1)) {
+  const bounds = { ...colliderBounds(colliders[0]) }
+  for (let index = 1; index < colliders.length; index += 1) {
+    const collider = colliders[index]
     const part = colliderBounds(collider)
     bounds.minX = Math.min(bounds.minX, part.minX)
     bounds.minY = Math.min(bounds.minY, part.minY)
@@ -129,11 +136,17 @@ type Projection = {
 }
 
 function polygonCenter(vertices: readonly Vector2[]): Vector2 {
-  const sum = vertices.reduce(
-    (center, vertex) => add(center, vertex),
-    { x: 0, y: 0 },
-  )
-  return scale(sum, 1 / vertices.length)
+  const cached = polygonGeometry(vertices)
+  if (cached.center) return cached.center
+  let x = 0
+  let y = 0
+  for (const vertex of vertices) {
+    x += vertex.x
+    y += vertex.y
+  }
+  const center = scale({ x, y }, 1 / vertices.length)
+  cached.center = center
+  return center
 }
 
 function projectPolygon(
@@ -142,7 +155,8 @@ function projectPolygon(
 ): Projection {
   let minimum = dot(vertices[0], axis)
   let maximum = minimum
-  for (const vertex of vertices.slice(1)) {
+  for (let index = 1; index < vertices.length; index += 1) {
+    const vertex = vertices[index]
     const projected = dot(vertex, axis)
     minimum = Math.min(minimum, projected)
     maximum = Math.max(maximum, projected)
@@ -151,6 +165,8 @@ function projectPolygon(
 }
 
 function polygonAxes(vertices: readonly Vector2[]) {
+  const cached = polygonGeometry(vertices)
+  if (cached.axes) return cached.axes
   const axes: Vector2[] = []
   for (let index = 0; index < vertices.length; index += 1) {
     const edge = subtract(
@@ -168,6 +184,7 @@ function polygonAxes(vertices: readonly Vector2[]) {
     }
     axes.push(axis)
   }
+  cached.axes = axes
   return axes
 }
 
@@ -179,7 +196,9 @@ function pointInConvexPolygon(
   for (let index = 0; index < polygon.length; index += 1) {
     const from = polygon[index]
     const to = polygon[(index + 1) % polygon.length]
-    const side = cross(subtract(to, from), subtract(point, from))
+    const side =
+      (to.x - from.x) * (point.y - from.y) -
+      (to.y - from.y) * (point.x - from.x)
     if (Math.abs(side) <= GEOMETRY_EPSILON) continue
     const currentSign = Math.sign(side)
     if (sign !== 0 && currentSign !== sign) return false
@@ -194,13 +213,16 @@ function segmentIntersection(
   secondFrom: Vector2,
   secondTo: Vector2,
 ): Vector2 | null {
-  const firstDirection = subtract(firstTo, firstFrom)
-  const secondDirection = subtract(secondTo, secondFrom)
-  const denominator = cross(firstDirection, secondDirection)
+  const firstX = firstTo.x - firstFrom.x
+  const firstY = firstTo.y - firstFrom.y
+  const secondX = secondTo.x - secondFrom.x
+  const secondY = secondTo.y - secondFrom.y
+  const denominator = firstX * secondY - firstY * secondX
   if (Math.abs(denominator) <= GEOMETRY_EPSILON) return null
-  const betweenOrigins = subtract(secondFrom, firstFrom)
-  const firstAlpha = cross(betweenOrigins, secondDirection) / denominator
-  const secondAlpha = cross(betweenOrigins, firstDirection) / denominator
+  const betweenX = secondFrom.x - firstFrom.x
+  const betweenY = secondFrom.y - firstFrom.y
+  const firstAlpha = (betweenX * secondY - betweenY * secondX) / denominator
+  const secondAlpha = (betweenX * firstY - betweenY * firstX) / denominator
   if (
     firstAlpha < -GEOMETRY_EPSILON ||
     firstAlpha > 1 + GEOMETRY_EPSILON ||
@@ -209,7 +231,8 @@ function segmentIntersection(
   ) {
     return null
   }
-  return add(firstFrom, scale(firstDirection, clamp(firstAlpha, 0, 1)))
+  const alpha = clamp(firstAlpha, 0, 1)
+  return { x: firstFrom.x + firstX * alpha, y: firstFrom.y + firstY * alpha }
 }
 
 function uniquePoints(points: Vector2[]) {
@@ -290,19 +313,25 @@ function collisionContacts(
 }
 
 export function isConvexPolygon(vertices: readonly Vector2[]) {
+  const cached = polygonGeometry(vertices)
+  if (cached.convex !== undefined) return cached.convex
   if (vertices.length < 3) return false
   let turnSign = 0
   for (let index = 0; index < vertices.length; index += 1) {
     const first = vertices[index]
     const second = vertices[(index + 1) % vertices.length]
     const third = vertices[(index + 2) % vertices.length]
-    const turn = cross(subtract(second, first), subtract(third, second))
+    const turn =
+      (second.x - first.x) * (third.y - second.y) -
+      (second.y - first.y) * (third.x - second.x)
     if (Math.abs(turn) <= GEOMETRY_EPSILON) continue
     const currentSign = Math.sign(turn)
     if (turnSign !== 0 && currentSign !== turnSign) return false
     turnSign = currentSign
   }
-  return turnSign !== 0
+  const convex = turnSign !== 0
+  cached.convex = convex
+  return convex
 }
 
 /** SAT narrowphase for two convex polygons. Normal always points A -> B. */
@@ -319,13 +348,18 @@ export function findCollisionManifold(
     throw new Error('SAT exige dois polígonos convexos válidos.')
   }
 
+  if (!colliderBoundsIntersect(colliderBounds(first), colliderBounds(second))) {
+    return null
+  }
+
   let minimumOverlap = Number.POSITIVE_INFINITY
   let minimumAxis: Vector2 | null = null
-  const axes = [
-    ...polygonAxes(first.vertices),
-    ...polygonAxes(second.vertices),
-  ]
-  for (const axis of axes) {
+  const firstAxes = polygonAxes(first.vertices)
+  const secondAxes = polygonAxes(second.vertices)
+  for (let index = 0; index < firstAxes.length + secondAxes.length; index += 1) {
+    const axis = index < firstAxes.length
+      ? firstAxes[index]
+      : secondAxes[index - firstAxes.length]
     const firstProjection = projectPolygon(first.vertices, axis)
     const secondProjection = projectPolygon(second.vertices, axis)
     const overlap =

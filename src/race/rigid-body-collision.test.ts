@@ -9,6 +9,7 @@ import {
   sweepConvexColliders,
 } from '@/race/continuous-collision'
 import {
+  colliderBounds,
   findCollisionManifold,
   findCompoundCollisionManifold,
   isConvexPolygon,
@@ -108,6 +109,20 @@ describe('compound metric F1 geometry', () => {
 })
 
 describe('SAT manifold and rigid-body impulses', () => {
+  it('keeps cached bounds immutable across compound unions and thousands of transient poses', () => {
+    const first = rectangle('first', 0, 0, 1, 1)
+    const other = rectangle('other', 1.5, 0, 1, 1)
+    const originalBounds = { ...colliderBounds(first) }
+    const originalContact = findCollisionManifold(first, other)
+    findCompoundCollisionManifold([first, rectangle('distant-part', 40, 0, 1, 1)], [other])
+    expect(colliderBounds(first)).toEqual(originalBounds)
+    for (let i = 0; i < 3000; i++) {
+      colliderBounds(rectangle(`transient-${i}`, i * 5, 10, 1, 1))
+    }
+    expect(findCollisionManifold(first, other)).toEqual(originalContact)
+    expect(colliderBounds(first)).toEqual(originalBounds)
+    expect(findCollisionManifold(first, { ...other, vertices: rectangle('moved', 20, 0, 1, 1).vertices })).toBeNull()
+  })
   it('excludes tangential friction from damage delta-v without removing friction', () => {
     const car = body({ x: 0, y: 0 }, { x: 4.5, y: 20 })
     car.inverseInertia = 1 / physicsConstants.vehicle.yawInertiaKgM2

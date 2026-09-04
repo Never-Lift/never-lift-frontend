@@ -333,7 +333,30 @@ function tracePolygon(
   if (points.length === 0) return
   context.beginPath()
   context.moveTo(points[0].x, points[0].y)
-  for (const point of points.slice(1)) context.lineTo(point.x, point.y)
+  for (let index = 1; index < points.length; index++) context.lineTo(points[index].x, points[index].y)
+  context.closePath()
+}
+
+/** Same continuous projection without allocating a screen-point array per face. */
+export function traceVehiclePolygon(
+  context: CanvasRenderingContext2D,
+  points: readonly VehiclePoint3[],
+  projection: VehicleProjection,
+) {
+  if (points.length === 0) return
+  const sinYaw = projection.sinYaw ?? Math.sin(projection.relativeYawRadians)
+  const cosYaw = projection.cosYaw ?? Math.cos(projection.relativeYawRadians)
+  context.beginPath()
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index]
+    const longitudinal = point.longitudinal * projection.length
+    const lateral = point.lateral * projection.width
+    const height = point.height * projection.width
+    const x = -longitudinal * sinYaw + lateral * cosYaw
+    const y = -(longitudinal * cosYaw + lateral * sinYaw) * projection.groundDepthScale - height * projection.heightScale
+    if (index === 0) context.moveTo(x, y)
+    else context.lineTo(x, y)
+  }
   context.closePath()
 }
 
@@ -959,10 +982,7 @@ function paintSurfaces(
 
   for (const surface of ordered) {
     if (surface.visibility === 'preview' && detail !== 'preview') continue
-    tracePolygon(
-      context,
-      surface.points.map((point) => projectVehiclePoint(point, projection)),
-    )
+    traceVehiclePolygon(context, surface.points, projection)
     context.fillStyle = surface.fill
     context.fill()
     if (surface.stroke) {

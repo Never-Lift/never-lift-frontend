@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "benchmark:race": "node tools/race-performance.mjs",
     "check": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {

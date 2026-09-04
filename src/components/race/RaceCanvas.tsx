@@ -12,7 +12,7 @@ import type {
   RaceMode,
   RaceResultEntry,
 } from '@/race/types'
-import type { TimeOfDayPreset } from '@/race/visual-settings'
+import { raceGraphicsSettings, type TimeOfDayPreset } from '@/race/visual-settings'
 
 type RaceCanvasProps = {
   engine: RaceEngine
@@ -183,7 +183,7 @@ export function RaceCanvas({
     const session = new LocalRaceSession(engine, humanIds)
     const renderer = new RaceRenderer(canvas, engine.track, {
       timeOfDay,
-      quality: 'medium',
+      ...raceGraphicsSettings(mode, engine.getInterpolatedVehicles().length),
       splitScreenAspectRatio: () => window.innerWidth / window.innerHeight,
     })
     let animationFrame = 0

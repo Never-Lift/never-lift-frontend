@@ -22,6 +22,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/game-design-guide.md` — fonte oficial das decisões visuais, de câmera, escala, telas e fase de implementação. Ler antes de qualquer trabalho de interface ou corrida.
 - `docs/module-3b-authoritative-physics.md` — entrega da Parte 3b, paridade, snapshot completo e limites em relação à 3c.
 - `docs/module-3b-portability.md` — revisão aprovada 2.0.3, kernel numérico compartilhado, evidências e teste manual curto antes da 3c.
+- `docs/race-performance-2026-09-04.md` — otimizações de grid completo/split-screen, benchmarks, paridade e limites; validação manual desta rodada pendente.
 - `docs/module-3-online-decisions.md` — registro aprovado das 80 decisões de produto e arquitetura para o online; consultar antes de implementar o Módulo 3.
 - `docs/contracts/module-2-shared-contracts.md`, `docs/contracts/module-2-physics-v2-proposal.md` e `contracts/module-2/v1/`/`v2/` — decisões e contratos publicados do Módulo 2. O `v1` é histórico imutável; o `v2` é a linha executável da Parte 2d.
 
@@ -78,5 +79,9 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 | 14 — Equipes e placar coletivo | não iniciado (pós-MVP) |
 | 15 — Torneios oficiais automáticos | não iniciado (pós-MVP) |
 | 16 — Conduta esportiva e penalidades | não iniciado (pós-MVP) |
+
+> Rodada de desempenho de 04/09/2026: otimizações de geometria, colisões e renderização implementadas, preservando a física 2.0.3 e o limite de 22 carros totais. A validação manual desta rodada permanece pendente; isso não marca o M3c como iniciado/pronto.
+
+> Complemento local 2+20: testes prolongados revelaram desempenho insuficiente em congestionamentos de Mônaco. Ajustes adicionais ajudam, mas **não declarar 22 carros no split-screen como desempenho aprovado**. Resultados e limites em `docs/race-performance-2026-09-04.md`.
 
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.

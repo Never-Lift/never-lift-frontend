@@ -13,6 +13,7 @@ import {
   type TimeOfDayPreset,
 } from '@/race/visual-settings'
 import { SHORT_TRACK } from '@/test/track-fixtures'
+import { performanceRacers } from '../../tools/race-performance-entry'
 
 type ClipRect = { x: number; y: number; width: number; height: number }
 type GradientVector = { fromX: number; fromY: number; toX: number; toY: number }
@@ -189,6 +190,33 @@ function renderPreset(preset: TimeOfDayPreset) {
 }
 
 describe('RaceRenderer Module 2c visuals', () => {
+  it.each([[1920, 1080], [1024, 900]])('keeps both local cameras and all 20 bots in the minimaps at %sx%s', (width, height) => {
+    const engine = new RaceEngine({ track: SHORT_TRACK, mode: 'local', racers: performanceRacers('local', 22) })
+    const before = JSON.stringify(engine.getInterpolatedVehicles())
+    const { context } = createRecordingContext()
+    const renderer = new RaceRenderer(createCanvas(context, width, height), SHORT_TRACK, { quality: 'low', pixelRatioCap: 1 })
+    const internals = renderer as unknown as {
+      drawMinimap: (viewport: ClipRect, vehicles: InterpolatedVehicleState[], focused: InterpolatedVehicleState) => void
+    }
+    const minimap = vi.spyOn(internals, 'drawMinimap')
+    renderer.render(engine, 1 / 60)
+    expect(minimap).toHaveBeenCalledTimes(2)
+    expect(minimap.mock.calls.map(([, , focused]) => focused.id)).toEqual(['player-1', 'player-2'])
+    for (const [, vehicles] of minimap.mock.calls) {
+      expect(vehicles).toHaveLength(22)
+      expect(vehicles.filter(vehicle => vehicle.kind === 'bot')).toHaveLength(20)
+    }
+    const viewports = minimap.mock.calls.map(([viewport]) => viewport)
+    if (width / height < 1.35) {
+      expect(viewports[0].x).toBe(viewports[1].x)
+      expect(viewports[1].y).toBe(viewports[0].height)
+    } else {
+      expect(viewports[0].y).toBe(viewports[1].y)
+      expect(viewports[1].x).toBe(viewports[0].width)
+    }
+    expect(JSON.stringify(engine.getInterpolatedVehicles())).toBe(before)
+  })
+
   it('shows driver names only while identification is enabled', () => {
     const engine = createEngine(SHORT_TRACK)
     const vehicle = engine.getInterpolatedVehicles()[0]
