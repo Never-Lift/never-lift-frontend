@@ -112,7 +112,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 ### Módulo 2 — Suporte a corrida local (sem rede)
 **Depende de:** Módulo 0.
-**Contrato de entrada atual:** `contracts/module-2/v2/` contém o schema de pista `2.0.0`, catálogo `2026.12`, contrato físico `2.0.2`, faces canônicas de barreira, aberturas físicas de entrada/saída do pit, placas métricas de frenagem, perfis visuais métricos de infraestrutura e as 24 definições geradas de forma reproduzível. `contracts/module-2/v1/` permanece histórico e imutável.
+**Contrato de entrada atual:** `contracts/module-2/v2/` contém o schema de pista `2.0.0`, catálogo `2026.12`, contrato físico `2.0.3`, faces canônicas de barreira, aberturas físicas de entrada/saída do pit, placas métricas de frenagem, perfis visuais métricos de infraestrutura e as 24 definições geradas de forma reproduzível. `contracts/module-2/v1/` permanece histórico e imutável.
 **Estado da Parte 2d:** implementação e validação manual integrada concluídas em 31/08/2026 para a física `2.0.0`. A revisão `2.0.1` recalibra somente dano e desvio de direção, tem validação automatizada e aguarda confirmação manual. O backend publica/importa o catálogo v2, empacota os artefatos comuns byte a byte, persiste `physicsContractVersion` e audita zebras, proteções contínuas, placas regressivas, largadas/orientações corrigidas, aberturas de `pit-entry`/`pit-exit` e 22 vagas visuais opacas. O catálogo `2026.12` remove o corredor provisório de escape do Rettifilo de Monza, reposiciona a largada oficial de Silverstone e orienta Marina Bay no sentido anti-horário. O Módulo 2 permanece pronto; o Módulo 3 está em andamento.
 **Simplificação implementada em 24/08/2026 (backend #72 / frontend #90):** o produto tem somente o F1 e uma configuração fixa de condução baseada nos valores do antigo perfil Normal. `carModel`, `handlingMode`/`driftMode`, os perfis Supercarro/Drift e as dimensões de recorde associadas foram removidos do contrato físico `1.3.0`, publicado de forma sincronizada nos dois repositórios.
 **Cobre features:** parte de 3 (registrar resultado local, se o usuário estiver logado), 26.
@@ -130,7 +130,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Depende de:** Módulos 1 e 2, com a Parte 2d do frontend validada e os cenários físicos v2 congelados.
 **Cobre features:** 4 (modos online — lobby, configuração de sala), 8, parte de 6 (física básica compartilhada), parte de 5 (colisão).
 **Este é o módulo de maior risco do projeto — é onde a lição sobre servidor autoritativo se aplica.**
-**Estado da Parte 3a:** sala, ticket e lobby, incluindo o refinamento de acesso/configuração de 02/09/2026, implementados e validados manualmente em dois navegadores em 03/09/2026; a Parte 3a está pronta. A Parte 3b Java está pronta com cenários de paridade passando; a Parte 3c permanece pendente.
+**Estado da Parte 3a:** sala, ticket e lobby, incluindo o refinamento de acesso/configuração de 02/09/2026, implementados e validados manualmente em dois navegadores em 03/09/2026; a Parte 3a está pronta. A Parte 3b Java está implementada com paridade passando; a revisão 2.0.3 aguarda teste manual curto antes da Parte 3c, ainda pendente.
 **Escopo:**
 - Sessão WebSocket por conexão (`/ws`), autenticada por ticket de uso único de 60 s vinculado à sala e ao usuário; o JWT principal não vai na URL.
 - `RoomManager`: cria/lista salas públicas e privadas por código numérico de 4 dígitos, atribui `hostId`/`hostName` e suporta até 22 humanos/bots. Não existe senha de sala: públicas aceitam entrada direta e privadas dependem exclusivamente do código. A criação recebe somente nome e visibilidade; pista, grid de 2 a 22 e bots são configurados pelo host dentro do lobby. Todos os endpoints de sala e ticket exigem `role: user`.
@@ -144,7 +144,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 
 
 
-### Transporte da Parte 3b — revisão 2.0.2
+### Transporte da Parte 3b — revisão 2.0.3
 
 O detalhamento implementado está em [module-3b-authoritative-physics.md](module-3b-authoritative-physics.md).
 O loop executa 30 ticks/s com quatro subpassos de 1/120 s; um agendamento independente
@@ -160,7 +160,13 @@ O snapshot inclui `trackId`, `trackCatalogVersion`, `physicsContractVersion`,
 `lap`, `isGhost` e `inPit` são opcionais no schema e só serão produzidos na 3c.
 Incompatibilidade envia `race_event type=version_mismatch` e fecha o socket (1008).
 A sessão técnica de física da 3b não implementa classificação, largada, voltas,
-resultado, predição ou reconciliação da 3c. Backend e frontend devem promover 2.0.2 juntos.
+resultado, predição ou reconciliação da 3c. Backend e frontend devem promover 2.0.3 juntos.
+
+A portabilidade 2.0.3 foi autorizada pelo autor e implementada nos dois motores
+com `portable-f64-v1`, sem recalibrar os parâmetros de condução/dano. As funções
+transcendentais nativas não devem ser reintroduzidas na física da 3c.
+A validação manual básica da 3b anterior está confirmada; esta revisão exige
+o teste curto de [module-3b-portability.md](module-3b-portability.md) antes da 3c.
 
 ### Módulo 4 — Ambiente e modo caos
 **Depende de:** Módulo 3.

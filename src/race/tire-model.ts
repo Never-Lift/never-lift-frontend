@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import {
   SURFACE_DYNAMICS,
   TIRE_MODEL,
@@ -35,7 +37,7 @@ export function computePeakTireForce(
     TIRE_MODEL.peakFrictionCoefficient *
     surface.gripMultiplier *
     referenceLoad *
-    (load / referenceLoad) ** TIRE_MODEL.loadSensitivityExponent
+    PortableMath.pow(load / referenceLoad, TIRE_MODEL.loadSensitivityExponent)
   )
 }
 
@@ -46,7 +48,7 @@ export function computeLongitudinalForceFromSlip(
   if (peakForceNewtons <= Number.EPSILON) return 0
   return (
     peakForceNewtons *
-    Math.tanh(
+    PortableMath.tanh(
       (TIRE_MODEL.longitudinalStiffnessNewtonsPerSlip * slipRatio) /
         peakForceNewtons,
     )
@@ -82,13 +84,13 @@ export function computeAxleTireForce(
     surface.corneringStiffnessMultiplier
   const pureLateral =
     -peakForce *
-    Math.tanh(
+    PortableMath.tanh(
       (corneringStiffness * input.slipAngleRadians) / peakForce,
     )
   const normalizedLongitudinal =
     input.longitudinalForceDemandNewtons / peakForce
   const normalizedLateral = pureLateral / peakForce
-  const combinedDemand = Math.hypot(
+  const combinedDemand = PortableMath.hypot(
     normalizedLongitudinal,
     normalizedLateral,
   )

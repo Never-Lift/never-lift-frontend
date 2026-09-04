@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import type {
   TrackBarrierGeometrySegment,
   TrackBounds,
@@ -195,7 +197,7 @@ function orientedSegmentCollider(
 ): WorldConvexCollider {
   const tangent = normalize(subtract(to, from))
   const normal = perpendicularLeft(tangent)
-  const halfLength = Math.max(Number.EPSILON, Math.hypot(to.x - from.x, to.y - from.y) / 2)
+  const halfLength = Math.max(Number.EPSILON, PortableMath.hypot(to.x - from.x, to.y - from.y) / 2)
   const center = {
     x: (from.x + to.x) / 2,
     y: (from.y + to.y) / 2,
@@ -243,7 +245,7 @@ function buildEscapeRoadColliderRecords(
     for (let rowIndex = 0; rowIndex < road.obstacleRows.length; rowIndex += 1) {
       const row = road.obstacleRows[rowIndex]
       const delta = subtract(row.to, row.from)
-      const lengthMeters = Math.hypot(delta.x, delta.y)
+      const lengthMeters = PortableMath.hypot(delta.x, delta.y)
       if (lengthMeters <= Number.EPSILON) continue
       const blockCount = Math.max(1, Math.ceil(lengthMeters / row.blockLengthMeters))
       const blockDepthMeters = Math.min(0.85, row.blockLengthMeters * 0.8)
@@ -363,7 +365,7 @@ function projectOntoSegment(
   return {
     alpha,
     point: projected,
-    distance: Math.hypot(point.x - projected.x, point.y - projected.y),
+    distance: PortableMath.hypot(point.x - projected.x, point.y - projected.y),
   }
 }
 

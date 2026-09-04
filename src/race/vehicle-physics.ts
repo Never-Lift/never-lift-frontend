@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import {
   DAMAGE_EFFECTS,
   DAMAGE_THRESHOLDS,
@@ -174,13 +176,13 @@ export function integrateVehicle(
     TIRE_MODEL.minimumSlipSpeedMetersPerSecond,
   )
   state.frontSlipAngle =
-    Math.atan2(
+    PortableMath.atan2(
       lateralSpeed +
         VEHICLE_DYNAMICS.centerOfMassToFrontAxleMeters * state.yawRate,
       slipReferenceSpeed,
     ) -
     state.steeringAngle
-  state.rearSlipAngle = Math.atan2(
+  state.rearSlipAngle = PortableMath.atan2(
     lateralSpeed -
       VEHICLE_DYNAMICS.centerOfMassToRearAxleMeters * state.yawRate,
     slipReferenceSpeed,
@@ -232,8 +234,8 @@ export function integrateVehicle(
   state.frontGripUtilization = frontTire.utilization
   state.rearGripUtilization = rearTire.utilization
 
-  const steeringCosine = Math.cos(state.steeringAngle)
-  const steeringSine = Math.sin(state.steeringAngle)
+  const steeringCosine = PortableMath.cos(state.steeringAngle)
+  const steeringSine = PortableMath.sin(state.steeringAngle)
   const frontLongitudinalBody =
     frontTire.longitudinalNewtons * steeringCosine -
     frontTire.lateralNewtons * steeringSine

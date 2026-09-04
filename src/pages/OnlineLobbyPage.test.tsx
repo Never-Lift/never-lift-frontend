@@ -23,7 +23,7 @@ const tracks = ['albert-park', 'shanghai', 'suzuka', 'bahrain'].map((id, index) 
 const catalog: TrackCatalog = {
   schemaVersion: '2.0.0',
   catalogVersion: '2026.12',
-  physicsContractVersion: '2.0.2',
+  physicsContractVersion: '2.0.3',
   seasonReference: 2026,
   calendarPolicy: 'original-24-round-freeze',
   tracks,
@@ -44,7 +44,7 @@ const room = (overrides: Partial<RoomSummary> = {}): RoomSummary => ({
   trackId: 'albert-park',
   trackName: 'Albert Park',
   trackCatalogVersion: '2026.12',
-  physicsContractVersion: '2.0.2',
+  physicsContractVersion: '2.0.3',
   participantCount: 1,
   limit: 22,
   state: 'lobby',
@@ -52,7 +52,7 @@ const room = (overrides: Partial<RoomSummary> = {}): RoomSummary => ({
   settings: {
     trackId: 'albert-park',
     trackCatalogVersion: '2026.12',
-    physicsContractVersion: '2.0.2',
+    physicsContractVersion: '2.0.3',
     gridSize: 22,
     botsEnabled: false,
     botDifficulty: 'normal',

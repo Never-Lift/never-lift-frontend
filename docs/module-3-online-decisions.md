@@ -114,7 +114,11 @@ Esta revisão é normativa e detalha as decisões atualizadas acima:
 
 - Estas decisões não tornam o Módulo 3 completo: o Módulo 2 está pronto, a
   Parte 3a foi validada manualmente em dois navegadores e está pronta desde 03/09/2026, e as
-  Partes 3b/3c permanecem pendentes.
+  Parte 3b Java está implementada, com validação manual básica confirmada pelo autor.
+  A correção numérica 2.0.3 foi autorizada separadamente, está testada automaticamente
+  e aguarda confirmação manual curta; somente a Parte 3c permanece não implementada.
+- Antes da 3c, seguir [module-3b-portability.md](module-3b-portability.md): os dois
+  motores usam `portable-f64-v1`, sem chamadas transcendentais nativas na física.
 - O M3 precisa reproduzir o contrato físico v2 e os cenários congelados antes de aceitar partidas online.
 - O limite de velocidade e os serviços de pit permanecem deliberadamente fora do M3; entram no Módulo 5 conforme o plano.
 - Penalidades esportivas de tempo e conduta permanecem no Módulo 16.
