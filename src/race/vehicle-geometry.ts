@@ -1,6 +1,6 @@
 import vehicleDefinition from '../../contracts/module-2/v2/vehicle-definition.json'
 
-import { add, rotate } from '@/race/math'
+import * as PortableMath from '@/race/portable-math'
 import type { Vector2 } from '@/race/types'
 
 export type LocalConvexCollider = {
@@ -11,7 +11,8 @@ export type LocalConvexCollider = {
 
 export type WorldConvexCollider = {
   id: string
-  vertices: Vector2[]
+  /** A pose is immutable; movement must create a new array for geometry caches. */
+  readonly vertices: readonly Readonly<Vector2>[]
   /** Present only for canonical static track barriers. */
   collisionMaterial?:
     | 'concrete-wall'
@@ -120,12 +121,15 @@ export const F1_VEHICLE_COLLIDER: CompoundVehicleCollider = {
 export function transformConvexCollider(
   part: LocalConvexCollider,
   transform: ColliderTransform,
+  cosine = PortableMath.cos(transform.angle),
+  sine = PortableMath.sin(transform.angle),
 ): WorldConvexCollider {
   return {
     id: part.id,
-    vertices: part.vertices.map((vertex) =>
-      add(transform.position, rotate(vertex, transform.angle)),
-    ),
+    vertices: part.vertices.map((vertex) => ({
+      x: transform.position.x + (vertex.x * cosine - vertex.y * sine),
+      y: transform.position.y + (vertex.x * sine + vertex.y * cosine),
+    })),
   }
 }
 
@@ -133,8 +137,10 @@ export function createVehicleWorldCollider(
   transform: ColliderTransform,
   definition = F1_VEHICLE_COLLIDER,
 ): WorldConvexCollider[] {
+  const cosine = PortableMath.cos(transform.angle)
+  const sine = PortableMath.sin(transform.angle)
   return definition.parts.map((part) =>
-    transformConvexCollider(part, transform),
+    transformConvexCollider(part, transform, cosine, sine),
   )
 }
 

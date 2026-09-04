@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RaceEngine } from '@/race/RaceEngine'
 import { RaceRenderer } from '@/race/RaceRenderer'
+import { TrackGeometry } from '@/race/TrackGeometry'
 import type { InterpolatedVehicleState } from '@/race/types'
 import { SHORT_TRACK } from '@/test/track-fixtures'
 
@@ -93,6 +94,41 @@ function createVehicles() {
 
 describe('RaceRenderer 2.5D camera integration', () => {
   beforeEach(() => drawVehicleVisualMock.mockClear())
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it('does not draw a detailed opponent outside the viewport and keeps it in the minimap', () => {
+    const renderer = new RaceRenderer(createCanvas(createNoopContext()), SHORT_TRACK)
+    const vehicles = createVehicles()
+    vehicles[1].renderPosition = { x: 10000, y: 10000 }
+    const minimap = vi.spyOn(renderer as unknown as { drawMinimap: (...args: unknown[]) => void }, 'drawMinimap')
+    renderer.render({ mode: 'solo', getInterpolatedVehicles: () => vehicles } as RaceEngine, 1 / 60)
+    expect(drawVehicleVisualMock).toHaveBeenCalledTimes(1)
+    expect(minimap.mock.calls.some(call => call.some(value => value === vehicles))).toBe(true)
+  })
+
+  it('precomputes pit projections instead of searching the circuit every frame in two viewports', () => {
+    const project = vi.spyOn(TrackGeometry.prototype, 'project')
+    const renderer = new RaceRenderer(createCanvas(createNoopContext()), SHORT_TRACK)
+    expect(project.mock.calls.length).toBeGreaterThan(0)
+    const vehicles = createVehicles()
+    project.mockClear()
+    for (let frame = 0; frame < 3; frame++) {
+      renderer.render({ mode: 'local', getInterpolatedVehicles: () => vehicles } as RaceEngine, 1 / 60)
+    }
+    expect(project).not.toHaveBeenCalled()
+  })
+
+  it('caps high-DPI raster work without changing CSS car size or split-screen layout', () => {
+    vi.stubGlobal('devicePixelRatio', 2)
+    const canvas = createCanvas(createNoopContext())
+    const renderer = new RaceRenderer(canvas, SHORT_TRACK, { pixelRatioCap: 1 })
+    const vehicles = createVehicles()
+    renderer.render({ mode: 'local', getInterpolatedVehicles: () => vehicles } as RaceEngine, 1 / 60)
+    expect(canvas.width).toBe(1600)
+    expect(canvas.height).toBe(900)
+    expect(drawVehicleVisualMock).toHaveBeenCalledTimes(4)
+    expect(drawVehicleVisualMock.mock.calls[0][1].length).toBeCloseTo(54, 8)
+  })
 
   it('selects the same car view independently in both split-screen cameras', () => {
     const context = createNoopContext()

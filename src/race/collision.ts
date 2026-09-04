@@ -11,6 +11,8 @@ import {
   subtract,
 } from '@/race/math'
 import {
+  colliderBounds,
+  colliderBoundsIntersect,
   findCompoundCollisionManifolds,
   resolveRigidBodyCollisions,
   type CollisionManifold,
@@ -46,6 +48,31 @@ const COLLISION_TIME_EPSILON_SECONDS =
   PHYSICS_CONSTANTS.collision.ccdTimeEpsilonSeconds
 const COLLISION_ANGULAR_MOTION_EPSILON_RADIANS =
   PHYSICS_CONSTANTS.collision.ccdAngularMotionEpsilonRadians
+
+type CachedPose = {
+  x: number
+  y: number
+  angle: number
+  colliders: WorldConvexCollider[]
+}
+const previousPoseCache = new WeakMap<VehicleState, CachedPose>()
+const currentPoseCache = new WeakMap<VehicleState, CachedPose>()
+
+function cachedVehiclePose(vehicle: VehicleState, previous = false) {
+  const cache = previous ? previousPoseCache : currentPoseCache
+  const position = previous ? vehicle.previousPosition : vehicle.position
+  const angle = previous ? vehicle.previousAngle : vehicle.angle
+  const cached = cache.get(vehicle)
+  if (
+    cached && cached.x === position.x &&
+    cached.y === position.y && cached.angle === angle
+  ) {
+    return cached.colliders
+  }
+  const colliders = createVehicleWorldCollider({ position, angle })
+  cache.set(vehicle, { x: position.x, y: position.y, angle, colliders })
+  return colliders
+}
 
 function vehicleBody(vehicle: VehicleState): RigidBody2D {
   return {
@@ -197,6 +224,32 @@ function boundsIntersect(first: CollisionBounds, second: CollisionBounds) {
   )
 }
 
+function poseMotionBounds(
+  start: readonly WorldConvexCollider[],
+  end: readonly WorldConvexCollider[],
+  angularTravel: number,
+): CollisionBounds {
+  const bounds = { ...colliderBounds(start[0]) }
+  for (const pose of [start, end]) {
+    for (const collider of pose) {
+      const part = colliderBounds(collider)
+      bounds.minX = Math.min(bounds.minX, part.minX)
+      bounds.minY = Math.min(bounds.minY, part.minY)
+      bounds.maxX = Math.max(bounds.maxX, part.maxX)
+      bounds.maxY = Math.max(bounds.maxY, part.maxY)
+    }
+  }
+  const margin =
+    2 * VEHICLE_MAXIMUM_AXIS_EXTENT_METERS *
+    PortableMath.sin(Math.min(Math.PI, Math.abs(angularTravel)) / 2)
+  return {
+    minX: bounds.minX - margin,
+    minY: bounds.minY - margin,
+    maxX: bounds.maxX + margin,
+    maxY: bounds.maxY + margin,
+  }
+}
+
 function advanceBody(body: RigidBody2D, deltaSeconds: number) {
   body.position.x += body.velocity.x * deltaSeconds
   body.position.y += body.velocity.y * deltaSeconds
@@ -242,10 +295,7 @@ function completeSimultaneousImpactManifolds(
 }
 
 function collidersAtVehiclePose(vehicle: VehicleState) {
-  return createVehicleWorldCollider({
-    position: vehicle.position,
-    angle: vehicle.angle,
-  })
+  return cachedVehiclePose(vehicle)
 }
 
 /**
@@ -485,14 +535,16 @@ export function resolveVehicleCollision(
   const secondAngularMotion =
     signedAngleDelta(second.previousAngle, second.angle) / deltaSeconds
   const relativeSpeed = magnitude(subtract(firstMotion, secondMotion))
-  const firstAtStart = createVehicleWorldCollider({
-    position: first.previousPosition,
-    angle: first.previousAngle,
-  })
-  const secondAtStart = createVehicleWorldCollider({
-    position: second.previousPosition,
-    angle: second.previousAngle,
-  })
+  const firstAtStart = cachedVehiclePose(first, true)
+  const secondAtStart = cachedVehiclePose(second, true)
+  // Conservative union of both endpoint poses plus the full angular arc.
+  // Reject only pairs that cannot touch; the canonical CCD/solver is unchanged.
+  if (
+    !colliderBoundsIntersect(
+      poseMotionBounds(firstAtStart, firstAtEnd, firstAngularMotion * deltaSeconds),
+      poseMotionBounds(secondAtStart, secondAtEnd, secondAngularMotion * deltaSeconds),
+    )
+  ) return false
   const shouldSweep =
     relativeSpeed >=
       PHYSICS_CONSTANTS.collision.ccdMinimumSpeedMetersPerSecond ||

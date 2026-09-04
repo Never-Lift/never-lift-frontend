@@ -45,6 +45,11 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 - O dano mecânico v2 é cumulativo e deriva da variação de velocidade normal do impacto. Contatos abaixo de `5 m/s` de `delta-v` são ignorados; direção, motor, dano combinado e perda total direta começam em `5`, `10`, `18` e `30 m/s`. Danos de direção e motor afetam a dinâmica; impactos críticos ou perda de toda a integridade causam perda total, que desativa os controles.
 - Ao terminar, o frontend envia a classificação autenticada para `POST /api/races/local-result` com `trackId`, `trackCatalogVersion` e `physicsContractVersion` efetivamente usados.
 
+> Otimização de solo/local em 04/09/2026: caches e culling reduzem trabalho repetido,
+> com perfil gráfico limitado em split-screen e grids densos. Física, escala e
+> comportamento dos bots permanecem iguais. Consulte as [medições e testes manuais](docs/race-performance-2026-09-04.md).
+> Diagnóstico opcional: `npm run benchmark:race` (requer catálogo local do backend).
+
 ## Módulo 3 — Parte 3a: lobby online
 
 - `/race/setup?mode=online` lista salas públicas com nome, host e ocupação; clicar em **Entrar** ingressa diretamente. Salas privadas não têm senha e usam o código numérico como único segredo. A criação solicita apenas nome e visibilidade.

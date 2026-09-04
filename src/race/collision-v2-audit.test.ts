@@ -216,6 +216,16 @@ describe('v2 compound-collider contact audit', () => {
 })
 
 describe('v2 car-to-car collision audit', () => {
+  it('invalidates cached poses after an in-place position or angle change', () => {
+    const first = vehicle('cached-first')
+    const second = vehicle('cached-second', { x: 5.9 })
+    expect(resolveVehicleCollision(first, second)).toBe(false)
+    second.position.x = 5.4
+    expect(resolveVehicleCollision(first, second)).toBe(true)
+    second.position.x = 50
+    second.angle = Math.PI / 2
+    expect(resolveVehicleCollision(first, second)).toBe(false)
+  })
   it('resolves a central head-on impact without artificial yaw', () => {
     const first = vehicle('central-first', {
       x: -2.75,
@@ -352,6 +362,30 @@ describe('v2 car-to-car collision audit', () => {
 })
 
 describe('v2 canonical-barrier collision audit', () => {
+  it('reuses angular geometry only for the same pivot and query inputs', () => {
+    const first = {
+      colliders: vehicleColliders({ angle: -0.08 }),
+      position: { x: 0, y: 0 },
+      velocity: { x: 0, y: 0 },
+      angularVelocity: 0.16 / PHYSICS_STEP_SECONDS,
+    }
+    const second = {
+      colliders: [concreteWall('pivot-wall', -2.9, -3.3, 0.125, 2.5)],
+      position: { x: 0, y: 0 },
+      velocity: { x: 0, y: 0 },
+      angularVelocity: 0,
+    }
+    expect(sweepCompoundCollidersWithRotation(first, second, PHYSICS_STEP_SECONDS)).not.toBeNull()
+    for (const pivot of [1, -3, 0]) {
+      first.position.x = pivot
+      first.velocity.y = pivot * 2
+      const expected = sweepCompoundCollidersWithRotation(
+        structuredClone(first), structuredClone(second), PHYSICS_STEP_SECONDS,
+      )
+      expect(sweepCompoundCollidersWithRotation(first, second, PHYSICS_STEP_SECONDS)).toEqual(expected)
+    }
+  })
+
   it('stops a 350 km/h nose at a 25 cm wall during one 120 Hz step', () => {
     const speed = 350 / 3.6
     const travel = speed * PHYSICS_STEP_SECONDS

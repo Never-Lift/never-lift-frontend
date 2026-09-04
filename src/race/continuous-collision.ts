@@ -1,4 +1,5 @@
 import * as PortableMath from '@/race/portable-math'
+import { polygonGeometry } from '@/race/polygon-cache'
 
 import physicsConstants from '../../contracts/module-2/v2/physics-constants.json'
 
@@ -7,7 +8,6 @@ import {
   dot,
   normalize,
   perpendicularLeft,
-  rotate,
   scale,
   subtract,
 } from '@/race/math'
@@ -34,6 +34,16 @@ export type SweptColliderBody = {
 export type SweptPoseColliderBody = SweptColliderBody & {
   position: Vector2
   angularVelocity: number
+}
+
+type PoseSample = {
+  position: Vector2
+  cosine: number
+  sine: number
+  colliders: Map<WorldConvexCollider, WorldConvexCollider>
+}
+type CachedPoseColliderBody = SweptPoseColliderBody & {
+  poseSamples?: Map<number, PoseSample>
 }
 
 export type TimeOfImpact = {
@@ -85,6 +95,8 @@ function cachedStaticColliderBounds(collider: WorldConvexCollider) {
 }
 
 function axesOf(vertices: readonly Vector2[]) {
+  const cached = polygonGeometry(vertices)
+  if (cached.sweepAxes) return cached.sweepAxes
   const axes: Vector2[] = []
   for (let index = 0; index < vertices.length; index += 1) {
     const edge = subtract(
@@ -102,13 +114,15 @@ function axesOf(vertices: readonly Vector2[]) {
     }
     axes.push(axis)
   }
+  cached.sweepAxes = axes
   return axes
 }
 
 function project(vertices: readonly Vector2[], axis: Vector2) {
   let minimum = dot(vertices[0], axis)
   let maximum = minimum
-  for (const vertex of vertices.slice(1)) {
+  for (let index = 1; index < vertices.length; index += 1) {
+    const vertex = vertices[index]
     const value = dot(vertex, axis)
     minimum = Math.min(minimum, value)
     maximum = Math.max(maximum, value)
@@ -158,7 +172,11 @@ function colliderRadius(
   collider: WorldConvexCollider,
   body: SweptPoseColliderBody,
 ) {
-  return collider.vertices.reduce(
+  const { x, y } = body.position
+  const geometry = polygonGeometry(collider.vertices)
+  const cached = geometry.radius
+  if (cached && cached.x === x && cached.y === y) return cached.value
+  const radius = collider.vertices.reduce(
     (radius, vertex) =>
       Math.max(
         radius,
@@ -166,47 +184,51 @@ function colliderRadius(
       ),
     0,
   )
+  geometry.radius = { x, y, value: radius }
+  return radius
 }
 
 function colliderAtPoseTime(
   collider: WorldConvexCollider,
-  body: SweptPoseColliderBody,
+  body: CachedPoseColliderBody,
   timeSeconds: number,
 ): WorldConvexCollider {
   if (timeSeconds <= TIME_EPSILON_SECONDS || isStaticPoseBody(body)) {
     return collider
   }
-  const translatedPosition = add(
-    body.position,
-    scale(body.velocity, timeSeconds),
-  )
-  const angularOffset = body.angularVelocity * timeSeconds
-  return {
+  let sample = body.poseSamples?.get(timeSeconds)
+  const cached = sample?.colliders.get(collider)
+  if (cached) return cached
+  if (!sample) {
+    const angularOffset = body.angularVelocity * timeSeconds
+    sample = {
+      position: add(body.position, scale(body.velocity, timeSeconds)),
+      cosine: PortableMath.cos(angularOffset),
+      sine: PortableMath.sin(angularOffset),
+      colliders: new Map(),
+    }
+    body.poseSamples?.set(timeSeconds, sample)
+  }
+  const { position: translatedPosition, cosine, sine } = sample
+  const result: WorldConvexCollider = {
     id: collider.id,
     collisionMaterial: collider.collisionMaterial,
-    vertices: collider.vertices.map((vertex) =>
-      add(
-        translatedPosition,
-        rotate(subtract(vertex, body.position), angularOffset),
-      ),
-    ),
+    vertices: collider.vertices.map((vertex) => {
+      const x = vertex.x - body.position.x
+      const y = vertex.y - body.position.y
+      return {
+        x: translatedPosition.x + (x * cosine - y * sine),
+        y: translatedPosition.y + (x * sine + y * cosine),
+      }
+    }),
   }
+  sample.colliders.set(collider, result)
+  return result
 }
 
 function maximumColliderRadius(body: SweptPoseColliderBody) {
   return body.colliders.reduce(
-    (maximum, collider) =>
-      collider.vertices.reduce(
-        (partMaximum, vertex) =>
-          Math.max(
-            partMaximum,
-            PortableMath.hypot(
-              vertex.x - body.position.x,
-              vertex.y - body.position.y,
-            ),
-          ),
-        maximum,
-      ),
+    (maximum, collider) => Math.max(maximum, colliderRadius(collider, body)),
     0,
   )
 }
@@ -222,6 +244,7 @@ function colliderMotionBounds(
   const bounds = sweptBounds(collider, body.velocity, maximumTimeSeconds)
   const angularTravelRadians =
     Math.abs(body.angularVelocity) * maximumTimeSeconds
+  if (angularTravelRadians === 0) return bounds
   const angularDisplacementMeters =
     angularTravelRadians <= Math.PI
       ? 2 *
@@ -414,12 +437,30 @@ export function sweepCompoundCollidersWithRotation(
   second: SweptPoseColliderBody,
   maximumTimeSeconds: number,
 ): CompoundTimeOfImpact | null {
+  // Cache only within this query. Reusing a caller's body on the next tick
+  // cannot retain stale positions/velocities or accumulate unbounded samples.
+  return sweepCachedPoseBodies(
+    { ...first, poseSamples: new Map() },
+    { ...second, poseSamples: new Map() },
+    maximumTimeSeconds,
+  )
+}
+
+function sweepCachedPoseBodies(
+  first: CachedPoseColliderBody,
+  second: CachedPoseColliderBody,
+  maximumTimeSeconds: number,
+): CompoundTimeOfImpact | null {
   if (maximumTimeSeconds < 0) {
     throw new Error('O intervalo de CCD não pode ser negativo.')
   }
   const maximumAngularTravelMeters =
-    (Math.abs(first.angularVelocity) * maximumColliderRadius(first) +
-      Math.abs(second.angularVelocity) * maximumColliderRadius(second)) *
+    ((first.angularVelocity === 0
+      ? 0
+      : Math.abs(first.angularVelocity) * maximumColliderRadius(first)) +
+      (second.angularVelocity === 0
+        ? 0
+        : Math.abs(second.angularVelocity) * maximumColliderRadius(second))) *
     maximumTimeSeconds
   if (maximumAngularTravelMeters <= SWEEP_EPSILON) {
     const impact = sweepCompoundColliders(first, second, maximumTimeSeconds)

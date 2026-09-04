@@ -3,6 +3,15 @@ export type GraphicsQuality = 'low' | 'medium' | 'high'
 
 export const DEFAULT_GRAPHICS_QUALITY: GraphicsQuality = 'medium'
 
+/** Reduce decorative/raster work for two cameras or a dense grid, not world scale. */
+export function raceGraphicsSettings(mode: 'solo' | 'local', participantCount: number) {
+  const highLoad = mode === 'local' || participantCount >= 10
+  return {
+    quality: (highLoad ? 'low' : 'medium') as GraphicsQuality,
+    pixelRatioCap: highLoad ? 1 : 1.5,
+  }
+}
+
 export const AMBIENT_PARTICLE_BUDGET: Record<GraphicsQuality, number> = {
   low: 24,
   medium: 48,

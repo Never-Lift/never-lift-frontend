@@ -65,6 +65,21 @@ type ElevationTrackSection = {
   points: TrackDefinition['centerline']
 }
 
+type PitGarageVisualGeometry = {
+  index: number
+  boxCorners: Vector2[]
+  boxLineFrom: Vector2
+  boxLineTo: Vector2
+  garageCorners: Vector2[]
+}
+
+type PitInfrastructureGeometry = {
+  path: Vector2[]
+  laneEdges: [Vector2[], Vector2[]]
+  wallPath: Vector2[]
+  garages: PitGarageVisualGeometry[]
+}
+
 export type RenderStats = {
   totalChunks: number
   visibleChunksByViewport: number[]
@@ -75,6 +90,7 @@ export type RaceRendererOptions = {
   timeOfDay?: TimeOfDayPreset
   quality?: GraphicsQuality
   splitScreenAspectRatio?: () => number
+  pixelRatioCap?: number
 }
 
 const SURFACE_COLORS: Record<TrackSurfaceMaterial, string> = {
@@ -405,8 +421,16 @@ export class RaceRenderer {
   private readonly timeOfDay: TimeOfDayPreset
   private readonly quality: GraphicsQuality
   private readonly splitScreenAspectRatio: () => number
+  private readonly pixelRatioCap: number
   private readonly trackCullMarginMeters: number
   private readonly suzukaCrossings: Vector2[]
+  private readonly chunkPoints = new Map<number, TrackDefinition['centerline']>()
+  private readonly chunkSections = new Map<number, ElevationTrackSection[]>()
+  private readonly sceneryByLayer: Record<
+    'ground' | 'overhead',
+    TrackSceneryObject[]
+  >
+  private readonly pitInfrastructure: PitInfrastructureGeometry | null
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
   private opacityLayerCanvas?: HTMLCanvasElement
@@ -427,8 +451,27 @@ export class RaceRenderer {
     this.splitScreenAspectRatio =
       options.splitScreenAspectRatio ??
       (() => this.canvas.width / this.canvas.height)
+    this.pixelRatioCap = Math.max(1, options.pixelRatioCap ?? 2)
     this.trackCullMarginMeters = trackCullMarginMeters(track, this.geometry)
     this.suzukaCrossings = findSuzukaCrossingPoints(track)
+    for (const chunk of track.chunks) {
+      const points = this.collectChunkPoints(chunk)
+      this.chunkPoints.set(chunk.index, points)
+      this.chunkSections.set(chunk.index, this.splitByElevationLayer(points))
+    }
+    const sceneryObjects = [
+      ...track.sceneryLayout.landmarks,
+      ...track.sceneryLayout.staticObjects,
+    ]
+    this.sceneryByLayer = {
+      ground: sceneryObjects.filter(
+        (object) => getSceneryRenderLayer(object.kind) === 'ground',
+      ),
+      overhead: sceneryObjects.filter(
+        (object) => getSceneryRenderLayer(object.kind) === 'overhead',
+      ),
+    }
+    this.pitInfrastructure = this.buildPitInfrastructureGeometry()
     this.renderStats = {
       totalChunks: track.chunks.length,
       visibleChunksByViewport: [],
@@ -517,7 +560,10 @@ export class RaceRenderer {
 
   private resize() {
     const bounds = this.canvas.getBoundingClientRect()
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+    const pixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      this.pixelRatioCap,
+    )
     const width = Math.max(1, Math.round(bounds.width * pixelRatio))
     const height = Math.max(1, Math.round(bounds.height * pixelRatio))
     if (this.canvas.width !== width || this.canvas.height !== height) {
@@ -571,8 +617,8 @@ export class RaceRenderer {
     context.fillStyle = gradient
     context.fillRect(viewport.x, viewport.y, viewport.width, viewport.height)
 
-    const visibleTrackSections = visibleChunks.flatMap((chunk) =>
-      this.splitByElevationLayer(this.getChunkPoints(chunk)),
+    const visibleTrackSections = visibleChunks.flatMap(
+      (chunk) => this.chunkSections.get(chunk.index) ?? [],
     )
 
     // Draw every visible section in material passes. Drawing a complete chunk at
@@ -633,7 +679,11 @@ export class RaceRenderer {
         this.drawTireMarks(transform, elevationLayer)
         this.drawEscapeRoadObstacleRows(transform, elevationLayer)
         const vehiclesAtLayer = sortVehiclesByProjectedDepth(
-          vehicles.filter((vehicle) => vehicle.trackLayer === elevationLayer),
+          vehicles.filter(
+            (vehicle) =>
+              vehicle.trackLayer === elevationLayer &&
+              this.isVehicleVisible(vehicle, transform),
+          ),
           transform,
         )
         for (const vehicle of vehiclesAtLayer) {
@@ -736,7 +786,7 @@ export class RaceRenderer {
     return { canvas, context }
   }
 
-  private getChunkPoints(chunk: TrackChunk) {
+  private collectChunkPoints(chunk: TrackChunk) {
     const path = this.track.centerline
     return path.filter((_, index) => {
       const previousDistance = path[Math.max(0, index - 1)].distanceMeters
@@ -746,6 +796,10 @@ export class RaceRenderer {
         previousDistance <= chunk.toDistanceMeters
       )
     })
+  }
+
+  private getChunkPoints(chunk: TrackChunk) {
+    return this.chunkPoints.get(chunk.index) ?? []
   }
 
   private splitByElevationLayer(
@@ -1810,24 +1864,13 @@ export class RaceRenderer {
     this.context.stroke()
   }
 
-  private drawPitInfrastructure(transform: CameraTransform) {
+  private buildPitInfrastructureGeometry(): PitInfrastructureGeometry | null {
     const path = this.track.pitLane.path
-    if (path.length < 2) return
+    if (path.length < 2) return null
     const style = this.track.pitLane.visualStyle
     const laneWidthMeters = style.laneWidthMeters
-    for (let index = 0; index < path.length - 1; index += 1) {
-      const from = path[index]
-      const to = path[index + 1]
-      this.strokeSegment(
-        worldToCamera(from, transform),
-        worldToCamera(to, transform),
-        projectedTrackWidth(from, to, laneWidthMeters, transform),
-        '#29313a',
-      )
-    }
-
-    for (const sideDirection of [-1, 1]) {
-      const edge = path.map((point, index) => {
+    const laneEdges = ([-1, 1] as const).map((sideDirection) =>
+      path.map((point, index) => {
         const previous = path[Math.max(0, index - 1)]
         const next = path[Math.min(path.length - 1, index + 1)]
         const delta = { x: next.x - previous.x, y: next.y - previous.y }
@@ -1836,13 +1879,8 @@ export class RaceRenderer {
           x: point.x + (-delta.y / length) * sideDirection * (laneWidthMeters / 2),
           y: point.y + (delta.x / length) * sideDirection * (laneWidthMeters / 2),
         }
-      })
-      this.strokePolyline(
-        edge.map((point) => worldToCamera(point, transform)),
-        Math.max(1, transform.pixelsPerMeter * 0.12),
-        style.roofColor,
-      )
-    }
+      }),
+    ) as [Vector2[], Vector2[]]
     const wallFromIndex = Math.max(
       0,
       Math.floor((path.length - 1) * style.garageStartRatio),
@@ -1851,65 +1889,27 @@ export class RaceRenderer {
       path.length - 1,
       Math.ceil((path.length - 1) * style.garageEndRatio),
     )
-    // The divider is present only alongside the garage block.  The entry and
-    // exit transitions remain visually open, matching the physical openings
-    // published in barrierOpenings and keeping the pit lane drivable.
-    this.drawPitWall(
-      path.slice(wallFromIndex, wallToIndex + 1),
-      transform,
-      style,
-    )
-    this.drawPitGarages(path, transform, style)
-  }
-
-  private drawPitWall(
-    path: Vector2[],
-    transform: CameraTransform,
-    style: TrackPitVisualStyle,
-  ) {
-    const wallPath = path.map((point) => {
-      const projection = this.geometry.project(point)
-      const towardTrack = {
-        x: projection.point.x - point.x,
-        y: projection.point.y - point.y,
-      }
-      const length = Math.max(
-        Number.EPSILON,
-        Math.hypot(towardTrack.x, towardTrack.y),
-      )
-      return {
-        x:
-          point.x +
-          (towardTrack.x / length) * (style.laneWidthMeters / 2 + 0.35),
-        y:
-          point.y +
-          (towardTrack.y / length) * (style.laneWidthMeters / 2 + 0.35),
-      }
-    })
-    const projected = wallPath.map((point) => worldToCamera(point, transform))
-    this.strokePolyline(
-      projected,
-      Math.max(1, transform.pixelsPerMeter * 0.38),
-      style.secondaryColor,
-      'butt',
-    )
-    const wallHeight =
-      transform.pixelsPerMeter *
-      CAMERA_HEIGHT_SCALE *
-      style.pitWallHeightMeters
-    this.strokePolyline(
-      projected.map((point) => ({ x: point.x, y: point.y - wallHeight })),
-      Math.max(1, transform.pixelsPerMeter * 0.16),
-      style.accentColor,
-      'butt',
-    )
-  }
-
-  private drawPitGarages(
-    path: Vector2[],
-    transform: CameraTransform,
-    style: TrackPitVisualStyle,
-  ) {
+    const wallPath = path
+      .slice(wallFromIndex, wallToIndex + 1)
+      .map((point) => {
+        const projection = this.geometry.project(point)
+        const towardTrack = {
+          x: projection.point.x - point.x,
+          y: projection.point.y - point.y,
+        }
+        const length = Math.max(
+          Number.EPSILON,
+          Math.hypot(towardTrack.x, towardTrack.y),
+        )
+        return {
+          x:
+            point.x +
+            (towardTrack.x / length) * (style.laneWidthMeters / 2 + 0.35),
+          y:
+            point.y +
+            (towardTrack.y / length) * (style.laneWidthMeters / 2 + 0.35),
+        }
+      })
     const cumulativeDistances = [0]
     for (let index = 1; index < path.length; index += 1) {
       cumulativeDistances.push(
@@ -1921,7 +1921,7 @@ export class RaceRenderer {
       )
     }
     const totalLengthMeters = cumulativeDistances.at(-1) ?? 0
-    if (totalLengthMeters <= Number.EPSILON) return
+    if (totalLengthMeters <= Number.EPSILON) return null
 
     const samplePath = (distanceMeters: number) => {
       const clampedDistance = Math.max(
@@ -1958,6 +1958,7 @@ export class RaceRenderer {
     const garageToMeters = totalLengthMeters * style.garageEndRatio
     const garageSpanMeters = garageToMeters - garageFromMeters
     const slotLengthMeters = garageSpanMeters / style.garageCount
+    const garages: PitGarageVisualGeometry[] = []
     for (let garageIndex = 0; garageIndex < style.garageCount; garageIndex += 1) {
       const centerDistanceMeters =
         garageFromMeters + slotLengthMeters * (garageIndex + 0.5)
@@ -1984,13 +1985,6 @@ export class RaceRenderer {
         boxHalfLength,
         boxHalfWidth,
       )
-      this.fillWorldPolygon(
-        boxCorners,
-        transform,
-        garageIndex % 2 === 0
-          ? style.primaryColor
-          : style.accentColor,
-      )
       const boxLineFrom = {
         x: boxCenter.x - tangent.x * boxHalfLength,
         y: boxCenter.y - tangent.y * boxHalfLength,
@@ -1999,14 +1993,6 @@ export class RaceRenderer {
         x: boxCenter.x + tangent.x * boxHalfLength,
         y: boxCenter.y + tangent.y * boxHalfLength,
       }
-      this.strokeSegment(
-        worldToCamera(boxLineFrom, transform),
-        worldToCamera(boxLineTo, transform),
-        Math.max(1, transform.pixelsPerMeter * 0.1),
-        style.roofColor,
-        'butt',
-      )
-
       const garageCenter = {
         x: midpoint.x + outward.x * style.garageCenterOffsetMeters,
         y: midpoint.y + outward.y * style.garageCenterOffsetMeters,
@@ -2021,7 +2007,148 @@ export class RaceRenderer {
         slotLengthMeters * 0.5,
         style.garageDepthMeters / 2,
       )
-      this.drawExtrudedBuilding(garageCorners, transform, style, garageIndex)
+      garages.push({
+        index: garageIndex,
+        boxCorners,
+        boxLineFrom,
+        boxLineTo,
+        garageCorners,
+      })
+    }
+    return { path, laneEdges, wallPath, garages }
+  }
+
+  private drawPitInfrastructure(transform: CameraTransform) {
+    const infrastructure = this.pitInfrastructure
+    if (!infrastructure) return
+    const style = this.track.pitLane.visualStyle
+    const laneWidthMeters = style.laneWidthMeters
+    for (let index = 0; index < infrastructure.path.length - 1; index += 1) {
+      const from = infrastructure.path[index]
+      const to = infrastructure.path[index + 1]
+      const projectedFrom = worldToCamera(from, transform)
+      const projectedTo = worldToCamera(to, transform)
+      const width = projectedTrackWidth(from, to, laneWidthMeters, transform)
+      if (
+        !this.isProjectedSegmentVisible(
+          projectedFrom,
+          projectedTo,
+          width / 2,
+          transform.viewport,
+        )
+      ) continue
+      this.strokeSegment(projectedFrom, projectedTo, width, '#29313a')
+    }
+
+    for (const edge of infrastructure.laneEdges) {
+      const projected = edge.map((point) => worldToCamera(point, transform))
+      if (!this.isProjectedPolylineVisible(projected, transform.viewport)) continue
+      this.strokePolyline(
+        projected,
+        Math.max(1, transform.pixelsPerMeter * 0.12),
+        style.roofColor,
+      )
+    }
+    // The divider is present only alongside the garage block. The entry and
+    // exit remain open, matching the physical contract.
+    this.drawPitWall(infrastructure.wallPath, transform, style)
+    this.drawPitGarages(infrastructure.garages, transform, style)
+  }
+
+  private drawPitWall(
+    wallPath: Vector2[],
+    transform: CameraTransform,
+    style: TrackPitVisualStyle,
+  ) {
+    const projected = wallPath.map((point) => worldToCamera(point, transform))
+    const wallHeight =
+      transform.pixelsPerMeter *
+      CAMERA_HEIGHT_SCALE *
+      style.pitWallHeightMeters
+    if (!this.isProjectedPolylineVisible(projected, transform.viewport, wallHeight + 4)) return
+    this.strokePolyline(
+      projected,
+      Math.max(1, transform.pixelsPerMeter * 0.38),
+      style.secondaryColor,
+      'butt',
+    )
+    this.strokePolyline(
+      projected.map((point) => ({ x: point.x, y: point.y - wallHeight })),
+      Math.max(1, transform.pixelsPerMeter * 0.16),
+      style.accentColor,
+      'butt',
+    )
+  }
+
+  private isProjectedPolylineVisible(
+    points: Vector2[],
+    viewport: Viewport,
+    marginPixels = 4,
+  ) {
+    if (points.length === 0) return false
+    let minX = Number.POSITIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+    for (const point of points) {
+      minX = Math.min(minX, point.x)
+      minY = Math.min(minY, point.y)
+      maxX = Math.max(maxX, point.x)
+      maxY = Math.max(maxY, point.y)
+    }
+    return !(
+      maxX < viewport.x - marginPixels ||
+      minX > viewport.x + viewport.width + marginPixels ||
+      maxY < viewport.y - marginPixels ||
+      minY > viewport.y + viewport.height + marginPixels
+    )
+  }
+
+  private isPitGarageVisible(
+    garage: PitGarageVisualGeometry,
+    transform: CameraTransform,
+    style: TrackPitVisualStyle,
+  ) {
+    const projected = [...garage.boxCorners, ...garage.garageCorners].map(
+      (point) => worldToCamera(point, transform),
+    )
+    const verticalMargin =
+      style.buildingHeightMeters *
+        transform.pixelsPerMeter *
+        CAMERA_HEIGHT_SCALE +
+      style.canopyDepthMeters * transform.pixelsPerMeter
+    return this.isProjectedPolylineVisible(
+      projected,
+      transform.viewport,
+      verticalMargin,
+    )
+  }
+
+  private drawPitGarages(
+    garages: PitGarageVisualGeometry[],
+    transform: CameraTransform,
+    style: TrackPitVisualStyle,
+  ) {
+    for (const garage of garages) {
+      if (!this.isPitGarageVisible(garage, transform, style)) continue
+      this.fillWorldPolygon(
+        garage.boxCorners,
+        transform,
+        garage.index % 2 === 0 ? style.primaryColor : style.accentColor,
+      )
+      this.strokeSegment(
+        worldToCamera(garage.boxLineFrom, transform),
+        worldToCamera(garage.boxLineTo, transform),
+        Math.max(1, transform.pixelsPerMeter * 0.1),
+        style.roofColor,
+        'butt',
+      )
+      this.drawExtrudedBuilding(
+        garage.garageCorners,
+        transform,
+        style,
+        garage.index,
+      )
     }
   }
 
@@ -2531,10 +2658,7 @@ export class RaceRenderer {
     transform: CameraTransform,
     layer: 'ground' | 'overhead',
   ) {
-    const objects = [
-      ...this.track.sceneryLayout.landmarks,
-      ...this.track.sceneryLayout.staticObjects,
-    ].filter((object) => getSceneryRenderLayer(object.kind) === layer)
+    const objects = this.sceneryByLayer[layer]
     const viewport = transform.viewport
     for (const object of objects) {
       const point = worldToCamera(object.position, transform)
@@ -3110,6 +3234,24 @@ export class RaceRenderer {
       )
       this.context.fill()
     }
+  }
+
+  private isVehicleVisible(
+    vehicle: InterpolatedVehicleState,
+    transform: CameraTransform,
+  ) {
+    const point = worldToCamera(vehicle.renderPosition, transform)
+    const viewport = transform.viewport
+    const visualMargin =
+      PHYSICS_CONSTANTS.vehicleVisual.lengthMeters *
+      transform.pixelsPerMeter *
+      1.4
+    return !(
+      point.x < viewport.x - visualMargin ||
+      point.x > viewport.x + viewport.width + visualMargin ||
+      point.y < viewport.y - visualMargin ||
+      point.y > viewport.y + viewport.height + visualMargin
+    )
   }
 
   private drawVehicle(
