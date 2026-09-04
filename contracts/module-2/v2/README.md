@@ -6,12 +6,21 @@ face visível de cada barreira a geometria canônica de colisão.
 
 ## Versões ativas
 
-- contrato físico: `2.0.1`; schema de pista: `2.0.0`;
+- contrato físico: `2.0.2`; schema de pista: `2.0.0`;
 - catálogo: `2026.12`;
 - unidade de mundo: metro; tempo: segundo; ângulo: radiano anti-horário desde `+x`.
 
 `contracts/module-2/v1/` permanece histórico e imutável. Resultados, salas,
 recordes e fantasmas não podem misturar versões físicas.
+
+### Revisão 2.0.2 — paridade Java/TypeScript
+
+Corrige dano para usar exclusivamente o delta-v dos impulsos normais aplicados,
+sem incluir a desaceleração tangencial do atrito. Mantém os limiares, a perda de
+vida e o desvio de direção calibrados em 2.0.1. As respostas de velocidade/yaw
+do solver não são retunadas. Clientes e servidor devem atualizar juntos; a
+implementação autoritativa Java da Parte 3b está concluída, com cenários de
+paridade passando. O fluxo de corrida online da Parte 3c permanece pendente.
 
 ## Artefatos
 
@@ -69,5 +78,5 @@ cópia das pistas em produção.
 ## Compatibilidade
 
 `GET /api/tracks` e `GET /api/tracks/{id}` publicam esta linha. O cliente deve
-enviar `trackCatalogVersion=2026.12` e `physicsContractVersion=2.0.1` ao persistir
+enviar `trackCatalogVersion=2026.12` e `physicsContractVersion=2.0.2` ao persistir
 resultado ou entrar em sala. Divergência é rejeitada, nunca convertida.

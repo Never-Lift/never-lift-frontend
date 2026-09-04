@@ -8,7 +8,7 @@
   "properties": {
     "$schema": { "type": "string" },
     "contractVersion": { "const": "2.0.0" },
-    "physicsConstantsVersion": { "const": "2.0.1" },
+    "physicsConstantsVersion": { "const": "2.0.2" },
     "physicsStepSeconds": { "const": 0.008333333333333333 },
     "tolerance": {
       "type": "object",

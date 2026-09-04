@@ -37,7 +37,7 @@
           "properties": {
             "roomCode": { "type": "string", "pattern": "^[0-9]{4}$" },
             "trackCatalogVersion": { "const": "2026.12" },
-            "physicsContractVersion": { "const": "2.0.1" }
+            "physicsContractVersion": { "const": "2.0.2" }
           }
         }
       }
@@ -115,7 +115,7 @@
       "properties": {
         "trackId": { "type": "string", "minLength": 1 },
         "trackCatalogVersion": { "const": "2026.12" },
-        "physicsContractVersion": { "const": "2.0.1" },
+        "physicsContractVersion": { "const": "2.0.2" },
         "gridSize": { "type": "integer", "minimum": 2, "maximum": 22 },
         "botsEnabled": { "type": "boolean" },
         "botDifficulty": { "enum": ["easy", "normal", "hard"] },
@@ -172,7 +172,7 @@
     "physicsState": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["yawRate", "steeringAngle", "appliedThrottle", "appliedBrake", "frontWheelAngularSpeed", "rearWheelAngularSpeed", "gear", "engineRpm", "gearShiftTimeRemaining"],
+      "required": ["yawRate", "steeringAngle", "appliedThrottle", "appliedBrake", "frontWheelAngularSpeed", "rearWheelAngularSpeed", "gear", "engineRpm", "gearShiftTimeRemaining", "longitudinalAcceleration"],
       "properties": {
         "yawRate": { "type": "number" },
         "steeringAngle": { "type": "number" },
@@ -182,25 +182,29 @@
         "rearWheelAngularSpeed": { "type": "number" },
         "gear": { "type": "integer", "minimum": -1, "maximum": 8 },
         "engineRpm": { "type": "number", "minimum": 0 },
-        "gearShiftTimeRemaining": { "type": "number", "minimum": 0 }
+        "gearShiftTimeRemaining": { "type": "number", "minimum": 0 },
+        "longitudinalAcceleration": { "type": "number" }
       }
     },
     "damageState": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["health", "engineDamaged", "steeringDamaged", "steeringPull", "totalLoss"],
+      "required": ["kind", "health", "engineDamaged", "steeringDamaged", "steeringPull", "totalLoss", "impactCount", "lastImpactSpeed"],
       "properties": {
         "health": { "type": "number", "minimum": 0, "maximum": 100 },
         "engineDamaged": { "type": "boolean" },
         "steeringDamaged": { "type": "boolean" },
         "steeringPull": { "type": "number", "minimum": -1, "maximum": 1 },
-        "totalLoss": { "type": "boolean" }
+        "totalLoss": { "type": "boolean" },
+        "kind": { "enum": ["none", "steering", "engine", "engine-and-steering", "total-loss"] },
+        "impactCount": { "type": "integer", "minimum": 0 },
+        "lastImpactSpeed": { "type": "number", "minimum": 0 }
       }
     },
     "carSnapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["playerId", "x", "y", "velocityX", "velocityY", "angle", "speed", "physicsState", "damageState", "lap", "isGhost", "inPit"],
+      "required": ["playerId", "x", "y", "velocityX", "velocityY", "angle", "speed", "physicsState", "damageState", "trackDistanceMeters", "trackLayer", "lastProcessedClientSeq"],
       "properties": {
         "playerId": { "type": "string", "minLength": 1 },
         "x": { "type": "number" },
@@ -211,6 +215,9 @@
         "speed": { "type": "number", "minimum": 0 },
         "physicsState": { "$ref": "#/$defs/physicsState" },
         "damageState": { "$ref": "#/$defs/damageState" },
+        "trackDistanceMeters": { "type": "number", "minimum": 0 },
+        "trackLayer": { "type": "integer" },
+        "lastProcessedClientSeq": { "type": "integer", "minimum": -1 },
         "lap": { "type": "integer", "minimum": 0 },
         "isGhost": { "type": "boolean" },
         "inPit": { "type": "boolean" }
@@ -225,11 +232,13 @@
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["tick", "serverTime", "physicsContractVersion", "cars"],
+          "required": ["tick", "serverTime", "trackId", "trackCatalogVersion", "physicsContractVersion", "cars"],
           "properties": {
             "tick": { "type": "integer", "minimum": 0 },
             "serverTime": { "type": "number", "minimum": 0 },
-            "physicsContractVersion": { "const": "2.0.1" },
+            "trackId": { "type": "string", "minLength": 1 },
+            "trackCatalogVersion": { "const": "2026.12" },
+            "physicsContractVersion": { "const": "2.0.2" },
             "cars": { "type": "array", "maxItems": 22, "items": { "$ref": "#/$defs/carSnapshot" } }
           }
         }
@@ -250,9 +259,21 @@
             { "$ref": "#/$defs/falseStartEvent" },
             { "$ref": "#/$defs/pitEnterEvent" },
             { "$ref": "#/$defs/pitExitEvent" },
-            { "$ref": "#/$defs/breakdownEvent" }
+            { "$ref": "#/$defs/breakdownEvent" },
+            { "$ref": "#/$defs/versionMismatchEvent" }
           ]
         }
+      }
+    },
+    "versionMismatchEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "trackId", "trackCatalogVersion", "physicsContractVersion"],
+      "properties": {
+        "type": { "const": "version_mismatch" },
+        "trackId": { "type": "string", "minLength": 1 },
+        "trackCatalogVersion": { "const": "2026.12" },
+        "physicsContractVersion": { "const": "2.0.2" }
       }
     },
     "collisionEvent": {

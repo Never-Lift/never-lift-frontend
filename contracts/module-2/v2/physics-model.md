@@ -1,4 +1,4 @@
-# Modelo físico canônico 2.0.1
+# Modelo físico canônico 2.0.2
 
 Este documento faz parte do contrato executável. Implementações TypeScript e
 Java devem preservar fórmulas, sinais, ordem de cálculo e passo fixo. Pequenas
@@ -20,7 +20,10 @@ diferenças numéricas só são aceitas dentro das tolerâncias dos cenários.
 
 `x, y, velocityX, velocityY, angle, yawRate, steeringAngle, appliedThrottle,
 appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm,
-gearShiftTimeRemaining` e dano. `u` e `v` são derivados a cada subpasso:
+gearShiftTimeRemaining` e dano. A aceleração longitudinal do subpasso anterior
+(`longitudinalAcceleration`) também é preservada e transmitida: o passo 6 já
+depende desse valor para transferência de carga. Não é uma nova força nem uma
+alteração da ordem de integração. `u` e `v` são derivados a cada subpasso:
 
 ```text
 u =  cos(ψ) * velocityX + sin(ψ) * velocityY
@@ -139,7 +142,24 @@ rearAxleRotationalInertiaKgM2 =
 
 ## Dano e perda total
 
-A calibração `2.0.1` ignora contatos abaixo de `5 m/s` de `delta-v`, classifica
+A revisão `2.0.2` corrige a medida do impacto, sem recalibrar resistência ou
+direção. Para cada chamada do solver de contatos, acumular **vetorialmente**
+somente os impulsos normais realmente aplicados em todos os patches/iterações:
+
+```text
+normalImpulseVector = sum(normal[i] * appliedNormalImpulse[i])
+firstNormalDeltaV  = length(normalImpulseVector) * first.inverseMass
+secondNormalDeltaV = length(normalImpulseVector) * second.inverseMass
+```
+
+O dano usa esses valores, não `length(velocityAfter - velocityBefore)`, que
+inclui atrito tangencial. Não somar módulos por iteração nem usar velocidade
+absoluta, correção de posição ou velocidade angular como dano. Atrito, torque e
+restituição continuam atuando normalmente na resposta física; a mudança apenas
+impede que frenagem tangencial de um raspão infle sua severidade. Contatos
+distintos resolvidos em chamadas subsequentes continuam cumulativos.
+
+A calibração de resistência/direção preservada de `2.0.1` ignora contatos abaixo de `5 m/s` de `delta-v`, classifica
 dano de direção a partir de `5 m/s`, dano de motor a partir de `10 m/s`, dano
 combinado a partir de `18 m/s` e perda total direta a partir de `30 m/s`. Cada
 impacto relevante reduz a vida em `delta-v * 1,5`; impactos distintos continuam

@@ -23,7 +23,7 @@
   ],
   "properties": {
     "$schema": { "type": "string" },
-    "version": { "const": "2.0.1" },
+    "version": { "const": "2.0.2" },
     "calibrationStatus": { "enum": ["initial", "validated"] },
     "units": {
       "type": "object",

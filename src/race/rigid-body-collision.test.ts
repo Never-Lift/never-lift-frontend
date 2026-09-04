@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import vehicleDefinition from '../../contracts/module-2/v2/vehicle-definition.json'
+import physicsConstants from '../../contracts/module-2/v2/physics-constants.json'
 
 import {
   resolveContinuousCollisionStep,
@@ -107,6 +108,38 @@ describe('compound metric F1 geometry', () => {
 })
 
 describe('SAT manifold and rigid-body impulses', () => {
+  it('excludes tangential friction from damage delta-v without removing friction', () => {
+    const car = body({ x: 0, y: 0 }, { x: 4.5, y: 20 })
+    car.inverseInertia = 1 / physicsConstants.vehicle.yawInertiaKgM2
+    const wall = body({ x: 3, y: 0 }, { x: 0, y: 0 }, 0)
+    const resolution = resolveRigidBodyCollisions(car, wall, [{
+      normal: { x: 1, y: 0 }, penetrationMeters: 0,
+      contacts: [{ x: 2.8, y: 0 }],
+      firstColliderId: 'car', secondColliderId: 'wall',
+    }], { ...RESPONSE, friction: 0.65 })
+
+    expect(resolution.firstNormalDeltaVelocityMetersPerSecond).toBeCloseTo(4.86, 10)
+    expect(resolution.firstNormalDeltaVelocityMetersPerSecond).toBeLessThan(5)
+    expect(resolution.firstDeltaVelocityMetersPerSecond).toBeGreaterThan(5)
+    expect(resolution.secondNormalDeltaVelocityMetersPerSecond).toBe(0)
+    expect(car.velocity.y).toBeLessThan(20)
+    expect(car.angularVelocity).not.toBe(0)
+  })
+
+  it('accumulates normal impulses vectorially for perpendicular contacts', () => {
+    const car = body({ x: 0, y: 0 }, { x: 6, y: 8 })
+    const wall = body({ x: 3, y: 3 }, { x: 0, y: 0 }, 0)
+    const manifolds: CollisionManifold[] = [
+      { normal: { x: 1, y: 0 }, penetrationMeters: 0, contacts: [{ x: 0, y: 0 }], firstColliderId: 'car', secondColliderId: 'a' },
+      { normal: { x: 0, y: 1 }, penetrationMeters: 0, contacts: [{ x: 0, y: 0 }], firstColliderId: 'car', secondColliderId: 'b' },
+    ]
+    const resolution = resolveRigidBodyCollisions(car, wall, manifolds, { ...RESPONSE, restitution: 0, friction: 0 })
+    expect(resolution.firstNormalDeltaVelocityMetersPerSecond).toBeCloseTo(10, 10)
+    expect(resolution.firstDeltaVelocityMetersPerSecond).toBeCloseTo(10, 10)
+    const reversed = resolveRigidBodyCollisions(body({ x: 0, y: 0 }, { x: 6, y: 8 }), wall, [...manifolds].reverse(), { ...RESPONSE, restitution: 0, friction: 0 })
+    expect(reversed.firstNormalDeltaVelocityMetersPerSecond).toBe(resolution.firstNormalDeltaVelocityMetersPerSecond)
+  })
+
   it('returns a stable normal, depth and two edge contacts', () => {
     const manifold = findCollisionManifold(
       rectangle('first', 0, 0, 1, 1),

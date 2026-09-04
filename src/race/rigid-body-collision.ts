@@ -52,6 +52,8 @@ export type CollisionResolution = {
   frictionImpulse: number
   firstDeltaVelocityMetersPerSecond: number
   secondDeltaVelocityMetersPerSecond: number
+  firstNormalDeltaVelocityMetersPerSecond: number
+  secondNormalDeltaVelocityMetersPerSecond: number
 }
 
 const GEOMETRY_EPSILON = physicsConstants.collision.geometryEpsilon
@@ -605,6 +607,8 @@ export function resolveRigidBodyCollision(
       frictionImpulse: 0,
       firstDeltaVelocityMetersPerSecond: 0,
       secondDeltaVelocityMetersPerSecond: 0,
+      firstNormalDeltaVelocityMetersPerSecond: 0,
+      secondNormalDeltaVelocityMetersPerSecond: 0,
     }
   }
 
@@ -699,6 +703,8 @@ export function resolveRigidBodyCollision(
     impactSpeed: maximumImpactSpeed,
     normalImpulse: totalNormalImpulse,
     frictionImpulse: totalFrictionImpulse,
+    firstNormalDeltaVelocityMetersPerSecond: totalNormalImpulse * first.inverseMass,
+    secondNormalDeltaVelocityMetersPerSecond: totalNormalImpulse * second.inverseMass,
     firstDeltaVelocityMetersPerSecond: magnitude(
       subtract(first.velocity, firstVelocityBefore),
     ),
@@ -737,7 +743,12 @@ export function resolveRigidBodyCollisions(
     frictionImpulse: 0,
     firstDeltaVelocityMetersPerSecond: 0,
     secondDeltaVelocityMetersPerSecond: 0,
+    firstNormalDeltaVelocityMetersPerSecond: 0,
+    secondNormalDeltaVelocityMetersPerSecond: 0,
   }
+  // Contract 2.0.2: net normal impulse only. Tangential friction still affects
+  // velocity and yaw, but cannot inflate impact damage on a shallow scrape.
+  let normalImpulseVector: Vector2 = { x: 0, y: 0 }
   const firstVelocityBefore = { ...first.velocity }
   const secondVelocityBefore = { ...second.velocity }
   for (let iteration = 0; iteration < iterations; iteration += 1) {
@@ -761,6 +772,10 @@ export function resolveRigidBodyCollisions(
       )
       total.normalImpulse += resolution.normalImpulse
       total.frictionImpulse += resolution.frictionImpulse
+      normalImpulseVector = add(
+        normalImpulseVector,
+        scale(manifold.normal, resolution.normalImpulse),
+      )
     }
   }
   total.firstDeltaVelocityMetersPerSecond = magnitude(
@@ -769,5 +784,9 @@ export function resolveRigidBodyCollisions(
   total.secondDeltaVelocityMetersPerSecond = magnitude(
     subtract(second.velocity, secondVelocityBefore),
   )
+  total.firstNormalDeltaVelocityMetersPerSecond =
+    magnitude(normalImpulseVector) * first.inverseMass
+  total.secondNormalDeltaVelocityMetersPerSecond =
+    magnitude(normalImpulseVector) * second.inverseMass
   return total
 }

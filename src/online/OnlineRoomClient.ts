@@ -194,6 +194,20 @@ export class OnlineRoomClient {
       try {
         const envelope = JSON.parse(event.data) as OnlineEnvelope
         if (!envelope || typeof envelope.type !== 'string') return
+        if (
+          envelope.type === 'race_event' &&
+          envelope.payload && typeof envelope.payload === 'object' &&
+          'type' in envelope.payload && envelope.payload.type === 'version_mismatch'
+        ) {
+          // Retrying the same build cannot repair a physical-contract mismatch.
+          this.disconnect()
+          this.setStatus('failed')
+          this.options.onEnvelope?.({ type: 'error', payload: {
+            code: 'version_mismatch',
+            message: 'A versão do jogo é incompatível com o servidor. Atualize a página ou use a preview correspondente.',
+          } })
+          return
+        }
         this.options.onEnvelope?.(envelope)
       } catch {
         // Ignore malformed frames. Validation errors are reported by the

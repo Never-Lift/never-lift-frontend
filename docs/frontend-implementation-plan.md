@@ -41,7 +41,7 @@ Envelope: `{ "type": "...", "payload": {...} }`.
 
 **Cliente → Servidor:** `join_room { roomCode, trackCatalogVersion, physicsContractVersion }`, `select_loadout { color }`, `ready { ready }`, `input { throttle, brake, steer, clientSeq, clientTimestamp }` — nunca posição, só intenção. `ready` aceita `true` e `false`, pois a confirmação é reversível enquanto a sala está no lobby. O modelo do carro e o modo de condução não fazem parte do payload: toda corrida usa o mesmo F1 e a mesma configuração física. Boost/nitro não existe e propriedades desconhecidas são rejeitadas.
 
-**Servidor → Cliente:** `room_state`, `countdown { startAtServerTime }`, `state_snapshot { tick, serverTime, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining }, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, lap, isGhost, inPit }] }`, `race_event`, `race_result`, `error`.
+**Servidor → Cliente:** `room_state`, `countdown { startAtServerTime }`, `state_snapshot { tick, serverTime, trackId, trackCatalogVersion, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining, longitudinalAcceleration }, damageState: { kind, health, engineDamaged, steeringDamaged, steeringPull, totalLoss, impactCount, lastImpactSpeed }, trackDistanceMeters, trackLayer, lastProcessedClientSeq }] }`, `race_event`, `race_result`, `error`.
 
 Nos snapshots, `x` e `y` são metros num plano cartesiano com `+X` para a direita e `+Y` para cima; `velocityX`/`velocityY` e `speed` usam metros por segundo; `angle` usa radianos no sentido anti-horário a partir de `+X`. Dentro de `physicsState`, `yawRate` usa radianos por segundo, `steeringAngle` é o ângulo físico das rodas dianteiras e as velocidades angulares usam radianos por segundo. Controles aplicados, rodas, marcha, RPM e transição de troca são estado autoritativo necessário à reconciliação. O frontend não converte esses valores em pixels até o estágio de câmera/renderização.
 
@@ -83,8 +83,8 @@ Mesma numeração e dependências do plano de backend.
 
 ### Módulo 2 — Motor de corrida local (sem rede)
 **Depende de:** Módulo 0 (frontend) + Módulo 2 (backend, catálogo versionado de pistas e persistência de resultado).
-**Contrato de entrada atual:** `contracts/module-2/v2/` define `TrackDefinition` `2.0.0`, catálogo `2026.12`, constantes físicas `2.0.1`, colliders compostos, faces canônicas de barreira, aberturas físicas de pit, face traseira `pitLane.garageBarrier` das garagens, placas métricas de frenagem e perfis visuais métricos de infraestrutura. O frontend consome as 24 geometrias pela API e mantém localmente somente os artefatos comuns do contrato; `contracts/module-2/v1/` preserva o runtime `1.3.0` como histórico imutável.
-**Estado da entrega:** pronto. As Partes 2a, 2b, 2c e 2d, a física `2.0.0` e o catálogo `2026.12` foram validados manualmente de forma integrada em 31/08/2026. A revisão `2.0.1` recalibra somente dano e desvio de direção, tem validação automatizada e aguarda confirmação manual. A simplificação para F1 único/condução única, o refinamento de câmera 2.5D/F1 multidirecional e a revisão de segurança visual das 24 pistas estão concluídos: zebras autorais, faixas contínuas de muro/grade, placas completas por curva, largada de Silverstone reposicionada, Marina Bay orientada no sentido anti-horário, entradas/saídas navegáveis do pit, 22 vãos opacos de garagem por circuito com face traseira colidível e remoção do escape provisório do Rettifilo de Monza. A reorganização do setup solo/local e do HUD foi automatizada em 02/09/2026, com validação visual da preview pendente; isso não reabre o critério funcional já aprovado do módulo. A Parte 2d e o Módulo 2 permanecem prontos; a Parte 3a foi validada manualmente em dois navegadores e está pronta desde 03/09/2026, enquanto 3b/3c permanecem pendentes.
+**Contrato de entrada atual:** `contracts/module-2/v2/` define `TrackDefinition` `2.0.0`, catálogo `2026.12`, constantes físicas `2.0.2`, colliders compostos, faces canônicas de barreira, aberturas físicas de pit, face traseira `pitLane.garageBarrier` das garagens, placas métricas de frenagem e perfis visuais métricos de infraestrutura. O frontend consome as 24 geometrias pela API e mantém localmente somente os artefatos comuns do contrato; `contracts/module-2/v1/` preserva o runtime `1.3.0` como histórico imutável.
+**Estado da entrega:** pronto. As Partes 2a, 2b, 2c e 2d, a física `2.0.0` e o catálogo `2026.12` foram validados manualmente de forma integrada em 31/08/2026. A revisão `2.0.1` recalibra somente dano e desvio de direção, tem validação automatizada e aguarda confirmação manual. A simplificação para F1 único/condução única, o refinamento de câmera 2.5D/F1 multidirecional e a revisão de segurança visual das 24 pistas estão concluídos: zebras autorais, faixas contínuas de muro/grade, placas completas por curva, largada de Silverstone reposicionada, Marina Bay orientada no sentido anti-horário, entradas/saídas navegáveis do pit, 22 vãos opacos de garagem por circuito com face traseira colidível e remoção do escape provisório do Rettifilo de Monza. A reorganização do setup solo/local e do HUD foi automatizada em 02/09/2026, com validação visual da preview pendente; isso não reabre o critério funcional já aprovado do módulo. A Parte 2d e o Módulo 2 permanecem prontos; a Parte 3a foi validada manualmente em dois navegadores e está pronta desde 03/09/2026, enquanto a Parte 3b Java está pronta com paridade passando e a Parte 3c permanece pendente.
 
 **Simplificação implementada em 24/08/2026 (frontend #90 / backend #72):** o produto tem somente o F1 e uma configuração fixa de condução que preserva os valores do antigo perfil Normal. A seleção Normal/Drift, os perfis visuais Supercarro/Drift e qualquer dimensão competitiva baseada em modelo ou handling foram removidos. O contrato físico incompatível `1.3.0` foi publicado de forma sincronizada nos dois repositórios.
 
@@ -138,9 +138,9 @@ salas privadas usam apenas o código como segredo, sem senha. Pista, grid e bots
 fora da página e permanece ativa durante a navegação; a saída normal ocorre somente
 pelo comando explícito com confirmação. O cliente obtém `POST /api/rooms/{code}/connection-ticket`
 antes do handshake, usa apenas o ticket temporário na URL, reconecta dentro da
-janela de 30 s, e cobre pronto/permissões do host sem iniciar física. As Partes
-3b (motor físico autoritativo) e 3c (classificação e fluxo de corrida) continuam
-pendentes.
+janela de 30 s, e cobre pronto/permissões do host sem iniciar física no cliente. A Parte 3b (motor físico Java) está pronta com
+cenários de paridade passando; a Parte 3c (classificação, fluxo de corrida e
+predição/reconciliação online) permanece pendente.
 **Escopo:**
 - Cliente WebSocket com reconexão automática (backoff simples), obtendo antes um ticket de uso único vinculado à sala/usuário (validade de 60 s) em vez de expor o JWT principal.
 - Lobby: acesso restrito a contas; guest vê somente a prévia bloqueada. A lista pública mostra nome, host e ocupação e permite entrada direta; salas privadas são descobertas exclusivamente pelo código de quatro dígitos, sem senha. Cada sala aceita até 22 carros (humanos e bots), com grid de 2 a 22 normalizado no cliente e validado no servidor. O host não marca pronto e inicia quando todos os demais humanos estiverem `ready`; convidados podem confirmar ou retirar o pronto. O host edita pista por carrossel de traçados, grid, bots/dificuldade e visibilidade durante todo o lobby, sem botão de salvar e sem limpar confirmações, com propagação automática a todos. As configurações travam ao iniciar a classificação; o host pode cancelá-la e reabrir o lobby somente antes de qualquer carro começar a andar. Host e participantes comuns podem sair explicitamente, com transferência automática do host. Entrada, saída, remoção e configuração são propagadas imediatamente; desconexão reserva a vaga somente durante a janela de reconexão. Avisos e erros usam notificações no canto superior direito, expiram em 5 s e aceitam fechamento manual.
@@ -155,6 +155,26 @@ pendentes.
 - Transporte: servidor a 30 ticks/s com subpassos de 1/120 s, inputs a 30 Hz, snapshots a 20 Hz, heartbeat a cada 10 s, ticket de uso único vinculado à sala/usuário com validade de 60 s e janela de reconexão de aproximadamente 30 s. O servidor valida/normaliza inputs e mantém o último comando por aproximadamente 150–250 ms antes de neutralizar gradualmente.
 - A corrida usa o pit lane navegável sem limite de velocidade ou serviço no M3; cortes respeitam checkpoints e limites, invalidam a quali e não concedem progresso até o retorno válido. O estado físico é restaurado entre quali e corrida.
 **Critério de pronto:** dois navegadores, mesma sala e mesma versão física convergem em trajetória, perda de aderência e colisões; clientes incompatíveis não entram e o mesmo contato produz resultado autoritativo nas duas telas.
+
+
+
+### Transporte da Parte 3b — revisão 2.0.2
+
+O detalhamento implementado está em [module-3b-authoritative-physics.md](module-3b-authoritative-physics.md).
+O loop executa 30 ticks/s com quatro subpassos de 1/120 s; um agendamento independente
+publica snapshots a 20 Hz. Inputs são renovados a 30 Hz, mantidos por 200 ms e depois
+neutralizados pelas rampas do contrato. A correção aprovada 2.0.2 calcula dano pelo
+delta-v normal, preservando os limiares de resistência/direção de 2.0.1.
+
+O snapshot inclui `trackId`, `trackCatalogVersion`, `physicsContractVersion`,
+`tick`, `serverTime` e carros com estado completo. `physicsState` inclui também
+`longitudinalAcceleration` do subpasso anterior; `damageState` inclui `kind`,
+`impactCount` e `lastImpactSpeed`. Cada carro transmite `trackDistanceMeters`,
+`trackLayer` e `lastProcessedClientSeq` (-1 antes do primeiro comando ou para bots).
+`lap`, `isGhost` e `inPit` são opcionais no schema e só serão produzidos na 3c.
+Incompatibilidade envia `race_event type=version_mismatch` e fecha o socket (1008).
+A sessão técnica de física da 3b não implementa classificação, largada, voltas,
+resultado, predição ou reconciliação da 3c. Backend e frontend devem promover 2.0.2 juntos.
 
 ### Módulo 4 — Ambiente e modo caos
 **Depende de:** Módulo 3.
