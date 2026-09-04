@@ -58,7 +58,7 @@ Envelope de toda mensagem WebSocket: `{ "type": "...", "payload": {...} }`.
 |---|---|---|
 | `room_state` | `{ code, name, players[], hostId, hostName, settings, readyStates, settingsLocked, state, participantCount, limit }`, com identidade/conexão de cada jogador e versões da pista/física em `settings` | toda entrada, saída, reconexão, remoção ou mudança no lobby |
 | `countdown` | `{ startAtServerTime }` | semáforo iniciando (feature 14) |
-| `state_snapshot` | `{ tick, serverTime, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining }, damageState: { health, engineDamaged, steeringDamaged, steeringPull, totalLoss }, lap, isGhost, inPit }] }` | a cada broadcast (~20/s) |
+| `state_snapshot` | `{ tick, serverTime, trackId, trackCatalogVersion, physicsContractVersion, cars: [{ playerId, x, y, velocityX, velocityY, angle, speed, physicsState: { yawRate, steeringAngle, appliedThrottle, appliedBrake, frontWheelAngularSpeed, rearWheelAngularSpeed, gear, engineRpm, gearShiftTimeRemaining, longitudinalAcceleration }, damageState: { kind, health, engineDamaged, steeringDamaged, steeringPull, totalLoss, impactCount, lastImpactSpeed }, trackDistanceMeters, trackLayer, lastProcessedClientSeq }] }` | a cada broadcast (~20/s) |
 | `race_event` | `{ type: collision \| checkpoint \| lap_complete \| finished \| false_start \| pit_enter \| pit_exit \| breakdown, ...dados específicos }` | evento discreto decidido pelo servidor |
 | `race_result` | `{ standings[] }` | fim de corrida |
 | `error` | `{ code, message }` | falha de validação |
@@ -130,7 +130,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 **Depende de:** Módulos 1 e 2, com a Parte 2d do frontend validada e os cenários físicos v2 congelados.
 **Cobre features:** 4 (modos online — lobby, configuração de sala), 8, parte de 6 (física básica compartilhada), parte de 5 (colisão).
 **Este é o módulo de maior risco do projeto — é onde a lição sobre servidor autoritativo se aplica.**
-**Estado da Parte 3a:** sala, ticket e lobby, incluindo o refinamento de acesso/configuração de 02/09/2026, implementados e validados manualmente em dois navegadores em 03/09/2026; a Parte 3a está pronta. As Partes 3b/3c permanecem pendentes.
+**Estado da Parte 3a:** sala, ticket e lobby, incluindo o refinamento de acesso/configuração de 02/09/2026, implementados e validados manualmente em dois navegadores em 03/09/2026; a Parte 3a está pronta. A Parte 3b Java está pronta com cenários de paridade passando; a Parte 3c permanece pendente.
 **Escopo:**
 - Sessão WebSocket por conexão (`/ws`), autenticada por ticket de uso único de 60 s vinculado à sala e ao usuário; o JWT principal não vai na URL.
 - `RoomManager`: cria/lista salas públicas e privadas por código numérico de 4 dígitos, atribui `hostId`/`hostName` e suporta até 22 humanos/bots. Não existe senha de sala: públicas aceitam entrada direta e privadas dependem exclusivamente do código. A criação recebe somente nome e visibilidade; pista, grid de 2 a 22 e bots são configurados pelo host dentro do lobby. Todos os endpoints de sala e ticket exigem `role: user`.
@@ -138,7 +138,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 - `RaceEngine` por sala escrito do zero em Java, reproduzindo o contrato físico 2.0 e os vetores congelados do TypeScript: corpo rígido 2D, modelo de bicicleta dinâmico, pneus não lineares/combined slip, transferência de carga, drag/downforce, tração traseira, câmbio automático, patinagem e travamento. Todo participante usa o mesmo F1 e nenhuma dificuldade recebe física privilegiada.
 - O loop externo roda a `30 ticks/segundo` e executa quatro subpassos de `1/120s` por tick, conforme fixado pelo contrato v2, lendo o último input normalizado de cada jogador. Estado inclui vetor de velocidade, yaw, esterço e câmbio para snapshots e reconciliação.
 - A sala fixa `trackId`, `trackCatalogVersion` e `physicsContractVersion` antes da largada e rejeita incompatibilidade em vez de simular motores ou geometrias diferentes.
-- Colisão é resolvida somente no servidor com colliders convexos compostos, faces canônicas de barreira, broadphase, CCD, manifold, impulso no ponto de contato, torque e solver iterativo determinístico. Dano cumulativo usa impulso/energia ou `delta-v` do contato.
+- Colisão é resolvida somente no servidor com colliders convexos compostos, faces canônicas de barreira, broadphase, CCD, manifold, impulso no ponto de contato, torque e solver iterativo determinístico. Dano cumulativo usa o delta-v normal efetivo do contato, sem velocidade absoluta nem desaceleração tangencial.
 - Broadcast de `state_snapshot` a cada ~50ms (20/s) pra todos da sala.
 **Critério de pronto:** o Java reproduz todos os cenários físicos TypeScript dentro das tolerâncias; dois clientes compatíveis convergem em trajetória, perda de aderência e colisões; um cliente com versão incompatível é recusado; contatos no bico, roda ou muro não atravessam, enroscam nem acontecem antes da geometria visível.
 

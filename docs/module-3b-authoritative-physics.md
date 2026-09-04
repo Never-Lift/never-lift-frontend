@@ -82,12 +82,13 @@ node tools/track-catalog/audit-v2.mjs --mirror ../never-lift-frontend/contracts/
 ```
 
 Os arquivos em `src/test/resources/physics` são saídas do TypeScript real,
-com hashes SHA-256 dos fontes; não são números gerados pelo Java para se
+com hashes SHA-256 dos fontes normalizados para LF (portáveis entre Windows e Linux);
+não são números gerados pelo Java para se
 autovalidar. Não regenerar referências para esconder divergências. Foram
 congelados com Node 24.18.0/V8 13.6 e comparados em Java 21.0.7 no Windows.
 Funções transcendentais usam StrictMath; potência usa Math.pow e a norma
 bidimensional segue a avaliação escalada do runtime TypeScript. As tolerâncias
-publicadas não foram ampliadas. A CI deve repetir a paridade em Linux.
+publicadas não foram ampliadas. A CI também repetiu e aprovou a paridade em Linux.
 
 `VehicleIntegratorTest` reproduz os 11 cenários, inclusive Miami, perda de
 aderência e barreira oblíqua. `TrackGeometryParityTest` compara 648 amostras
@@ -102,8 +103,48 @@ O diagnóstico opcional `MathParityDiagnosticTest` não é critério de aceitaç
 somente roda com `-Dphysics.parity.diagnostics=true` após gerar suas sondas.
 As suítes de aceitação não dependem dele e nunca são puladas.
 
+## Verificação final — 04/09/2026
+
+- Backend: `clean package` aprovado; 107 testes passaram, zero falhas/erros.
+  Um diagnóstico matemático opcional ficou desativado; nenhum teste de
+  aceitação foi pulado. JAR gerado com o catálogo e os contratos v2.
+- Frontend: CI completa aprovada — lint, TypeScript/build e 334 testes em 38 arquivos.
+- Paridade: 11 cenários físicos/413 estados de referência e 648 amostras das
+  24 pistas, com as tolerâncias originais. Referências vêm do TypeScript real.
+- Dois clientes HTTP/WebSocket reais recebem estados idênticos dos mesmos
+  ticks enquanto ocorre movimento/colisão autoritativa; versão incompatível
+  recebe evento e fechamento 1008; posição enviada pelo cliente é rejeitada.
+- O catálogo permanece reproduzível e os arquivos comuns v2 são byte-idênticos.
+  Nenhum arquivo histórico v1 foi alterado.
+
+### Capacidade medida, não garantia de produção
+
+O probe `tools/physics-parity/PhysicsBenchmark.java` usa 22 carros (21 bots),
+quatro subpassos/tick, 120 ticks de aquecimento e 120 medidos em Albert Park.
+Nesta máquina, Java 21, a média caiu de 174,815 ms para 19,669 ms por tick e o
+p95 ficou em 28,216 ms, abaixo do orçamento de 33,333 ms. Os 12.068 contatos
+resolvidos permaneceram iguais. O ganho veio de bounds/eixos imutáveis em cache,
+broadphase/CCD sem recálculo por par e menos alocações; não houve mudança de
+fórmula, ordem de contato, tolerância ou passo de física.
+
+Esse teste curto de uma sala não comprova capacidade de múltiplas salas nem
+o desempenho do plano contratado no Render. A operação em produção ainda
+requer medição de carga no ambiente de deploy; o benchmark não é um limite
+de hardware imposto à CI.
+
 ## Estado da entrega
 
-Implementação em validação final. Não promover a Parte 3b a pronta nem abrir a
-Parte 3c até concluir a suíte completa e a comprovação dos dois clientes.
-Nenhuma validação visual/manual da 3c foi antecipada.
+**Parte 3b (motor físico Java) pronta, cenários de paridade passando; 3c
+(fluxo de corrida) pendente.** O Módulo 3 inteiro continua em andamento.
+
+Implementação publicada para revisão nas PRs
+[backend #99](https://github.com/Never-Lift/never-lift-backend/pull/99) e
+[frontend #127](https://github.com/Never-Lift/never-lift-frontend/pull/127),
+ambas destinadas à `develop`. Promoção/deploy devem manter backend e frontend
+em 2.0.2; não misturar uma preview antiga com a nova API. O cliente trata
+`version_mismatch` como erro terminal, sem loop de reconexão.
+
+A Parte 3b não disponibiliza corrida online jogável pela interface atual:
+isso depende da 3c. Nenhuma validação visual/manual da 3c foi antecipada.
+A confirmação manual da calibração de dano/direção e da correção 2.0.2
+continua pendente, separada da paridade automatizada aprovada.

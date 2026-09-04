@@ -20,6 +20,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/frontend-implementation-plan.md` — plano deste repositório, módulo a módulo.
 - `docs/backend-implementation-plan.md` — plano do repositório backend, incluído aqui só como referência da API/WebSocket que este cliente consome. Não implementar nada daqui.
 - `docs/game-design-guide.md` — fonte oficial das decisões visuais, de câmera, escala, telas e fase de implementação. Ler antes de qualquer trabalho de interface ou corrida.
+- `docs/module-3b-authoritative-physics.md` — entrega da Parte 3b, paridade, snapshot completo e limites em relação à 3c.
 - `docs/module-3-online-decisions.md` — registro aprovado das 80 decisões de produto e arquitetura para o online; consultar antes de implementar o Módulo 3.
 - `docs/contracts/module-2-shared-contracts.md`, `docs/contracts/module-2-physics-v2-proposal.md` e `contracts/module-2/v1/`/`v2/` — decisões e contratos publicados do Módulo 2. O `v1` é histórico imutável; o `v2` é a linha executável da Parte 2d.
 
@@ -61,8 +62,8 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 |---|---|
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
-| 2 — Motor de corrida local | pronto — Partes 2a/2b/2c/2d, física `2.0.0` e catálogo `2026.12` validados manualmente de forma integrada em 31/08/2026; calibração de dano/direção `2.0.1` implementada e coberta por testes, com validação manual pendente; simplificação para F1 único/condução fixa concluída; dinâmica F1, colisões precisas, dano cumulativo, câmera 2.5D, minimapa, split-screen, culling, pits navegáveis, 22 vagas visuais sólidas por circuito, zebras, muros/grades contínuos, placas métricas, largadas corrigidas, proteção canônica de Monza e remoção do escape provisório concluídos. Refinamento de setup/HUD automatizado em 02/09/2026, com conferência visual da preview pendente. Parte 2d e Módulo 2 prontos |
-| 3 — Motor autoritativo online | Parte 3a (sala, ticket e lobby, incluindo refinamento de acesso/configuração de 02/09/2026) pronta e validada manualmente em dois navegadores em 03/09/2026; 3b (motor físico) e 3c (classificação e fluxo de corrida) pendentes |
+| 2 — Motor de corrida local | pronto — Partes 2a/2b/2c/2d, física `2.0.0` e catálogo `2026.12` validados manualmente de forma integrada em 31/08/2026; calibração de dano/direção `2.0.1` e correção aprovada de delta-v normal `2.0.2` implementadas e cobertas por testes, com confirmação manual pendente; simplificação para F1 único/condução fixa concluída; dinâmica F1, colisões precisas, dano cumulativo, câmera 2.5D, minimapa, split-screen, culling, pits navegáveis, 22 vagas visuais sólidas por circuito, zebras, muros/grades contínuos, placas métricas, largadas corrigidas, proteção canônica de Monza e remoção do escape provisório concluídos. Refinamento de setup/HUD automatizado em 02/09/2026, com conferência visual da preview pendente. Parte 2d e Módulo 2 prontos |
+| 3 — Motor autoritativo online | Parte 3a (sala, ticket e lobby, incluindo refinamento de acesso/configuração de 02/09/2026) pronta e validada manualmente em dois navegadores em 03/09/2026; Parte 3b implementada exclusivamente no backend, com paridade Java/TypeScript 2.0.2 passando e compatibilidade deste cliente atualizada; 3c (classificação, fluxo de corrida e predição/reconciliação online) pendente |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/vácuo/pits/HUD) | não iniciado |
 | 6 — Campeonatos | não iniciado |

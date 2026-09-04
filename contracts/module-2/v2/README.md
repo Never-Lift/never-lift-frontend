@@ -13,13 +13,14 @@ face visível de cada barreira a geometria canônica de colisão.
 `contracts/module-2/v1/` permanece histórico e imutável. Resultados, salas,
 recordes e fantasmas não podem misturar versões físicas.
 
-### Revisão 2.0.2 — preparação da paridade Java
+### Revisão 2.0.2 — paridade Java/TypeScript
 
 Corrige dano para usar exclusivamente o delta-v dos impulsos normais aplicados,
 sem incluir a desaceleração tangencial do atrito. Mantém os limiares, a perda de
 vida e o desvio de direção calibrados em 2.0.1. As respostas de velocidade/yaw
 do solver não são retunadas. Clientes e servidor devem atualizar juntos; a
-implementação autoritativa Java da Parte 3b continua em andamento.
+implementação autoritativa Java da Parte 3b está concluída, com cenários de
+paridade passando. O fluxo de corrida online da Parte 3c permanece pendente.
 
 ## Artefatos
 
