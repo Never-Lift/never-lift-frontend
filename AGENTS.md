@@ -82,4 +82,6 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 
 > Rodada de desempenho de 04/09/2026: otimizações de geometria, colisões e renderização implementadas, preservando a física 2.0.3 e o limite de 22 carros totais. A validação manual desta rodada permanece pendente; isso não marca o M3c como iniciado/pronto.
 
+> Complemento local 2+20: testes prolongados revelaram desempenho insuficiente em congestionamentos de Mônaco. Ajustes adicionais ajudam, mas **não declarar 22 carros no split-screen como desempenho aprovado**. Resultados e limites em `docs/race-performance-2026-09-04.md`.
+
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.

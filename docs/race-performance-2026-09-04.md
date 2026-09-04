@@ -85,6 +85,76 @@ pista estar carregada: o gargalo investigado ocorre no navegador.
   ausência de reprojeção de boxes por frame, culling de oponentes, perfis gráficos
   e preservação de escala/split-screen em alta densidade.
 
+## Complemento: dois humanos + vinte bots no local
+
+Após a primeira entrega, o autor pediu avaliar explicitamente o local com bots
+e autorizou otimizações. **Os números de local da tabela anterior eram sem bots**;
+não comprovavam desempenho com grid completo. Os novos testes usam dois humanos
+e vinte bots reais, e não vinte e dois participantes classificados como humanos.
+
+### Ajustes adicionais preservados
+
+- Cache geométrico com estrutura estável, independentemente da primeira consulta.
+- Reaproveitamento da geometria de corpos rígidos enquanto posição e ângulo forem
+  exatamente os mesmos, invalidando-a após qualquer correção de contato.
+- Rejeição de poses espacialmente separadas antes da etapa detalhada do CCD,
+  mantendo todos os tempos de amostragem, tolerâncias e ordem dos contatos.
+- Desenho das faces do carro sem criar um novo vetor de pontos para cada face.
+  Projeção contínua, escala, cores e ordem de desenho são preservadas.
+- Testes específicos de 2+20, duas câmeras/minimapas nas duas orientações de
+  split-screen e equivalência exata da projeção em 722 combinações de ângulo/escala.
+
+Um cache baseado somente em WeakMap piorou o custo e foi descartado. A filtragem
+adicional por subintervalo angular também foi descartada: o ganho medido não
+justificou aumentar a complexidade do CCD. Não houve redução de frequência da
+física, de bots, de hitboxes ou de qualidade das colisões.
+
+### Medição prolongada
+
+Edge `152.0.4191.62` headless, DPR 2, sem profiler e sem outros benchmarks paralelos.
+Para esta comparação, `--fixed-driving` fornece comandos aos dois humanos em
+cada passo de 1/120 s usando o planejador existente. Assim, os comandos não mudam
+com o FPS do render. Isso é apenas um piloto de teste e não altera o jogo.
+O Canvas é isolado, sem HUD React; estes resultados **não substituem validação
+manual nem garantem o mesmo FPS na preview**.
+
+| Cenário local 2+20 | Duração real | FPS médio aproximado | Intervalo p95 | Tempo simulado / real |
+|---|---:|---:|---:|---:|
+| Mônaco, dia, 1920×1080, base `a0ad98d` | 60 s | 6,2 | 383 ms | 83,1% |
+| Mônaco, dia, 1920×1080, com ajustes adicionais | 60 s | 7,7 | 333 ms | 88,4% |
+| Spa, dia, 1920×1080, com ajustes adicionais | 60 s | 34,6 | 66,8 ms | 98,8% |
+| Spa, noite, 1024×900, divisão horizontal | 45 s | 20,7 | 116,9 ms | 98,4% |
+
+No final dos testes de Spa ainda havia 22 carros em movimento de dia e 20 à noite;
+a medição não foi feita somente após todos os bots ficarem imobilizados. Ainda
+existem picos expressivos. Em Mônaco, o custo médio da física por frame permaneceu
+muito maior que o do desenho: aproximadamente 112 ms contra 13 ms. O número de
+passos por frame cresce quando o navegador tenta recuperar o atraso.
+
+**Conclusão:** a combinação é suportada funcionalmente, mas seu bom desempenho
+generalizado **não está aprovado**. Os ajustes ajudam, porém não resolvem os
+congestionamentos de 22 carros em Mônaco. Não afirmar que basta reduzir efeitos ou
+trocar Render/Vercel: solo/local é simulado no navegador. O próximo trabalho é uma
+revisão mais profunda do custo das colisões compostas, sempre preservando ou
+revalidando explicitamente a paridade com Java. M3c e aprovação manual continuam
+fora desta entrega.
+
+### Regressão deste complemento
+
+- `npm run check`: **371 testes em 42 arquivos**, lint e build aprovados.
+- Referência de geometria: novamente 24 circuitos e 648 amostras exatas.
+- Referência física publicada: novamente 11 cenários/413 estados, com diferença
+  zero em Node 24.19.0 e Edge 152.0.4191.62; nenhum oracle foi regenerado.
+- 512 colisões sintéticas (318 com contato) produziram o mesmo hash na base
+  `a0ad98d` e na versão final:
+  `8a47702e6a2051c8ed655cd32518fc0a2becc823282d4ea0b2117e2d0ea01e36`.
+- Mônaco local 2+20, após 3.720 passos fixos com comandos por passo, manteve
+  exatamente o estado final da base:
+  `2bb080541a9d8d80d9ed0869601f0037b1f08fb0a35ccb040676fb2d31a51aa3`.
+- Captura de Spa noturno em split-screen horizontal inspecionada: duas câmeras,
+  carros, faróis e minimapas presentes. Isso não aprova fluidez nem substitui o
+  teste manual completo.
+
 ## Como reproduzir
 
 Com os repositórios frontend/backend lado a lado e dependências instaladas:
@@ -111,6 +181,27 @@ a carga. O navegador limita cada caso a `PERF_MAX_SECONDS` (15 por padrão), usa
 `--profile` mostra as funções mais amostradas; `PERF_SCREENSHOT_DIR` guarda capturas.
 Esses benchmarks são diagnósticos opcionais, não gates de tempo sensíveis ao
 hardware no CI. Nenhum deles publica dados ou altera catálogo/oracles.
+
+Para reproduzir especificamente o local completo:
+
+```powershell
+$env:PERF_MODES = 'local'
+$env:PERF_CARS = '22'
+$env:PERF_TRACK = 'monaco'
+$env:PERF_DPR = '2'
+$env:PERF_FRAMES = '10000'
+$env:PERF_MAX_SECONDS = '60'
+$env:PERF_BASE_REF = 'a0ad98d'
+node tools/race-performance.mjs --baseline --browser --fixed-driving
+node tools/race-performance.mjs --browser --fixed-driving
+```
+
+`PERF_WIDTH`, `PERF_HEIGHT` e `PERF_TIME_OF_DAY` selecionam resolução CSS e horário.
+O benchmark aplica o perfil gráfico da versão medida também na comparação de
+base; não compara artificialmente uma base em alta densidade com a versão atual
+em baixa quando as duas já usam o mesmo perfil. `--ccd-samples` gera 512 cenários
+reproduzíveis de colisão para comparar hashes entre revisões; `--fixed-driving`
+também pode ser usado no benchmark CPU com `PERF_MODES=local` e `PERF_COUNTS=22`.
 
 ## Validação manual solicitada
 

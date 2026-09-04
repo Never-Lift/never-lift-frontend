@@ -5,6 +5,7 @@ import {
   drawVehicleVisual,
   getFormulaWheelSpecs,
   projectVehiclePoint,
+  traceVehiclePolygon,
   vehicleYawRelativeToCamera,
 } from '@/race/vehicle-visuals'
 
@@ -91,6 +92,34 @@ function paint(
 }
 
 describe('multidirectional F1 view', () => {
+  it('traces exactly the continuous projection in both camera scales without changing polygon order', () => {
+    const points = [
+      { longitudinal: -0.5, lateral: -0.4, height: 0.12 },
+      { longitudinal: 0.48, lateral: -0.35, height: 0.21 },
+      { longitudinal: 0.4, lateral: 0.39, height: 0.65 },
+      { longitudinal: -0.51, lateral: 0.5, height: 0.08 },
+    ]
+    for (const length of [32.4, 64.8]) for (let sample = -180; sample <= 180; sample++) {
+      const projection = { relativeYawRadians: sample * Math.PI / 180 + 0.001, length, width: length / 3, groundDepthScale: 0.743, heightScale: 0.669 }
+      const actual: Array<unknown[]> = []
+      const context = {
+        beginPath: () => actual.push(['begin']),
+        moveTo: (x: number, y: number) => actual.push(['move', x, y]),
+        lineTo: (x: number, y: number) => actual.push(['line', x, y]),
+        closePath: () => actual.push(['close']),
+      } as unknown as CanvasRenderingContext2D
+      traceVehiclePolygon(context, points, projection)
+      expect(actual).toEqual([
+        ['begin'],
+        ...points.map((point, index) => {
+          const screen = projectVehiclePoint(point, projection)
+          return [index === 0 ? 'move' : 'line', screen.x, screen.y]
+        }),
+        ['close'],
+      ])
+    }
+  })
+
   it('classifies rear, front, both sides and diagonal views', () => {
     expect(classifyVehicleView(0)).toBe('rear')
     expect(classifyVehicleView(Math.PI / 4)).toBe('rear-left')

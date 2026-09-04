@@ -356,6 +356,10 @@ function manifoldsForPairsAtPoseTime(
       secondCollider = colliderAtPoseTime(pair.second, second, timeSeconds)
       secondAtTime.set(pair.second.id, secondCollider)
     }
+    // A motion envelope is deliberately conservative. Reject separated poses
+    // before narrowphase validation/axis construction, retaining every probe
+    // time and the same canonical order for pairs that can actually touch.
+    if (!colliderBoundsIntersect(colliderBounds(firstCollider), colliderBounds(secondCollider))) continue
     const manifold = findCollisionManifold(firstCollider, secondCollider)
     if (manifold) manifolds.push(manifold)
   }

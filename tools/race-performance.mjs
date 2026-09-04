@@ -29,7 +29,23 @@ const bundle = await build({
 {
   const code = bundle.output.find(item => item.type === 'chunk' && item.isEntry).code
   const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
-  const { RaceEngine, TrackGeometry } = await import(moduleUrl)
+  const { RaceEngine, TrackGeometry, performanceRacers } = await import(moduleUrl)
+  if (process.argv.includes('--ccd-samples')) {
+    const { sweepCompoundCollidersWithRotation, createVehicleWorldCollider } = await import(moduleUrl)
+    let seed = 92753
+    const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296 }
+    const outputs = []
+    for (let index = 0; index < 512; index++) {
+      const firstPosition = { x: 400, y: -250 }
+      const secondPosition = { x: 400 + random() * 10 - 5, y: -250 + random() * 10 - 5 }
+      const first = { position: firstPosition, colliders: createVehicleWorldCollider({ position: firstPosition, angle: random() * Math.PI * 2 }), velocity: { x: random() * 160 - 80, y: random() * 160 - 80 }, angularVelocity: random() * 60 - 30 }
+      const second = { position: secondPosition, colliders: createVehicleWorldCollider({ position: secondPosition, angle: random() * Math.PI * 2 }), velocity: { x: random() * 160 - 80, y: random() * 160 - 80 }, angularVelocity: random() * 60 - 30 }
+      outputs.push(sweepCompoundCollidersWithRotation(first, second, index % 2 === 0 ? 1 / 120 : 1 / 30))
+    }
+    console.log(JSON.stringify({ baseline, samples: outputs.length, contacts: outputs.filter(Boolean).length, sha256: createHash('sha256').update(JSON.stringify(outputs)).digest('hex') }))
+    if (process.argv.includes('--state')) console.log(JSON.stringify(outputs))
+    process.exit(0)
+  }
   const trackId = process.env.PERF_TRACK ?? 'albert-park'
   const catalogRoot = resolve(process.env.PERF_CATALOG_ROOT ?? '../never-lift-backend/contracts/module-2/v2/tracks')
   if (process.argv.includes('--geometry-parity')) {
@@ -69,26 +85,31 @@ const bundle = await build({
     const browser = await chromium.launch({ headless: true, channel: process.env.PERF_BROWSER ?? 'msedge' })
     try {
       for (const mode of (process.env.PERF_MODES ?? 'solo,local').split(',')) {
-        const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: Number(process.env.PERF_DPR ?? 1) })
+        const page = await browser.newPage({ viewport: { width: Number(process.env.PERF_WIDTH ?? 1920), height: Number(process.env.PERF_HEIGHT ?? 1080) }, deviceScaleFactor: Number(process.env.PERF_DPR ?? 1) })
         await page.setContent('<style>html,body{margin:0}canvas{display:block;width:100vw;height:100vh}</style><canvas></canvas>')
         const profiler = process.argv.includes('--profile') ? await page.context().newCDPSession(page) : null
         if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
-        const result = await page.evaluate(async ({ moduleUrl, track, mode, baseline, driving, frames, maximumSeconds }) => {
-          const { RaceEngine, RaceRenderer, raceGraphicsSettings } = await import(moduleUrl)
-          const count = mode === 'solo' ? 22 : 2
-          const engine = new RaceEngine({ track, mode, racers: Array.from({ length: count }, (_, i) => ({
-            id: i < 2 ? `player-${i + 1}` : `bot-${i}`, name: `Car ${i}`, kind: i === 0 || mode === 'local' ? 'human' : 'bot', botDifficulty: 'normal', color: '#2d7dff',
-          })) })
-          const renderer = new RaceRenderer(document.querySelector('canvas'), track, baseline ? {} : raceGraphicsSettings(mode, count))
+        const result = await page.evaluate(async ({ moduleUrl, track, mode, driving, fixedDriving, frames, maximumSeconds, cars, timeOfDay }) => {
+          const { RaceEngine, RaceRenderer, raceGraphicsSettings, performanceRacers } = await import(moduleUrl)
+          const count = cars ?? (mode === 'solo' ? 22 : 2)
+          const racers = performanceRacers(mode, count)
+          const engine = new RaceEngine({ track, mode, racers })
+          const humanIds = racers.filter(racer => racer.kind === 'human').map(racer => racer.id)
+          const driveHumans = () => {
+            for (const id of humanIds) engine.setInput(id, engine.createBotInput(engine.getVehicleState(id)))
+          }
+          if (fixedDriving) {
+            const step = engine.stepFixed.bind(engine)
+            engine.stepFixed = () => { driveHumans(); step() }
+          }
+          const renderer = new RaceRenderer(document.querySelector('canvas'), track, { ...(raceGraphicsSettings?.(mode, count) ?? {}), timeOfDay })
           const physicsMs = [], renderMs = [], frameMs = []
           for (let frame = 0; frame < frames; frame++) {
             const timestamp = await new Promise(resolve => requestAnimationFrame(resolve))
             const deltaSeconds = frameMs.length === 0 ? 0 : (timestamp - frameMs.at(-1)) / 1000
             frameMs.push(timestamp)
             const start = performance.now()
-            if (driving) for (const id of (mode === 'local' ? ['player-1', 'player-2'] : ['player-1'])) {
-              engine.setInput(id, engine.createBotInput(engine.getVehicleState(id)))
-            }
+            if (driving && !fixedDriving) driveHumans()
             engine.advanceFrame(deltaSeconds)
             const physicsEnd = performance.now()
             renderer.render(engine, deltaSeconds)
@@ -97,8 +118,8 @@ const bundle = await build({
           }
           const stats = values => ({ mean: values.reduce((a,b) => a+b,0)/values.length, p95: [...values].sort((a,b) => a-b)[Math.floor(values.length * .95)] })
           const wallSeconds = (frameMs.at(-1) - frameMs[0]) / 1000
-          return { mode, cars: count, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds: engine.getSimulationTimeSeconds(), simulationToWallRatio: engine.getSimulationTimeSeconds() / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
-        }, { moduleUrl, track, mode, baseline, driving: process.argv.includes('--driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15) })
+          return { mode, cars: count, humans: racers.filter(r => r.kind === 'human').length, bots: racers.filter(r => r.kind === 'bot').length, timeOfDay, raceStatus: engine.getStatus(), movingCars: engine.getInterpolatedVehicles().filter(v => Math.hypot(v.velocity.x,v.velocity.y)>1).length, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds: engine.getSimulationTimeSeconds(), simulationToWallRatio: engine.getSimulationTimeSeconds() / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
+        }, { moduleUrl, track, mode, driving: process.argv.includes('--driving'), fixedDriving: process.argv.includes('--fixed-driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15), cars: process.env.PERF_CARS ? Number(process.env.PERF_CARS) : null, timeOfDay: process.env.PERF_TIME_OF_DAY ?? 'day' })
         console.log(JSON.stringify({ baseline, browser: await browser.version(), track: trackId, ...result }))
         if (profiler) {
           const { profile } = await profiler.send('Profiler.stop')
@@ -119,9 +140,18 @@ const bundle = await build({
     const samples = []
     let state
     for (let run = 0; run < Number(process.env.PERF_RUNS ?? 3); run++) {
-      const engine = new RaceEngine({ track, mode: count === 2 ? 'local' : 'solo', racers: Array.from({ length: count }, (_, i) => ({
+      const mode = process.env.PERF_MODES ?? (count === 2 ? 'local' : 'solo')
+      const racers = process.env.PERF_MODES ? performanceRacers(mode, count) : Array.from({ length: count }, (_, i) => ({
         id: `car-${i}`, name: `Car ${i}`, kind: i === 0 || count === 2 ? 'human' : 'bot', botDifficulty: 'normal', color: '#2d7dff',
-      })) })
+      }))
+      const engine = new RaceEngine({ track, mode, racers })
+      if (process.argv.includes('--fixed-driving')) {
+        const step = engine.stepFixed.bind(engine)
+        engine.stepFixed = () => {
+          for (const racer of racers) if (racer.kind === 'human') engine.setInput(racer.id, engine.createBotInput(engine.getVehicleState(racer.id)))
+          step()
+        }
+      }
       for (let i = 0; i < 120; i++) engine.stepFixed()
       const start = performance.now()
       for (let i = 0; i < measuredSteps; i++) engine.stepFixed()
@@ -130,7 +160,7 @@ const bundle = await build({
     }
     samples.sort((a,b) => a-b)
     const median = samples[Math.floor(samples.length / 2)]
-    const record = { cars: count, mode: count === 2 ? 'local (no bots)' : 'solo', medianStepMs: median, physicsPer60FpsFrameMs: median * 2,
+    const record = { cars: count, mode: process.env.PERF_MODES ?? (count === 2 ? 'local (no bots)' : 'solo'), medianStepMs: median, physicsPer60FpsFrameMs: median * 2,
       stateSha256: createHash('sha256').update(JSON.stringify(state)).digest('hex') }
     result.cases.push(record)
     console.log(JSON.stringify(record))

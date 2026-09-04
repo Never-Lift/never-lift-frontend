@@ -57,6 +57,7 @@ type CachedPose = {
 }
 const previousPoseCache = new WeakMap<VehicleState, CachedPose>()
 const currentPoseCache = new WeakMap<VehicleState, CachedPose>()
+const bodyPoseCache = new WeakMap<RigidBody2D, CachedPose>()
 
 function cachedVehiclePose(vehicle: VehicleState, previous = false) {
   const cache = previous ? previousPoseCache : currentPoseCache
@@ -259,10 +260,16 @@ function advanceBody(body: RigidBody2D, deltaSeconds: number) {
 }
 
 function vehicleColliders(body: RigidBody2D) {
-  return createVehicleWorldCollider({
+  const cached = bodyPoseCache.get(body)
+  if (cached && Object.is(cached.x, body.position.x) && Object.is(cached.y, body.position.y) && Object.is(cached.angle, body.angle)) {
+    return cached.colliders
+  }
+  const colliders = createVehicleWorldCollider({
     position: body.position,
     angle: body.angle,
   })
+  bodyPoseCache.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, colliders })
+  return colliders
 }
 
 function completeSimultaneousImpactManifolds(
