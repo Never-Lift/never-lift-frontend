@@ -122,6 +122,7 @@ export function RaceCanvas({
   const finishedRef = useRef(false)
   const onFinishedRef = useRef(onFinished)
   const onRestartRef = useRef(onRestart)
+  const onAbortRef = useRef(onAbort)
   const [telemetry, setTelemetry] = useState<DriverTelemetry[]>([])
   const [startAnnouncement, setStartAnnouncement] = useState('Semáforo apagado')
 
@@ -132,6 +133,35 @@ export function RaceCanvas({
   useEffect(() => {
     onRestartRef.current = onRestart
   }, [onRestart])
+
+  useEffect(() => {
+    onAbortRef.current = onAbort
+  }, [onAbort])
+
+  useEffect(() => {
+    const handleExit = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' && event.code !== 'Escape') return
+      if (
+        event.repeat ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey
+      ) return
+      const target = event.target
+      if (
+        target instanceof Element &&
+        target.closest(
+          'input, textarea, select, [contenteditable="true"], [role="dialog"], [role="alertdialog"]',
+        )
+      ) return
+      event.preventDefault()
+      onAbortRef.current()
+    }
+    window.addEventListener('keydown', handleExit)
+    return () => window.removeEventListener('keydown', handleExit)
+  }, [])
 
   useEffect(() => {
     const handleQuickRestart = (event: KeyboardEvent) => {
@@ -166,9 +196,16 @@ export function RaceCanvas({
       previousTimestamp = timestamp
 
       const frameInputs = {
-        'player-1': controls.getPlayerOneInput(mode),
+        'player-1': controls.getPlayerOneInput(
+          mode,
+          engine.getVehicleState('player-1'),
+        ),
         ...(mode === 'local'
-          ? { 'player-2': controls.getPlayerTwoInput() }
+          ? {
+              'player-2': controls.getPlayerTwoInput(
+                engine.getVehicleState('player-2'),
+              ),
+            }
           : {}),
       }
       session.advanceFrame(deltaSeconds, frameInputs)
@@ -265,11 +302,13 @@ export function RaceCanvas({
 
       <div className="pointer-events-none absolute left-3 top-3 z-20 flex items-start gap-3 sm:left-4 sm:top-4">
         <Brand compact />
-        <p className="inline-flex items-center gap-2 rounded-lg border border-border/70 bg-background/76 px-2.5 py-2 text-[10px] font-bold text-muted-foreground backdrop-blur-md">
+        <p className="inline-flex max-w-[calc(100vw-6rem)] flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-background/76 px-2.5 py-2 text-[10px] font-bold text-muted-foreground backdrop-blur-md">
           <Keyboard aria-hidden="true" className="size-3.5 text-info" />
           Segure <kbd className="text-foreground">ESPAÇO</kbd> para identificar pilotos
           <span aria-hidden="true">•</span>
           <kbd className="text-foreground">R</kbd> reinicia
+          <span aria-hidden="true">•</span>
+          <kbd className="text-foreground">ESC</kbd> sai
         </p>
       </div>
 
@@ -286,11 +325,12 @@ export function RaceCanvas({
           <RotateCcw aria-hidden="true" className="size-5" />
         </Button>
         <Button
+          aria-keyshortcuts="Escape"
           aria-label="Sair da corrida"
           className="size-11 shadow-xl"
           onClick={onAbort}
           size="icon"
-          title="Sair da corrida"
+          title="Sair da corrida (Esc)"
           type="button"
           variant="secondary"
         >

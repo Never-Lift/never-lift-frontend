@@ -1,16 +1,11 @@
 import {
-  Angry,
   Bot,
   CheckCircle2,
   CircleAlert,
   LoaderCircle,
-  Meh,
-  Minus,
   Play,
-  Plus,
   RotateCcw,
   Settings2,
-  Smile,
   Users,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -18,6 +13,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
 import { RaceCanvas } from '@/components/race/RaceCanvas'
+import { CountStepper } from '@/components/race/CountStepper'
+import { DifficultyButton } from '@/components/race/DifficultyButton'
 import { TrackCarousel } from '@/components/race/TrackCarousel'
 import { VehiclePreview } from '@/components/race/VehiclePreview'
 import { Button } from '@/components/ui/button'
@@ -72,22 +69,6 @@ const timeOfDayOptions: Array<{
     description: 'Pista escurecida e faróis ativos',
   },
 ]
-
-const difficultyOptions: Array<{
-  id: BotDifficulty
-  label: string
-  tone: string
-}> = [
-  { id: 'easy', label: 'Fácil', tone: 'text-success' },
-  { id: 'normal', label: 'Médio', tone: 'text-warning' },
-  { id: 'hard', label: 'Difícil', tone: 'text-destructive' },
-]
-
-function DifficultyIcon({ difficulty }: { difficulty: BotDifficulty }) {
-  if (difficulty === 'easy') return <Smile aria-hidden="true" className="size-5" />
-  if (difficulty === 'hard') return <Angry aria-hidden="true" className="size-5" />
-  return <Meh aria-hidden="true" className="size-5" />
-}
 
 const defaultPlayerOne: PlayerSelection = {
   name: 'Piloto 1',
@@ -293,22 +274,10 @@ export function RacePage() {
   const [submission, setSubmission] = useState<SubmissionState>({ status: 'idle' })
   const humanCount = mode === 'local' ? 2 : 1
   const maximumBotCount = MAX_RACE_PARTICIPANTS - humanCount
-  const difficultyOption =
-    difficultyOptions.find((option) => option.id === difficulty) ??
-    difficultyOptions[0]
 
   useEffect(() => {
     setBotCount((current) => Math.min(current, maximumBotCount))
   }, [maximumBotCount])
-
-  const cycleDifficulty = useCallback(() => {
-    setDifficulty((current) => {
-      const currentIndex = difficultyOptions.findIndex(
-        (option) => option.id === current,
-      )
-      return difficultyOptions[(currentIndex + 1) % difficultyOptions.length].id
-    })
-  }, [])
 
   const requestGuestSession = useCallback(() => {
     requestedGuest.current = true
@@ -697,38 +666,13 @@ export function RacePage() {
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                     Quantidade de bots
                   </p>
-                  <div className="mt-2 flex h-11 items-center justify-between rounded-[10px] border border-border bg-background/45 p-1">
-                    <Button
-                      aria-label="Diminuir quantidade de bots"
-                      disabled={botCount === 0}
-                      onClick={() => setBotCount((current) => Math.max(0, current - 1))}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <Minus aria-hidden="true" className="size-4" />
-                    </Button>
-                    <span
-                      aria-label={botCount + ' bots selecionados'}
-                      className="font-mono text-base font-black text-foreground"
-                    >
-                      {botCount}
-                    </span>
-                    <Button
-                      aria-label="Aumentar quantidade de bots"
-                      disabled={botCount >= maximumBotCount}
-                      onClick={() =>
-                        setBotCount((current) =>
-                          Math.min(maximumBotCount, current + 1),
-                        )
-                      }
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <Plus aria-hidden="true" className="size-4" />
-                    </Button>
-                  </div>
+                  <CountStepper
+                    label="Quantidade de bots"
+                    minimum={0} maximum={maximumBotCount} value={botCount}
+                    valueLabel={`${botCount} bots selecionados`}
+                    onDecrease={() => setBotCount((current) => Math.max(0, current - 1))}
+                    onIncrease={() => setBotCount((current) => Math.min(maximumBotCount, current + 1))}
+                  />
                   <p className="mt-1.5 text-[10px] font-semibold text-muted-foreground">
                     {humanCount + botCount}/{MAX_RACE_PARTICIPANTS} vagas ocupadas
                   </p>
@@ -738,22 +682,7 @@ export function RacePage() {
                   <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                     Dificuldade
                   </p>
-                  <Button
-                    aria-label={
-                      'Dificuldade dos bots: ' +
-                      difficultyOption.label +
-                      '; clique para alterar'
-                    }
-                    className={'mt-2 size-11 ' + difficultyOption.tone}
-                    disabled={botCount === 0}
-                    onClick={cycleDifficulty}
-                    size="icon"
-                    title={'Bots no ' + difficultyOption.label.toLocaleLowerCase('pt-BR')}
-                    type="button"
-                    variant="secondary"
-                  >
-                    <DifficultyIcon difficulty={difficulty} />
-                  </Button>
+                  <DifficultyButton value={difficulty} onChange={setDifficulty} disabled={botCount === 0} />
                 </div>
               </div>
 

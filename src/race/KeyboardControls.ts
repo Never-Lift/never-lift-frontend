@@ -1,5 +1,16 @@
-import { clamp } from '@/race/math'
-import type { DriverInput, RaceMode } from '@/race/types'
+import { NUMERIC_SPEED_EPSILON_METERS_PER_SECOND } from '@/race/constants'
+import { clamp, dot } from '@/race/math'
+import { bodyAxes } from '@/race/physics-utils'
+import type { DriverInput, RaceMode, VehicleState } from '@/race/types'
+
+type SteeringVehicle = Pick<VehicleState, 'angle' | 'velocity'>
+
+/** Human left/right follow travel direction in reverse. Apply before physics/transport. */
+function travelSteer(steer: number, vehicle?: SteeringVehicle | null) {
+  if (!vehicle || steer === 0) return steer
+  const speed = dot(vehicle.velocity, bodyAxes(vehicle.angle).forward)
+  return speed < -NUMERIC_SPEED_EPSILON_METERS_PER_SECOND ? -steer : steer
+}
 
 const CONTROL_KEYS = new Set([
   'KeyW',
@@ -117,7 +128,10 @@ export class KeyboardControls {
     return this.isPressed('Space')
   }
 
-  getPlayerOneInput(mode: RaceMode): DriverInput {
+  getPlayerOneInput(
+    mode: RaceMode,
+    vehicle?: SteeringVehicle | null,
+  ): DriverInput {
     const includeArrows = mode === 'solo'
     return {
       throttle:
@@ -130,22 +144,25 @@ export class KeyboardControls {
         (includeArrows && this.isPressed(this.bindings.playerTwo.brake))
           ? 1
           : 0,
-      steer: clamp(
-        (this.isPressed(this.bindings.playerOne.left) ||
-        (includeArrows && this.isPressed(this.bindings.playerTwo.left))
-          ? 1
-          : 0) -
-          (this.isPressed(this.bindings.playerOne.right) ||
-          (includeArrows && this.isPressed(this.bindings.playerTwo.right))
+      steer: travelSteer(
+        clamp(
+          (this.isPressed(this.bindings.playerOne.left) ||
+          (includeArrows && this.isPressed(this.bindings.playerTwo.left))
             ? 1
-            : 0),
-        -1,
-        1,
+            : 0) -
+            (this.isPressed(this.bindings.playerOne.right) ||
+            (includeArrows && this.isPressed(this.bindings.playerTwo.right))
+              ? 1
+              : 0),
+          -1,
+          1,
+        ),
+        vehicle,
       ),
     }
   }
 
-  getPlayerTwoInput(): DriverInput {
+  getPlayerTwoInput(vehicle?: SteeringVehicle | null): DriverInput {
     return {
       throttle:
         this.isPressed(this.bindings.playerTwo.throttle) ||
@@ -157,17 +174,20 @@ export class KeyboardControls {
         this.isPressed(PLAYER_TWO_ALTERNATIVE.brake)
           ? 1
           : 0,
-      steer: clamp(
-        (this.isPressed(this.bindings.playerTwo.left) ||
-        this.isPressed(PLAYER_TWO_ALTERNATIVE.left)
-          ? 1
-          : 0) -
-          (this.isPressed(this.bindings.playerTwo.right) ||
-          this.isPressed(PLAYER_TWO_ALTERNATIVE.right)
+      steer: travelSteer(
+        clamp(
+          (this.isPressed(this.bindings.playerTwo.left) ||
+          this.isPressed(PLAYER_TWO_ALTERNATIVE.left)
             ? 1
-            : 0),
-        -1,
-        1,
+            : 0) -
+            (this.isPressed(this.bindings.playerTwo.right) ||
+            this.isPressed(PLAYER_TWO_ALTERNATIVE.right)
+              ? 1
+              : 0),
+          -1,
+          1,
+        ),
+        vehicle,
       ),
     }
   }

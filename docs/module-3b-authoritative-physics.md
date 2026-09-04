@@ -2,7 +2,7 @@
 
 > Atualização 04/09/2026: a validação manual básica da 3b anterior foi
 > confirmada pelo autor. A revisão de portabilidade **2.0.3**, também autorizada,
-> está implementada e testada; falta sua confirmação manual curta antes da 3c.
+> está implementada, testada e validada manualmente pelo autor em 04/09/2026; a 3c permanece pendente.
 > Evidências atuais e procedimento: [module-3b-portability.md](module-3b-portability.md).
 
 ## Escopo e alinhamentos aprovados
@@ -141,8 +141,8 @@ de hardware imposto à CI.
 
 ## Estado da entrega
 
-**Parte 3b implementada e testada; revisão numérica 2.0.3 aguardando validação
-manual curta; 3c pendente.** O Módulo 3 inteiro continua em andamento.
+**Parte 3b implementada e testada; revisão numérica 2.0.3 validada
+manualmente pelo autor em 04/09/2026; 3c pendente.** O Módulo 3 inteiro continua em andamento.
 
 Implementação anterior já mesclada em develop pelas PRs
 [backend #99](https://github.com/Never-Lift/never-lift-backend/pull/99) e
@@ -153,6 +153,5 @@ em 2.0.3 nesta revisão; não misturar uma preview antiga com a nova API. O clie
 
 A Parte 3b não disponibiliza corrida online jogável pela interface atual:
 isso depende da 3c. Nenhuma validação visual/manual da 3c foi antecipada.
-A validação manual básica anterior foi confirmada pelo autor. Isso não substitui
-o teste específico da portabilidade 2.0.3 descrito no novo relatório nem
-antecipa a validação funcional da 3c.
+A validação manual básica e o teste específico da portabilidade 2.0.3 foram
+confirmados pelo autor em 04/09/2026. Isso não antecipa a validação funcional da 3c.

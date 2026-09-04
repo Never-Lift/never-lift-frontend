@@ -4,7 +4,6 @@ import {
   DoorOpen,
   LoaderCircle,
   Lock,
-  Minus,
   Plus,
   RefreshCw,
   Settings2,
@@ -23,6 +22,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
 import { TrackCarousel } from '@/components/race/TrackCarousel'
+import { CountStepper } from '@/components/race/CountStepper'
+import { DifficultyButton } from '@/components/race/DifficultyButton'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -101,7 +102,7 @@ function formatRoomState(state: RoomState) {
 function formatDifficulty(value: RoomBotDifficulty) {
   if (value === 'easy') return 'Fácil'
   if (value === 'hard') return 'Difícil'
-  return 'Normal'
+  return 'Médio'
 }
 
 function RoomList({
@@ -473,7 +474,13 @@ export function OnlineLobbyPage({
   useEffect(() => {
     if (!room || !isHost || room.state !== 'lobby') return
     const signature = settingsSignature(draftSettings)
-    if (signature === lastSentSettings.current || !Number.isInteger(draftSettings.gridSize)) return
+    if (
+      signature === lastSentSettings.current ||
+      typeof draftSettings.gridSize !== 'number' ||
+      !Number.isInteger(draftSettings.gridSize) ||
+      draftSettings.gridSize < GRID_MIN ||
+      draftSettings.gridSize > GRID_MAX
+    ) return
     if (settingsTimer.current !== null) window.clearTimeout(settingsTimer.current)
     settingsTimer.current = window.setTimeout(() => {
       settingsTimer.current = null
@@ -534,28 +541,36 @@ export function OnlineLobbyPage({
     }
   }, [api, isUser, navigate, notify, roomName, session, visibility])
 
-  const handleGridChange = useCallback((rawValue: string) => {
-    const digits = rawValue.replace(/\D/g, '')
-    if (!digits) {
-      setGridSize('')
-      return
-    }
-    const value = Number(digits)
-    if (value > GRID_MAX) {
-      setGridSize(String(GRID_MAX))
-      notify(gridError)
-    } else if (value < GRID_MIN) {
-      setGridSize(String(GRID_MIN))
-      notify(gridError)
-    } else {
-      setGridSize(String(value))
-    }
-  }, [gridError, notify])
+  const handleGridChange = useCallback(
+    (rawValue: string) => {
+      const digits = rawValue.replace(/\D/g, '')
+      if (!digits) {
+        setGridSize('')
+        return
+      }
+      const value = Number(digits)
+      if (value > GRID_MAX) {
+        setGridSize(String(GRID_MAX))
+        notify(gridError)
+      } else {
+        // Allow a leading 1 while typing 10–19; normalize the lower bound on blur.
+        // Incomplete drafts are never sent by the autosave effect.
+        setGridSize(String(value))
+      }
+    },
+    [gridError, notify],
+  )
 
-  const adjustGrid = useCallback((change: number) => {
-    const value = Math.min(GRID_MAX, Math.max(GRID_MIN, (Number(gridSize) || GRID_MIN) + change))
-    setGridSize(String(value))
-  }, [gridSize])
+  const adjustGrid = useCallback(
+    (change: number) => {
+      const value = Math.min(
+        GRID_MAX,
+        Math.max(GRID_MIN, (Number(gridSize) || GRID_MIN) + change),
+      )
+      setGridSize(String(value))
+    },
+    [gridSize],
+  )
 
   const handleRemove = useCallback(async (playerId: string) => {
     if (!room || !session || !isHost) return
@@ -726,18 +741,40 @@ export function OnlineLobbyPage({
                   </div>
                   <div className="space-y-5">
                     <TrackCarousel catalog={trackCatalog} disabled={settingsDisabled} getTrack={getTrack} onLoadError={notify} onSelect={setSelectedTrackId} selectedId={selectedTrackId} />
-                    <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                      Limite de carros
-                      <div className="relative mt-2">
-                        <Input aria-label="Limite de carros" className="pr-24" disabled={settingsDisabled} inputMode="numeric" onBlur={() => { if (!gridSize) { setGridSize(String(GRID_MIN)); notify(gridError) } }} onChange={(event) => handleGridChange(event.target.value)} type="text" value={gridSize} />
-                        <div className="absolute inset-y-1 right-1 flex gap-1">
-                          <Button aria-label="Diminuir limite de carros" className="h-9 w-9 bg-info/70 hover:bg-info/85" disabled={settingsDisabled || Number(gridSize) <= GRID_MIN} onClick={() => adjustGrid(-1)} size="icon" type="button"><Minus aria-hidden="true" className="size-4" /></Button>
-                          <Button aria-label="Aumentar limite de carros" className="h-9 w-9 bg-info hover:bg-info/85" disabled={settingsDisabled || Number(gridSize) >= GRID_MAX} onClick={() => adjustGrid(1)} size="icon" type="button"><Plus aria-hidden="true" className="size-4" /></Button>
-                        </div>
+                    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <div>
+                        <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                          Limite de carros
+                        </p>
+                        <CountStepper
+                          disabled={settingsDisabled}
+                          label="Limite de carros"
+                          maximum={GRID_MAX}
+                          minimum={GRID_MIN}
+                          onDecrease={() => adjustGrid(-1)}
+                          onIncrease={() => adjustGrid(1)}
+                          onValueChange={handleGridChange}
+                          onBlur={() => {
+                            if (Number(gridSize) < GRID_MIN) {
+                              setGridSize(String(GRID_MIN))
+                              notify(gridError)
+                            }
+                          }}
+                          value={gridSize}
+                        />
                       </div>
-                    </label>
+                      <div>
+                        <p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                          Dificuldade
+                        </p>
+                        <DifficultyButton
+                          disabled={settingsDisabled || !botsEnabled}
+                          onChange={setBotDifficulty}
+                          value={botDifficulty}
+                        />
+                      </div>
+                    </div>
                     <label className="flex items-center gap-3 text-sm font-semibold"><input checked={botsEnabled} disabled={settingsDisabled} onChange={(event) => setBotsEnabled(event.target.checked)} type="checkbox" /> Habilitar bots</label>
-                    {botsEnabled && <label className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Dificuldade<select className="mt-2 h-11 w-full rounded-[10px] border border-input bg-background/65 px-3 text-sm font-semibold text-foreground disabled:opacity-50" disabled={settingsDisabled} onChange={(event) => setBotDifficulty(event.target.value as RoomBotDifficulty)} value={botDifficulty}><option value="easy">Fácil</option><option value="normal">Normal</option><option value="hard">Difícil</option></select></label>}
                     <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Visibilidade</span><VisibilityToggle disabled={settingsDisabled} onChange={setVisibility} value={visibility} /></div>
                     {settingsSaving && <p className="inline-flex items-center gap-2 text-xs font-semibold text-info"><LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> Sincronizando ajustes…</p>}
                     {settingsDisabled && <p className="rounded-xl border border-warning/30 bg-warning/8 p-3 text-xs leading-5 text-warning">Os ajustes ficam bloqueados durante a classificação. Cancele antes do primeiro carro andar para voltar ao lobby.</p>}
