@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import referenceScenarios from '../../contracts/module-2/v2/physics-reference-scenarios.json'
 
 import {
@@ -249,7 +251,7 @@ function executeFixedSteps(
       }),
     )
 
-    distanceMeters += Math.hypot(
+    distanceMeters += PortableMath.hypot(
       vehicle.position.x - previousVehicle.position.x,
       vehicle.position.y - previousVehicle.position.y,
     )
@@ -331,7 +333,7 @@ function executeFixedSteps(
       maximumSpeedMetersPerSecond,
       finalSpeedMetersPerSecond: magnitude(vehicle.velocity),
       distanceMeters,
-      displacementMeters: Math.hypot(
+      displacementMeters: PortableMath.hypot(
         vehicle.position.x - initialPosition.x,
         vehicle.position.y - initialPosition.y,
       ),

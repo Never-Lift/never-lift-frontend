@@ -1,5 +1,10 @@
 # Parte 3b — motor físico autoritativo Java
 
+> Atualização 04/09/2026: a validação manual básica da 3b anterior foi
+> confirmada pelo autor. A revisão de portabilidade **2.0.3**, também autorizada,
+> está implementada e testada; falta sua confirmação manual curta antes da 3c.
+> Evidências atuais e procedimento: [module-3b-portability.md](module-3b-portability.md).
+
 ## Escopo e alinhamentos aprovados
 
 - `RaceEngine` pertence a uma sala; somente a thread de simulação altera carros.
@@ -26,8 +31,8 @@ normais, dividida pela massa. A resposta de velocidade/torque e os limiares de
 resistência/direção de 2.0.1 permanecem iguais; não houve novo tuning de pneus,
 aero, motor ou freios.
 
-As duas aplicações devem ser promovidas juntas para 2.0.2. Uma preview antiga
-com 2.0.1 será rejeitada corretamente pelo backend 2.0.2.
+A regra de dano de 2.0.2 permanece no runtime 2.0.3. As duas aplicações devem
+atualizar juntas para 2.0.3; clientes 2.0.1/2.0.2 são recusados.
 
 ## Implementação
 
@@ -71,7 +76,7 @@ não constitui a classificação jogável da 3c.
 
 ## Verificação reproduzível
 
-Java 21 e Maven; Node somente para regenerar/verificar os dados de referência:
+Java 21 e Maven; Node 24.x para gerar/conferir os dados canônicos de referência:
 
 ```sh
 ./mvnw --batch-mode clean test
@@ -85,10 +90,12 @@ Os arquivos em `src/test/resources/physics` são saídas do TypeScript real,
 com hashes SHA-256 dos fontes normalizados para LF (portáveis entre Windows e Linux);
 não são números gerados pelo Java para se
 autovalidar. Não regenerar referências para esconder divergências. Foram
-congelados com Node 24.18.0/V8 13.6 e comparados em Java 21.0.7 no Windows.
-Funções transcendentais usam StrictMath; potência usa Math.pow e a norma
-bidimensional segue a avaliação escalada do runtime TypeScript. As tolerâncias
-publicadas não foram ampliadas. A CI também repetiu e aprovou a paridade em Linux.
+congelados inicialmente em 2.0.2 com Node 24.18.0/V8 13.6 e comparados em Java
+21.0.7. Essa referência histórica foi preservada. O runtime atual 2.0.3 usa
+`portable-f64-v1` nos dois motores, não StrictMath/Math.pow nativos.
+As novas referências vêm do Node 24.19.0 e foram comparadas em Java 21.0.10
+e nos navegadores descritos no relatório de portabilidade. Não houve ampliação
+das tolerâncias. CRLF/LF não produz mais falso negativo no verificador.
 
 `VehicleIntegratorTest` reproduz os 11 cenários, inclusive Miami, perda de
 aderência e barreira oblíqua. `TrackGeometryParityTest` compara 648 amostras
@@ -103,7 +110,7 @@ O diagnóstico opcional `MathParityDiagnosticTest` não é critério de aceitaç
 somente roda com `-Dphysics.parity.diagnostics=true` após gerar suas sondas.
 As suítes de aceitação não dependem dele e nunca são puladas.
 
-## Verificação final — 04/09/2026
+## Verificação anterior — 2.0.2 (histórico de 04/09/2026)
 
 - Backend: `clean package` aprovado; 107 testes passaram, zero falhas/erros.
   Um diagnóstico matemático opcional ficou desativado; nenhum teste de
@@ -134,17 +141,18 @@ de hardware imposto à CI.
 
 ## Estado da entrega
 
-**Parte 3b (motor físico Java) pronta, cenários de paridade passando; 3c
-(fluxo de corrida) pendente.** O Módulo 3 inteiro continua em andamento.
+**Parte 3b implementada e testada; revisão numérica 2.0.3 aguardando validação
+manual curta; 3c pendente.** O Módulo 3 inteiro continua em andamento.
 
-Implementação publicada para revisão nas PRs
+Implementação anterior já mesclada em develop pelas PRs
 [backend #99](https://github.com/Never-Lift/never-lift-backend/pull/99) e
 [frontend #127](https://github.com/Never-Lift/never-lift-frontend/pull/127),
 ambas destinadas à `develop`. Promoção/deploy devem manter backend e frontend
-em 2.0.2; não misturar uma preview antiga com a nova API. O cliente trata
+em 2.0.3 nesta revisão; não misturar uma preview antiga com a nova API. O cliente trata
 `version_mismatch` como erro terminal, sem loop de reconexão.
 
 A Parte 3b não disponibiliza corrida online jogável pela interface atual:
 isso depende da 3c. Nenhuma validação visual/manual da 3c foi antecipada.
-A confirmação manual da calibração de dano/direção e da correção 2.0.2
-continua pendente, separada da paridade automatizada aprovada.
+A validação manual básica anterior foi confirmada pelo autor. Isso não substitui
+o teste específico da portabilidade 2.0.3 descrito no novo relatório nem
+antecipa a validação funcional da 3c.

@@ -1,4 +1,18 @@
-# Modelo físico canônico 2.0.2
+# Modelo físico canônico 2.0.3
+
+## Portabilidade numérica — revisão aprovada 2.0.3
+
+As fórmulas, coeficientes, ordem das etapas e tolerâncias abaixo permanecem
+inalterados em relação a 2.0.2. Na física, geometria de colisão e decisões de bots,
+`sin`, `cos`, `atan2`, `tanh`, potências não inteiras e norma bidimensional
+usam o kernel `portable-f64-v1`, com a mesma ordem de operações IEEE-754 em
+`src/race/portable-math.ts` e `PortableMath.java`. Não usar o `Math` nativo
+para essas operações nem trocar por `StrictMath` isoladamente.
+
+Isso não é tuning e não autoriza ampliar tolerâncias. O kernel é restrito ao
+domínio físico documentado; não é uma biblioteca matemática geral. Câmera e
+efeitos visuais continuam livres para usar as funções nativas. Especificação,
+limites e testes em [module-3b-portability.md](../../../docs/module-3b-portability.md).
 
 Este documento faz parte do contrato executável. Implementações TypeScript e
 Java devem preservar fórmulas, sinais, ordem de cálculo e passo fixo. Pequenas

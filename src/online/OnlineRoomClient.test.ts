@@ -43,7 +43,7 @@ describe('OnlineRoomClient', () => {
     const createSocket = vi.fn(() => socket)
     const onEnvelope = vi.fn()
     const client = new OnlineRoomClient({
-      roomCode: '1234', trackCatalogVersion: '2026.12', physicsContractVersion: '2.0.2',
+      roomCode: '1234', trackCatalogVersion: '2026.12', physicsContractVersion: '2.0.3',
       getTicket: vi.fn().mockResolvedValue(ticket()), wsUrl: 'ws://localhost/ws',
       webSocketFactory: createSocket, onEnvelope,
       now: () => Date.parse('2026-09-01T12:00:00.000Z'),
@@ -63,7 +63,7 @@ describe('OnlineRoomClient', () => {
     const client = new OnlineRoomClient({
       roomCode: '1234',
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.2',
+      physicsContractVersion: '2.0.3',
       getTicket,
       now: () => Date.parse('2026-09-01T12:00:00.000Z'),
       wsUrl: 'wss://race.example/ws',
@@ -85,7 +85,7 @@ describe('OnlineRoomClient', () => {
       payload: {
         roomCode: '1234',
         trackCatalogVersion: '2026.12',
-        physicsContractVersion: '2.0.2',
+        physicsContractVersion: '2.0.3',
       },
     })
 
@@ -101,7 +101,7 @@ describe('OnlineRoomClient', () => {
     const client = new OnlineRoomClient({
       roomCode: '1234',
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.2',
+      physicsContractVersion: '2.0.3',
       getTicket,
       wsUrl: 'ws://localhost/ws',
       now: () => now,
@@ -146,7 +146,7 @@ describe('OnlineRoomClient', () => {
     const client = new OnlineRoomClient({
       roomCode: '1234',
       trackCatalogVersion: '2026.12',
-      physicsContractVersion: '2.0.2',
+      physicsContractVersion: '2.0.3',
       getTicket: vi.fn().mockResolvedValue(ticket()),
       wsUrl: 'ws://localhost/ws',
       now: () => now,
@@ -175,7 +175,7 @@ describe('OnlineRoomClient', () => {
       new OnlineRoomClient({
         roomCode: '1234',
         trackCatalogVersion: '2026.12',
-        physicsContractVersion: '2.0.2',
+        physicsContractVersion: '2.0.3',
         getTicket: vi.fn().mockResolvedValue({ ...ticket(), ticket: `ticket-${sockets.length + 1}` }),
         wsUrl: 'ws://localhost/ws',
         webSocketFactory: () => {

@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import type { Vector2 } from '@/race/types'
 
 export const TAU = Math.PI * 2
@@ -41,8 +43,8 @@ export function perpendicularLeft(vector: Vector2): Vector2 {
 }
 
 export function rotate(vector: Vector2, angle: number): Vector2 {
-  const cosine = Math.cos(angle)
-  const sine = Math.sin(angle)
+  const cosine = PortableMath.cos(angle)
+  const sine = PortableMath.sin(angle)
   return {
     x: vector.x * cosine - vector.y * sine,
     y: vector.x * sine + vector.y * cosine,
@@ -56,7 +58,7 @@ export function distanceSquared(a: Vector2, b: Vector2): number {
 }
 
 export function magnitude(vector: Vector2): number {
-  return Math.hypot(vector.x, vector.y)
+  return PortableMath.hypot(vector.x, vector.y)
 }
 
 export function normalize(vector: Vector2): Vector2 {

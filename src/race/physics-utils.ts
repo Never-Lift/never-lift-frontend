@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import type { Vector2 } from '@/race/types'
 
 export function moveTowards(
@@ -14,7 +16,7 @@ export function finiteOr(value: number, fallback: number) {
 }
 
 export function bodyAxes(angle: number) {
-  const forward = { x: Math.cos(angle), y: Math.sin(angle) }
+  const forward = { x: PortableMath.cos(angle), y: PortableMath.sin(angle) }
   return {
     forward,
     left: { x: -forward.y, y: forward.x },

@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import physicsConstants from '../../contracts/module-2/v2/physics-constants.json'
 
 import {
@@ -160,7 +162,7 @@ function colliderRadius(
     (radius, vertex) =>
       Math.max(
         radius,
-        Math.hypot(vertex.x - body.position.x, vertex.y - body.position.y),
+        PortableMath.hypot(vertex.x - body.position.x, vertex.y - body.position.y),
       ),
     0,
   )
@@ -198,7 +200,7 @@ function maximumColliderRadius(body: SweptPoseColliderBody) {
         (partMaximum, vertex) =>
           Math.max(
             partMaximum,
-            Math.hypot(
+            PortableMath.hypot(
               vertex.x - body.position.x,
               vertex.y - body.position.y,
             ),
@@ -224,7 +226,7 @@ function colliderMotionBounds(
     angularTravelRadians <= Math.PI
       ? 2 *
         colliderRadius(collider, body) *
-        Math.sin(angularTravelRadians / 2)
+        PortableMath.sin(angularTravelRadians / 2)
       : 2 * colliderRadius(collider, body)
   bounds.minX -= angularDisplacementMeters
   bounds.minY -= angularDisplacementMeters

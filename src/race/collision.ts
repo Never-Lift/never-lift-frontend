@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import { sweepCompoundCollidersWithRotation } from '@/race/continuous-collision'
 import { PHYSICS_CONSTANTS } from '@/race/constants'
 import {
@@ -36,7 +38,7 @@ type StaticColliderProvider = (
   bounds: CollisionBounds,
 ) => readonly WorldConvexCollider[]
 
-const VEHICLE_MAXIMUM_AXIS_EXTENT_METERS = Math.hypot(
+const VEHICLE_MAXIMUM_AXIS_EXTENT_METERS = PortableMath.hypot(
   F1_VEHICLE_COLLIDER.lengthMeters / 2,
   F1_VEHICLE_COLLIDER.widthMeters / 2,
 )
@@ -108,8 +110,8 @@ function synchronizeResolvedBody(vehicle: VehicleState, body: RigidBody2D) {
   vehicle.angle = normalizeAngle(body.angle)
   vehicle.yawRate = body.angularVelocity
   vehicle.physicsState.yawRate = body.angularVelocity
-  const cosine = Math.cos(vehicle.angle)
-  const sine = Math.sin(vehicle.angle)
+  const cosine = PortableMath.cos(vehicle.angle)
+  const sine = PortableMath.sin(vehicle.angle)
   vehicle.physicsState.longitudinalSpeed =
     vehicle.velocity.x * cosine + vehicle.velocity.y * sine
   vehicle.physicsState.lateralSpeed =

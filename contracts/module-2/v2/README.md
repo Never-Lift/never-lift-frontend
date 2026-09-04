@@ -6,14 +6,24 @@ face visível de cada barreira a geometria canônica de colisão.
 
 ## Versões ativas
 
-- contrato físico: `2.0.2`; schema de pista: `2.0.0`;
+- contrato físico: `2.0.3`; schema de pista: `2.0.0`;
 - catálogo: `2026.12`;
 - unidade de mundo: metro; tempo: segundo; ângulo: radiano anti-horário desde `+x`.
 
 `contracts/module-2/v1/` permanece histórico e imutável. Resultados, salas,
 recordes e fantasmas não podem misturar versões físicas.
 
-### Revisão 2.0.2 — paridade Java/TypeScript
+### Revisão 2.0.3 — portabilidade numérica autorizada
+
+Substitui as funções transcendentais dependentes do runtime por `portable-f64-v1`
+nos dois motores. Não recalibra motor, pneus, freios, direção, colisões ou dano.
+As tolerâncias e entradas dos cenários continuam as mesmas. As referências
+2.0.2 são preservadas como histórico; somente as novas referências 2.0.3 validam
+o runtime atual. API, cliente e servidor devem usar 2.0.3 juntos. O catálogo
+2026.12 e as geometrias permanecem iguais, salvo o identificador da física.
+Detalhes e critérios: [portabilidade](../../../docs/module-3b-portability.md).
+
+### Revisão 2.0.2 — paridade Java/TypeScript (histórico)
 
 Corrige dano para usar exclusivamente o delta-v dos impulsos normais aplicados,
 sem incluir a desaceleração tangencial do atrito. Mantém os limiares, a perda de
@@ -78,5 +88,5 @@ cópia das pistas em produção.
 ## Compatibilidade
 
 `GET /api/tracks` e `GET /api/tracks/{id}` publicam esta linha. O cliente deve
-enviar `trackCatalogVersion=2026.12` e `physicsContractVersion=2.0.2` ao persistir
+enviar `trackCatalogVersion=2026.12` e `physicsContractVersion=2.0.3` ao persistir
 resultado ou entrar em sala. Divergência é rejeitada, nunca convertida.

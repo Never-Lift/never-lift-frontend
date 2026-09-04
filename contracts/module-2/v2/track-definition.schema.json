@@ -378,7 +378,7 @@
       }
     },
     "physicsContractVersion": {
-      "const": "2.0.2"
+      "const": "2.0.3"
     },
     "barrierOpenings": {
       "type": "array",

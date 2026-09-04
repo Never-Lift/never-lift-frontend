@@ -1,3 +1,5 @@
+import * as PortableMath from '@/race/portable-math'
+
 import {
   resolveVehicleBarrierCollisions,
   resolveVehicleCollision,
@@ -69,7 +71,7 @@ function createVehicle(
       x: centerlinePoint.x - tangent.y * lateralOffset,
       y: centerlinePoint.y + tangent.x * lateralOffset,
     },
-    angle: Math.atan2(tangent.y, tangent.x),
+    angle: PortableMath.atan2(tangent.y, tangent.x),
   }
   const gridSlot = publishedGridSlot ?? generatedGridSlot
   const position = { ...gridSlot.position }
@@ -275,13 +277,13 @@ export class RaceEngine {
     const target = this.geometry.getRacingLinePoint(
       projection.distanceMeters + steeringLookAheadMeters,
     )
-    const desiredHeading = Math.atan2(
+    const desiredHeading = PortableMath.atan2(
       target.y - vehicle.position.y,
       target.x - vehicle.position.x,
     )
     const headingError = signedAngleDelta(vehicle.angle, desiredHeading)
     const deterministicNoise =
-      Math.sin(
+      PortableMath.sin(
         this.simulationTimeSeconds *
           planner.steeringNoiseFrequencyRadiansPerSecond +
           vehicle.id.split('').reduce((sum, letter) => sum + letter.charCodeAt(0), 0),
@@ -310,7 +312,7 @@ export class RaceEngine {
     }
     const targetSpeed =
       PHYSICS_CONSTANTS.vehiclePerformance.maxForwardSpeed *
-      upcomingSpeedFactor ** planner.racingLineSpeedFactorExponent *
+      PortableMath.pow(upcomingSpeedFactor, planner.racingLineSpeedFactorExponent) *
       difficulty.paceMultiplier *
       planner.terminalSpeedTargetMultiplier
     const safeTargetSpeed =
