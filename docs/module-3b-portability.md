@@ -7,9 +7,11 @@ autorizou explicitamente uma revisão sincronizada de portabilidade nos dois
 repositórios. Não foi autorizado novo tuning: potência, freio, aderência,
 direção e dano mantêm todos os seus parâmetros. A Parte 3c não foi iniciada.
 
-Esta correção está implementada e validada automaticamente. O teste manual
-curto da revisão **2.0.3** abaixo ainda precisa de confirmação do autor;
-a confirmação da versão anterior não foi reaproveitada como teste desta revisão.
+Esta correção está implementada e validada automaticamente. O autor confirmou
+explicitamente o teste manual curto da revisão **2.0.3** em 04/09/2026:
+“validações manuais deram certo, tudo aprovado”. A aprovação desta revisão é
+separada da versão anterior e não antecipa os novos ajustes de controles/lobby
+solicitados em seguida. A Parte 3c permanece pendente.
 
 ## Problemas reproduzidos
 
@@ -137,7 +139,7 @@ temporário do Windows, pode-se usar localmente
 `-DargLine=-Djdk.net.unixdomain.tmpdir=<caminho-absoluto-do-backend>/target`.
 Isso é ajuste do runner local, não mudança no servidor de produção.
 
-## Validação manual curta antes da 3c
+## Validação manual curta antes da 3c — concluída em 04/09/2026
 
 1. Após mesclar os dois PRs em **develop**, publicar backend e preview frontend
    correspondentes a **2.0.3**. Não promover para main nesta etapa.

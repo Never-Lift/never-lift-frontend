@@ -165,8 +165,8 @@ resultado, predição ou reconciliação da 3c. Backend e frontend devem promove
 A portabilidade 2.0.3 foi autorizada pelo autor e implementada nos dois motores
 com `portable-f64-v1`, sem recalibrar os parâmetros de condução/dano. As funções
 transcendentais nativas não devem ser reintroduzidas na física da 3c.
-A validação manual básica da 3b anterior está confirmada; esta revisão exige
-o teste curto de [module-3b-portability.md](module-3b-portability.md) antes da 3c.
+A validação manual da revisão 2.0.3 foi confirmada pelo autor em 04/09/2026,
+conforme [module-3b-portability.md](module-3b-portability.md). A Parte 3c não foi iniciada.
 
 ### Módulo 4 — Ambiente e modo caos
 **Depende de:** Módulo 3.

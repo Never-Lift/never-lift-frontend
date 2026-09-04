@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const rendererCapture = vi.hoisted(() => ({
@@ -25,12 +25,14 @@ import {
   type DriverTelemetry,
 } from '@/components/race/RaceCanvas'
 import { RaceEngine } from '@/race/RaceEngine'
+import { LocalRaceSession } from '@/race/LocalRaceSession'
 import { SHORT_TRACK } from '@/test/track-fixtures'
 
 afterEach(() => {
   cleanup()
   rendererCapture.options.length = 0
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 function telemetry(
@@ -94,6 +96,70 @@ describe('DriverTelemetryCard', () => {
 })
 
 describe('RaceCanvas layout', () => {
+  it.each(['solo', 'local'] as const)('exits %s with Esc and cleans up the shortcut on unmount', (mode) => {
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const onAbort = vi.fn()
+    const onRestart = vi.fn()
+    const engine = new RaceEngine({ track: SHORT_TRACK, mode, racers: [
+      { id: 'player-1', name: 'Pilot', kind: 'human', color: '#2d7dff' },
+    ] })
+    const props = { engine, mode, timeOfDay: 'day' as const, onFinished: vi.fn(), onRestart }
+    const { rerender, unmount } = render(<RaceCanvas {...props} onAbort={onAbort} />)
+    expect(screen.getByRole('button', { name: 'Sair da corrida' })).toHaveAttribute('aria-keyshortcuts', 'Escape')
+    fireEvent.keyDown(window, { code: 'Escape', key: 'Escape' })
+    fireEvent.keyDown(window, { code: 'Escape', repeat: true })
+    expect(onAbort).toHaveBeenCalledTimes(1)
+    expect(onRestart).not.toHaveBeenCalled()
+    const latestAbort = vi.fn()
+    rerender(<RaceCanvas {...props} onAbort={latestAbort} />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(latestAbort).toHaveBeenCalledTimes(1)
+    for (const tag of ['input', 'textarea', 'select']) {
+      const element = document.createElement(tag)
+      document.body.append(element)
+      fireEvent.keyDown(element, { key: 'Escape' })
+      element.remove()
+    }
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    document.body.append(dialog)
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    dialog.remove()
+    const prevented = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    prevented.preventDefault()
+    window.dispatchEvent(prevented)
+    expect(latestAbort).toHaveBeenCalledTimes(1)
+    unmount()
+    fireEvent.keyDown(window, { code: 'Escape' })
+    expect(latestAbort).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes each current vehicle to the keyboard adapter in the local frame loop', () => {
+    let frame: FrameRequestCallback = () => {}
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback) => { frame = callback; return 1 }))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const engine = new RaceEngine({ track: SHORT_TRACK, mode: 'local', racers: [
+      { id: 'player-1', name: 'P1', kind: 'human', color: '#2d7dff' },
+      { id: 'player-2', name: 'P2', kind: 'human', color: '#ff0000' },
+    ] })
+    const getState = engine.getVehicleState.bind(engine)
+    vi.spyOn(engine, 'getVehicleState').mockImplementation((id) => {
+      const vehicle = getState(id)!
+      vehicle.angle = 0
+      vehicle.velocity = { x: id === 'player-1' ? -4 : 4, y: 0 }
+      return vehicle
+    })
+    const inputSpy = vi.spyOn(LocalRaceSession.prototype, 'advanceFrame')
+    render(<RaceCanvas engine={engine} mode="local" timeOfDay="day" onAbort={vi.fn()} onRestart={vi.fn()} onFinished={vi.fn()} />)
+    fireEvent.keyDown(window, { code: 'KeyD' })
+    fireEvent.keyDown(window, { code: 'ArrowRight' })
+    act(() => frame(0))
+    expect(inputSpy).toHaveBeenCalledWith(0, {
+      'player-1': { throttle: 0, brake: 0, steer: 1 },
+      'player-2': { throttle: 0, brake: 0, steer: -1 },
+    })
+  })
   it('uses the full viewport and the real screen ratio without a bottom overlay', () => {
     vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
     vi.stubGlobal('cancelAnimationFrame', vi.fn())
@@ -139,7 +205,7 @@ describe('RaceCanvas layout', () => {
     )
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
     expect(screen.getByText(/para identificar pilotos/)).toHaveTextContent(
-      'Segure ESPAÇO para identificar pilotos•R reinicia',
+      'Segure ESPAÇO para identificar pilotos•R reinicia•ESC sai',
     )
     expect(screen.getByRole('button', { name: 'Reiniciar corrida' })).toHaveAttribute(
       'aria-keyshortcuts',

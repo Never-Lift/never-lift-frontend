@@ -240,6 +240,51 @@ describe('OnlineLobbyPage', () => {
     await waitFor(() => expect(api.updateRoom).toHaveBeenCalledWith('1234', expect.objectContaining({ visibility: 'private' }), 'jwt'))
   })
 
+  it('uses the shared difficulty cycle and supports typed 10–19 grids without publishing invalid drafts', async () => {
+    const initial = room()
+    const api = {
+      getRoom: vi.fn().mockResolvedValue(initial), getConnectionTicket: vi.fn(),
+      updateRoom: vi.fn().mockImplementation(async (_code, changes) => ({
+        ...initial, limit: changes.gridSize, settings: { ...initial.settings, ...changes },
+      })),
+    }
+    renderLobby({ api })
+    const user = userEvent.setup()
+    const grid = await screen.findByLabelText('Limite de carros')
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Médio/ })).toBeDisabled()
+    await user.click(screen.getByLabelText('Habilitar bots'))
+    await user.click(screen.getByRole('button', { name: /Dificuldade dos bots: Médio/ }))
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Difícil/ })).toHaveClass('text-destructive')
+    await waitFor(() => expect(api.updateRoom).toHaveBeenLastCalledWith('1234', expect.objectContaining({ botDifficulty: 'hard', botsEnabled: true }), 'jwt'))
+    await user.click(screen.getByRole('button', { name: /Dificuldade dos bots: Difícil/ }))
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Fácil/ })).toHaveClass('text-success')
+    await user.click(screen.getByRole('button', { name: /Dificuldade dos bots: Fácil/ }))
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots: Médio/ })).toHaveClass('text-warning')
+    await user.clear(grid)
+    await user.type(grid, '12')
+    expect(grid).toHaveValue('12')
+    await waitFor(() => expect(api.updateRoom).toHaveBeenLastCalledWith('1234', expect.objectContaining({ gridSize: 12, botDifficulty: 'normal' }), 'jwt'))
+    await user.clear(grid)
+    await user.type(grid, '1')
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(api.updateRoom.mock.calls.every(([, changes]) => changes.gridSize >= 2)).toBe(true)
+    await user.tab()
+    expect(grid).toHaveValue('2')
+    expect(screen.getByRole('button', { name: 'Diminuir limite de carros' })).toBeDisabled()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/entre 2 e 22/)
+    await waitFor(() => expect(api.updateRoom).toHaveBeenLastCalledWith('1234', expect.objectContaining({ gridSize: 2 }), 'jwt'))
+  })
+
+  it('disables both shared controls when qualification locks the settings', async () => {
+    const api = { getRoom: vi.fn().mockResolvedValue(room({ state: 'qualifying', settingsLocked: true })), getConnectionTicket: vi.fn() }
+    renderLobby({ api })
+    expect(await screen.findByLabelText('Limite de carros')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Aumentar limite de carros' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Diminuir limite de carros' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Dificuldade dos bots/ })).toBeDisabled()
+  })
+
   it('shows the regular-player summary, syncs host changes and keeps ready reversible', async () => {
     const player = {
       id: 'user-2', userId: 'user-2', displayName: 'Segundo', bot: false, ready: false, connected: true,
