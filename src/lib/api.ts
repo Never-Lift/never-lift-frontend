@@ -1379,12 +1379,84 @@ function compatibleTrackDefinition(payload: unknown): TrackDefinition {
   return payload as TrackDefinition
 }
 
-export const raceApi = {
-  getTracks: async () => compatibleTrackCatalog(await apiRequest('/tracks')),
-  getTrack: async (trackId: string) =>
-    compatibleTrackDefinition(
-      await apiRequest(`/tracks/${encodeURIComponent(trackId)}`),
+const TRACK_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000
+const TRACK_DEFINITION_CACHE_TTL_MS = 60 * 60 * 1000
+const TRACK_DEFINITION_CACHE_SIZE = 4
+
+type TrackRequestCacheEntry<T> = {
+  apiBaseUrl: string
+  fetchImplementation: typeof globalThis.fetch
+  expiresAt: number
+  promise: Promise<T>
+}
+
+let trackCatalogCache: TrackRequestCacheEntry<TrackCatalog> | null = null
+const trackDefinitionCache = new Map<
+  string,
+  TrackRequestCacheEntry<TrackDefinition>
+>()
+
+function validTrackCacheEntry<T>(entry: TrackRequestCacheEntry<T> | undefined) {
+  return (
+    entry !== undefined &&
+    entry.apiBaseUrl === apiBaseUrl() &&
+    entry.fetchImplementation === globalThis.fetch &&
+    entry.expiresAt > Date.now()
+  )
+}
+
+function getCachedTrackCatalog() {
+  if (validTrackCacheEntry(trackCatalogCache ?? undefined)) {
+    return trackCatalogCache!.promise
+  }
+
+  const entry: TrackRequestCacheEntry<TrackCatalog> = {
+    apiBaseUrl: apiBaseUrl(),
+    fetchImplementation: globalThis.fetch,
+    expiresAt: Date.now() + TRACK_CATALOG_CACHE_TTL_MS,
+    promise: apiRequest('/tracks').then(compatibleTrackCatalog),
+  }
+  trackCatalogCache = entry
+  void entry.promise.catch(() => {
+    if (trackCatalogCache === entry) trackCatalogCache = null
+  })
+  return entry.promise
+}
+
+function getCachedTrackDefinition(trackId: string) {
+  const cached = trackDefinitionCache.get(trackId)
+  if (validTrackCacheEntry(cached)) {
+    trackDefinitionCache.delete(trackId)
+    trackDefinitionCache.set(trackId, cached!)
+    return cached!.promise
+  }
+
+  trackDefinitionCache.delete(trackId)
+  const entry: TrackRequestCacheEntry<TrackDefinition> = {
+    apiBaseUrl: apiBaseUrl(),
+    fetchImplementation: globalThis.fetch,
+    expiresAt: Date.now() + TRACK_DEFINITION_CACHE_TTL_MS,
+    promise: apiRequest(`/tracks/${encodeURIComponent(trackId)}`).then(
+      compatibleTrackDefinition,
     ),
+  }
+  trackDefinitionCache.set(trackId, entry)
+  while (trackDefinitionCache.size > TRACK_DEFINITION_CACHE_SIZE) {
+    const oldestId = trackDefinitionCache.keys().next().value
+    if (oldestId === undefined) break
+    trackDefinitionCache.delete(oldestId)
+  }
+  void entry.promise.catch(() => {
+    if (trackDefinitionCache.get(trackId) === entry) {
+      trackDefinitionCache.delete(trackId)
+    }
+  })
+  return entry.promise
+}
+
+export const raceApi = {
+  getTracks: getCachedTrackCatalog,
+  getTrack: getCachedTrackDefinition,
   submitLocalResult: (result: LocalRaceResultRequest, token?: string) =>
     apiRequest<LocalRaceResultResponse>(
       '/races/local-result',
