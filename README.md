@@ -50,6 +50,10 @@ Como a sessão fica exclusivamente em memória, recarregar a página remove o lo
 > comportamento dos bots permanecem iguais. Consulte as [medições e testes manuais](docs/race-performance-2026-09-04.md).
 > Diagnóstico opcional: `npm run benchmark:race` (requer catálogo local do backend).
 
+> Rodada de 08/09/2026: [simulação local em Web Worker e otimizações equivalentes](docs/race-performance-worker-2026-09-08.md).
+> Preserva física e design; apresenta medições de tempo real e idade dos estados,
+> além do FPS. Validação manual pendente e mínimo de 40 FPS ainda não comprovado.
+
 ## Módulo 3 — Parte 3a: lobby online
 
 - `/race/setup?mode=online` lista salas públicas com nome, host e ocupação; clicar em **Entrar** ingressa diretamente. Salas privadas não têm senha e usam o código numérico como único segredo. A criação solicita apenas nome e visibilidade.

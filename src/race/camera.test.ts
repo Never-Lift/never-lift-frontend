@@ -18,6 +18,17 @@ import {
 import { signedAngleDelta } from '@/race/math'
 
 describe('camera and minimap transforms', () => {
+  it('cached camera basis preserves exact projections and cannot survive an orientation change', () => {
+    for (let sample = 0; sample < 40; sample++) {
+      const transform = createCameraTransform({ position: { x: -65, y: 32 }, orientation: sample * 0.17 },
+        { x: 0, y: 0, width: 1920, height: 1080 }, 5.6)
+      const point = { x: sample * 1.25, y: sample * -0.73 }
+      const uncached = { ...transform, basisOrientation: undefined }
+      expect(worldToCamera(point, transform)).toEqual(worldToCamera(point, uncached))
+      const rotated = { ...transform, orientation: transform.orientation + 1 }
+      expect(worldToCamera(point, rotated)).toEqual(worldToCamera(point, { ...rotated, basisOrientation: undefined }))
+    }
+  })
   it('places the focused car low enough to show over twice as much track ahead', () => {
     const viewport = { x: 0, y: 0, width: 1_000, height: 600 }
     const transform = createCameraTransform(

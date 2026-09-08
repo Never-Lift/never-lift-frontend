@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Brand } from '@/components/Brand'
 import { KeyboardControls } from '@/race/KeyboardControls'
-import { LocalRaceSession } from '@/race/LocalRaceSession'
+import { LocalRaceRuntime } from '@/race/LocalRaceRuntime'
 import type { RaceEngine } from '@/race/RaceEngine'
 import { RaceRenderer } from '@/race/RaceRenderer'
 import type {
@@ -125,6 +125,7 @@ export function RaceCanvas({
   const onAbortRef = useRef(onAbort)
   const [telemetry, setTelemetry] = useState<DriverTelemetry[]>([])
   const [startAnnouncement, setStartAnnouncement] = useState('Semáforo apagado')
+  const [raceError, setRaceError] = useState<{ engine: RaceEngine; message: string } | null>(null)
 
   useEffect(() => {
     onFinishedRef.current = onFinished
@@ -180,7 +181,15 @@ export function RaceCanvas({
 
     const controls = new KeyboardControls()
     const humanIds = mode === 'local' ? ['player-1', 'player-2'] : ['player-1']
-    const session = new LocalRaceSession(engine, humanIds)
+    const runtime = new LocalRaceRuntime(engine, humanIds,
+      typeof Worker === 'undefined' ? undefined : () =>
+        new Worker(new URL('../../race/local-race.worker.ts', import.meta.url), { type: 'module' }),
+    )
+    const handleVisibility = () => {
+      previousTimestamp = null
+      runtime.setPaused(document.hidden)
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
     const renderer = new RaceRenderer(canvas, engine.track, {
       timeOfDay,
       ...raceGraphicsSettings(mode, engine.getInterpolatedVehicles().length),
@@ -189,6 +198,9 @@ export function RaceCanvas({
     let animationFrame = 0
     let previousTimestamp: number | null = null
     let lastTelemetryUpdate = 0
+    let errorTimer: ReturnType<typeof setTimeout> | undefined
+    finishedRef.current = false
+    if (document.hidden) handleVisibility()
 
     function frame(timestamp: number) {
       const deltaSeconds =
@@ -198,27 +210,33 @@ export function RaceCanvas({
       const frameInputs = {
         'player-1': controls.getPlayerOneInput(
           mode,
-          engine.getVehicleState('player-1'),
+          runtime.getVehicleState('player-1'),
         ),
         ...(mode === 'local'
           ? {
               'player-2': controls.getPlayerTwoInput(
-                engine.getVehicleState('player-2'),
+                runtime.getVehicleState('player-2'),
               ),
             }
           : {}),
       }
-      session.advanceFrame(deltaSeconds, frameInputs)
+      runtime.advanceFrame(deltaSeconds, frameInputs)
+      const failure = runtime.getFailure()
+      if (failure) {
+        setRaceError({ engine, message: failure })
+        errorTimer = setTimeout(() => setRaceError(null), 5000)
+        return
+      }
       renderer.render(
-        engine,
+        runtime,
         deltaSeconds,
-        session.getOverlayState(controls.isIdentificationHeld()),
+        runtime.getOverlayState(controls.isIdentificationHeld()),
       )
 
       if (timestamp - lastTelemetryUpdate >= 150) {
         setTelemetry(
           humanIds.flatMap((racerId) => {
-            const vehicle = engine.getVehicleState(racerId)
+            const vehicle = runtime.getVehicleState(racerId)
             if (!vehicle) return []
             return [
               {
@@ -231,9 +249,9 @@ export function RaceCanvas({
             ]
           }),
         )
-        const lights = session.getStartLightState()
+        const lights = runtime.getStartLightState()
         const jumpStarts = humanIds.filter(
-          (racerId) => session.getPenalty(racerId).throttleLockTicksRemaining > 0,
+          (racerId) => runtime.getPenalty(racerId).throttleLockTicksRemaining > 0,
         )
         setStartAnnouncement(
           jumpStarts.length > 0
@@ -247,10 +265,10 @@ export function RaceCanvas({
         lastTelemetryUpdate = timestamp
       }
 
-      if (engine.getStatus() === 'finished') {
+      if (runtime.getStatus() === 'finished') {
         if (!finishedRef.current) {
           finishedRef.current = true
-          onFinishedRef.current(engine.getResults())
+          onFinishedRef.current(runtime.getResults())
         }
         return
       }
@@ -260,6 +278,9 @@ export function RaceCanvas({
     animationFrame = requestAnimationFrame(frame)
     return () => {
       cancelAnimationFrame(animationFrame)
+      clearTimeout(errorTimer)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      runtime.dispose()
       controls.destroy()
     }
   }, [engine, mode, timeOfDay])
@@ -272,6 +293,10 @@ export function RaceCanvas({
       <p aria-live="polite" className="sr-only">
         {startAnnouncement}
       </p>
+      {raceError?.engine === engine && <div role="alert" className="absolute right-4 top-4 z-50 max-w-sm rounded-lg border border-destructive bg-background p-4">
+        {raceError.message}
+        <button aria-label="Fechar aviso" className="ml-3" onClick={() => setRaceError(null)}>×</button>
+      </div>}
 
       <div className="absolute inset-0 overflow-hidden bg-[#101b19]">
         <canvas

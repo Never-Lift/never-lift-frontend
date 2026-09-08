@@ -1,0 +1,261 @@
+# M2/M3 — desempenho local com 22 carros (08/09/2026)
+
+## Escopo aprovado e estado
+
+O autor autorizou otimizar solo **1 jogador + 21 bots** e local **2 jogadores +
+20 bots**, preservando a física, o design e os recursos já existentes. São 22
+carros **totais**, não 22 bots além dos humanos.
+
+Esta rodada não inicia o M3c, não implementa um novo protocolo online e não
+promove `develop` para `main`. A validação manual destas mudanças continua
+pendente. **FPS médio acima de 40 não significa mínimo de 40 em todas as
+situações.** A meta de desempenho ainda não foi comprovada.
+
+## O que mudou
+
+- `VehicleBroadphase`: índice espacial conservador de trajetórias para evitar
+  testar carros distantes. Preserva a ordem canônica dos pares e atualiza as
+  células após cada colisão, inclusive deslocamentos causados por outro carro.
+  As hitboxes exatas e o CCD continuam decidindo todos os contatos candidatos.
+- `CollisionScratch`: reutilização limitada de vértices temporários do CCD,
+  separada por tamanho de polígono. Limpa todos os caches geométricos a cada
+  reutilização; copia contatos e normais antes de retornar resultados para que
+  uma consulta posterior não os altere. Não muda amostras, equações ou solver.
+- `LocalWorkerSimulation` e `local-race.worker.ts`: o mesmo `RaceEngine` e a
+  mesma `LocalRaceSession` rodam num Web Worker nas corridas solo/local.
+  A física continua a 120 Hz. A recuperação de tempo é dividida em fatias de
+  um tick, cedendo execução entre elas para receber comandos e enviar estados.
+  `MessageChannel` evita a espera mínima de timers aninhados durante catch-up.
+  O limite existente de recuperação de 0,25 s continua aplicado; atraso não é
+  ocultado nas medições de tempo simulado versus tempo real.
+- `LocalRaceRuntime`: no máximo uma solicitação de estado em trânsito e quatro
+  snapshots retidos. Interpola somente a posição/ângulo de desenho, com atraso
+  de referência de um quadro a 60 Hz, sem extrapolar a física. Expõe também idade
+  do snapshot e tempo da simulação para o diagnóstico não se limitar ao FPS.
+- `RaceCanvas`: renderização e captura de controles continuam na thread da
+  interface; telemetria React permanece desacoplada. `R`, botão de reinício,
+  `Esc`, saída, resultados e cleanup encerram o worker anterior. Abas ocultas
+  suspendem a corrida local e limpam o input, sem recuperar todo o tempo da aba.
+- Falha antes do primeiro estado permite fallback para o motor síncrono. Falha
+  após o início ou worker sem resposta por cinco segundos interrompe a prova
+  com aviso de cinco segundos e opção de reiniciar; não reseta silenciosamente
+  uma corrida em andamento. O fallback não promete o mesmo desempenho.
+- Renderizador: cache de recortes/offsets métricos das zebras e bordas, base
+  trigonométrica da câmera, profundidade das faces do carro e caminho vetorial
+  do minimapa. Câmeras continuam independentes, pontos e desenhos são os mesmos.
+  Não há bitmap proporcional ao circuito inteiro, redução de detalhes, mudança
+  de zoom/inclinação, física mais simples ou bots menos capazes.
+- Recortes canônicos de muros e grades, incluindo seus offsets métricos,
+  também são reutilizados por trecho imutável em vez de recalculados a cada
+  quadro. Os caches pertencem ao renderer e usam referências fracas; não
+  misturam pistas nem sobrevivem ao encerramento da corrida.
+- Descarte conservador de segmentos/polígonos totalmente fora de cada viewport,
+  mesmo dentro de chunks visíveis. Mantém traçados inteiros que cruzam a tela,
+  bordas grossas, antialiasing e a ordem de desenho. Comparação RGBA com a base
+  `9391e7e`: zero diferenças em 192 quadros (24 circuitos, quatro poses por
+  circuito, dia/noite, split-screen 1920×1080).
+
+## Compatibilidade com o backend
+
+Nenhum arquivo do backend ou contrato publicado foi alterado. Continua valendo
+a física **2.0.3**. O transporte deste worker é exclusivamente interno ao
+navegador: não aceita autoridade do cliente numa corrida online e não substitui
+o WebSocket. O futuro M3c deve integrar predição/reconciliação de forma explícita,
+sem reutilizar automaticamente a sessão local como autoridade online.
+
+## Evidências automatizadas
+
+- `npm run check`: 393 testes em 47 arquivos, lint e build de produção aprovados.
+- Referência congelada: 11 cenários / 413 estados, diferenças máximas iguais a
+  zero em Node 22, Chrome 152 e Edge 152; não foram regenerados oracles.
+- Geometria: 24 circuitos / 648 amostras, incluindo superfície, barreiras e bots,
+  idênticos à referência.
+- CCD: 512 amostras / 318 contatos, hash
+  `8a47702e6a2051c8ed655cd32518fc0a2becc823282d4ea0b2117e2d0ea01e36`.
+- Mônaco 2+20, 120 passos de aquecimento + 3.600 passos: estado físico final
+  `2bb080541a9d8d80d9ed0869601f0037b1f08fb0a35ccb040676fb2d31a51aa3`,
+  preservado também na verificação final do pool por tamanho (6,91 ms por passo
+  nesta execução; esse tempo mede CPU, não FPS).
+- Testes novos: seleção conservadora de pares em células negativas/limites e
+  atualização após impulso; caches sem dados antigos; contatos publicados não
+  mutáveis pelo pool; paridade da sessão a 30/60/120 Hz e catch-up fatiado;
+  mensagens limitadas; interpolação sem extrapolação; timeout/falha/cleanup;
+  pausa de aba; minimapa vetorial e equivalência exata da projeção da câmera.
+- `tools/local-worker-browser-smoke.mjs`: React em StrictMode + Vite + Edge real,
+  dois controles, reinício por R, saída por Esc e resultado; cinco workers criados
+  e cinco encerrados, sem erro de página. Também executa o asset do worker gerado
+  pelo build. O teste usa pista sintética, não é validação visual do catálogo.
+
+## Medições de desempenho
+
+Os números abaixo são execuções reais, não estimativas. Hardware/concorrência,
+primeira compilação de código, posição dos carros e congestionamento afetam os
+resultados. Não rodar benchmarks junto com testes/builds para comparações.
+
+Mônaco, Edge 152, Canvas 1920×1080, dia, 60 segundos, dificuldade normal, humanos
+conduzidos pelo mesmo planejador de bots a cada tick para reproduzir carga:
+
+| Caso | FPS médio aproximado | Intervalo p95 | Idade p95 do snapshot | Tempo simulado/real |
+|---|---:|---:|---:|---:|
+| Base síncrona, 2+20 (com profiler) | 29,0 | 66,7 ms | não se aplica | 94,1% |
+| Colisões otimizadas, síncrono, 2+20 (com profiler) | 35,6 | 66,5 ms | não se aplica | 100,0% |
+| Worker final fatiado, 1+21 (sem profiler) | 58,8 | 16,8 ms | 20,8 ms | 98,8% |
+| Worker final fatiado, 2+20 (sem profiler) | 44,8 | 50,0 ms | 44,9 ms | 100,0% |
+
+A instrumentação da base inclui profiler; portanto, não usar esta tabela para
+afirmar uma porcentagem exata de ganho. A queda p95 do local ainda impede
+declarar um mínimo sustentado de 40 FPS. O solo também não apresentou razão
+simulação/tempo real exatamente igual a 100% nesta execução.
+
+Uma versão intermediária do worker mostrou FPS alto com snapshots atrasados
+no solo (p95 ~461 ms); ela foi substituída pelo agendamento fatiado acima.
+Uma experiência com cache exclusivamente em WeakMap foi descartada após
+regressão de desempenho, sem alterar o estado físico esperado.
+
+### Matriz completa antes do descarte fino de primitivas
+
+08/09/2026, i5-14500 (20 processadores lógicos), Windows 10.0.26200, Edge
+headless 152.0.4191.66, 1920×1080/DPR 1, dia, dificuldade normal, 20 segundos
+por caso após o semáforo. 48 execuções reais, sem falhas; não são voltas
+completas nem teste de hardware universal. O headless pode ter custos gráficos
+diferentes do navegador visível. Arquivos originais locais em
+`output/performance/matrix-final/` (nome do diretório não significa meta aprovada).
+Esta rodada usa o worker fatiado e os caches, **antes** do descarte fino abaixo.
+
+| Circuito (ID) | Solo 1+21 FPS médio | Local 2+20 FPS médio | Local intervalo p95 (ms) |
+|---|---:|---:|---:|
+| albert-park | 58,9 | 43,9 | 33,4 |
+| austin | 52,4 | 32,4 | 50,0 |
+| bahrain | 54,3 | 39,4 | 50,0 |
+| baku | 58,9 | 40,4 | 33,4 |
+| barcelona | 59,8 | 48,1 | 33,4 |
+| hungaroring | 53,0 | 37,4 | 50,0 |
+| interlagos | 54,9 | 38,4 | 49,9 |
+| jeddah | 51,7 | 33,7 | 50,1 |
+| las-vegas | 57,8 | 46,1 | 33,4 |
+| lusail | 45,9 | 37,5 | 50,0 |
+| madrid | 45,9 | 31,1 | 50,1 |
+| mexico-city | 60,0 | 44,8 | 33,4 |
+| miami | 48,0 | 28,7 | 50,1 |
+| monaco | 56,0 | 29,6 | 50,1 |
+| montreal | 55,3 | 36,6 | 50,0 |
+| monza | 55,9 | 37,8 | 50,0 |
+| shanghai | 52,1 | 32,8 | 50,0 |
+| silverstone | 59,8 | 37,5 | 33,4 |
+| singapore | 50,8 | 34,1 | 50,0 |
+| spa-francorchamps | 46,1 | 27,3 | 50,1 |
+| spielberg | 58,9 | 41,3 | 33,4 |
+| suzuka | 59,7 | 41,8 | 33,4 |
+| yas-marina | 59,3 | 43,0 | 33,4 |
+| zandvoort | 54,3 | 36,1 | 50,0 |
+
+Não substituir o resultado desfavorável de Mônaco pelo teste de 60 segundos:
+posição, congestionamento e janela de medição diferem. Alguns bots já estavam
+parados/danificados ao fim da janela (o relatório bruto registra `movingCars`);
+não interpretar esses casos como prova de 22 carros em movimento contínuo.
+
+### Verificação gráfica e ajustes incrementais
+
+`tools/race-browser-environment.mjs` confirmou no navegador de testes uma
+NVIDIA T400 4 GB, ANGLE/Direct3D11 e aceleração de Canvas/composição/rasterização
+habilitada. Não atribuir a matriz baixa a software rendering sem evidência.
+
+Após o descarte fino, a repetição de 20 segundos nos casos pesados registrou:
+
+| Circuito | Solo 1+21 FPS médio | Local 2+20 FPS médio | Local intervalo p95 (ms) |
+|---|---:|---:|---:|
+| Austin | 53,0 | 33,8 | 50,0 |
+| Miami | 53,0 | 29,1 | 50,1 |
+| Mônaco | 56,2 | 26,4 | 66,7 |
+| Spa | 47,2 | 28,8 | 50,1 |
+
+Resultados locais: `output/performance/matrix-culling/`. Ainda não incluem o
+cache adicional dos recortes de muros/grades. A piora de Mônaco impede declarar
+ganho universal; congestionamentos e cenas variam entre as execuções.
+Um experimento de Canvas opaco, somente no benchmark, resultou em 29,5 FPS no
+local de Mônaco e não foi habilitado no aplicativo. O experimento sem blur de
+sombras também ficou restrito ao benchmark: não demonstrou benefício nem foi
+usado como critério de aprovação. **Sombras continuam preservadas no jogo.**
+
+### Última rodada com os caches de muros/grades — carga concorrente identificada
+
+Execução de 30 segundos por caso, mesmas configurações gráficas. Arquivo local:
+`output/performance/final-cache-validation.jsonl`.
+
+| Circuito | Modo | Carros totais | FPS médio | Intervalo p95 | Simulado/real |
+|---|---|---:|---:|---:|---:|
+| Mônaco | solo | 22 | 48,8 | 33,4 ms | 87,5% |
+| Mônaco | local | 22 | 16,3 | 83,4 ms | 80,6% |
+| Mônaco | local sem bots | 2 | 59,6 | 16,8 ms | 100,1% |
+| Spa | local | 22 | 18,6 | 83,4 ms | 96,2% |
+
+Durante esta rodada, uma consulta somente de processos identificou outro Edge
+que não pertencia ao benchmark. Numa janela de dois segundos, um renderer dele
+consumiu aproximadamente 1,08 segundo de CPU e seu processo gráfico 0,48 segundo,
+concorrendo com a execução automatizada. Nenhuma página foi inspecionada e
+nenhum aplicativo do autor foi encerrado. Essa carga também existia durante
+o experimento diagnóstico de sombras da tarde; seu resultado não isola o
+custo do blur. Não atribuir toda a queda à concorrência nem ao novo cache:
+**repetir A/B controlado antes de concluir ganho/regressão ou aprovar 40 FPS**.
+Também não esconder a desaceleração da simulação por trás do FPS do Canvas.
+
+## Ponto de retomada
+
+- Código e documentação na branch `codex/race-performance-worker`; testes
+  completos 393/393, build/lint, paridade de colisões/geometrias e comparação
+  visual das 24 pistas aprovados. A meta de desempenho permanece incompleta.
+- Próximo teste: repetir base e candidato com a mesma carga, sem outra corrida,
+  vídeo ou benchmark concorrendo por GPU/CPU; incluir 1+21, 2+20, local sem bots,
+  noite e divisão horizontal. Não alterar recursos para atingir o número.
+- A publicação da atualização remota da issue #60 foi bloqueada pelo controle
+  de permissões; foi solicitada confirmação explícita do autor para publicar
+  código, métricas e pendências na issue/Project e em PR para `develop`.
+  Não há autorização para mesclar nem promover esta rodada para `main`.
+- Nenhuma mudança no backend é necessária para este patch equivalente; se
+  um próximo passo alterar a matemática ou o contrato, exigir revisão de
+  paridade sincronizada antes de publicar.
+
+## Como reproduzir e ampliar
+
+```powershell
+npm run check
+node tools/local-worker-browser-smoke.mjs
+node tools/race-performance.mjs --ccd-samples
+node tools/race-performance.mjs --geometry-parity
+$env:PERF_MODES = 'solo,local'
+$env:PERF_CARS = '22'
+$env:PERF_TRACK = 'monaco'
+$env:PERF_FRAMES = '10000'
+$env:PERF_MAX_SECONDS = '60'
+node tools/race-performance.mjs --browser --fixed-driving --worker
+```
+
+Para as 24 pistas, `node tools/race-performance-matrix.mjs` executa casos
+sequenciais de 20 segundos para solo e local, gravando JSONL e identificação de
+hardware em `output/performance/matrix/`. `PERF_TRACKS` restringe circuitos,
+`PERF_MAX_SECONDS` altera a duração e `PERF_MATRIX_DIR` separa rodadas. A opção
+`PERF_REPORT` do benchmark individual também guarda os resultados. Todos esses
+arquivos são locais/ignorados pelo Git; o relatório publicado deve identificar
+quais casos realmente foram medidos e nunca preencher os demais com números
+simulados. Esses testes curtos não equivalem a completar cada circuito.
+
+Os verificadores de referência ficam no backend; o de navegador requer Node
+24.x. Usar os verificadores de runtime/navegador, nunca regenerar referências
+para esconder divergências.
+
+## Validação manual ainda necessária
+
+1. Mônaco e Spa: solo 1+21 e local 2+20, da largada ao congestionamento das curvas;
+   testar também local sem bots e dificuldade alta. Observar comandos e fluidez
+   real dos carros, não só contador de FPS.
+2. Aceleração, freio, ré e esterço dos dois jogadores, contatos carro-carro/muro,
+   dano, checkpoints, voltas e chegada.
+3. Dia/noite, Suzuka por baixo/por cima, zebras/bordas, minimapas, boxes e carros;
+   redimensionar a janela para dividir horizontalmente também.
+4. Alternar aba, voltar, reiniciar repetidamente por R/botão e sair por Esc/botão;
+   a prova anterior não deve continuar consumindo CPU em segundo plano.
+
+Se o mínimo de 40 continuar obrigatório em todos os instantes, a entrega não
+pode ser marcada como desempenho aprovado só por ter média acima desse valor.
+Qualquer proposta de reduzir detalhes, limite de carros ou fidelidade física
+exige nova decisão do autor; esta rodada não toma essa liberdade.

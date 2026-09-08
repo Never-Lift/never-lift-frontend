@@ -969,14 +969,11 @@ function paintSurfaces(
       sinYaw: Math.sin(orderAngle),
       cosYaw: Math.cos(orderAngle),
     }
-    ordered = [...surfaces].sort((first, second) => {
-      const averageDepth = (surface: FormulaSurface) =>
-        surface.points.reduce(
-          (sum, point) => sum + cameraDepth(point, orderProjection),
-          0,
-        ) / surface.points.length
-      return averageDepth(second) - averageDepth(first)
-    })
+    // Exactly the same depth and stable order, computed once per face rather
+    // than again for every comparison made by Array.sort.
+    ordered = surfaces.map(surface => ({ surface, depth:
+      surface.points.reduce((sum, point) => sum + cameraDepth(point, orderProjection), 0) / surface.points.length,
+    })).sort((first, second) => second.depth - first.depth).map(entry => entry.surface)
     orders.set(orderKey, ordered)
   }
 

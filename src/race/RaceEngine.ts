@@ -1,4 +1,5 @@
 import * as PortableMath from '@/race/portable-math'
+import { VehicleBroadphase } from '@/race/vehicle-broadphase'
 
 import {
   resolveVehicleBarrierCollisions,
@@ -121,6 +122,7 @@ export class RaceEngine {
   private readonly geometry: TrackGeometry
   private readonly vehicles: VehicleState[]
   private readonly inputs = new Map<string, DriverInput>()
+  private readonly broadphase = new VehicleBroadphase()
 
   constructor(options: RaceEngineOptions) {
     if (
@@ -218,23 +220,31 @@ export class RaceEngine {
       vehicle.trackLayer = trackProjection.elevationLayer
     }
 
+    this.broadphase.rebuild(this.vehicles)
     for (let firstIndex = 0; firstIndex < this.vehicles.length; firstIndex += 1) {
+      let candidates = this.broadphase.candidates(firstIndex)
       for (
         let secondIndex = firstIndex + 1;
         secondIndex < this.vehicles.length;
         secondIndex += 1
       ) {
         if (
+          (candidates & (1 << secondIndex)) === 0 ||
           this.vehicles[firstIndex].trackLayer !==
           this.vehicles[secondIndex].trackLayer
         ) {
           continue
         }
-        resolveVehicleCollision(
+        const collided = resolveVehicleCollision(
           this.vehicles[firstIndex],
           this.vehicles[secondIndex],
           PHYSICS_STEP_SECONDS,
         )
+        if (collided) {
+          this.broadphase.update(firstIndex, this.vehicles[firstIndex])
+          this.broadphase.update(secondIndex, this.vehicles[secondIndex])
+          candidates = this.broadphase.candidates(firstIndex)
+        }
       }
     }
 

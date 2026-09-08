@@ -1,5 +1,6 @@
 import * as PortableMath from '@/race/portable-math'
 import { polygonGeometry } from '@/race/polygon-cache'
+import { CollisionScratch } from '@/race/collision-scratch'
 
 import physicsConstants from '../../contracts/module-2/v2/physics-constants.json'
 
@@ -73,6 +74,8 @@ export type ContinuousCollisionStepResult = {
 
 const SWEEP_EPSILON = physicsConstants.collision.geometryEpsilon
 const TIME_EPSILON_SECONDS = physicsConstants.collision.ccdTimeEpsilonSeconds
+const sweepScratch = new CollisionScratch()
+let activeScratch: CollisionScratch | undefined
 const STATIC_COLLIDER_BOUNDS = new WeakMap<
   WorldConvexCollider,
   ReturnType<typeof colliderBounds>
@@ -136,6 +139,10 @@ function translateCollider(
   timeSeconds: number,
 ): WorldConvexCollider {
   const offset = scale(velocity, timeSeconds)
+  if (activeScratch) return activeScratch.transform(collider, (vertex, target) => {
+    target.x = vertex.x + offset.x
+    target.y = vertex.y + offset.y
+  })
   return {
     id: collider.id,
     collisionMaterial: collider.collisionMaterial,
@@ -210,7 +217,12 @@ function colliderAtPoseTime(
     body.poseSamples?.set(timeSeconds, sample)
   }
   const { position: translatedPosition, cosine, sine } = sample
-  const result: WorldConvexCollider = {
+  const result: WorldConvexCollider = activeScratch ? activeScratch.transform(collider, (vertex, target) => {
+    const x = vertex.x - body.position.x
+    const y = vertex.y - body.position.y
+    target.x = translatedPosition.x + (x * cosine - y * sine)
+    target.y = translatedPosition.y + (x * sine + y * cosine)
+  }) : {
     id: collider.id,
     collisionMaterial: collider.collisionMaterial,
     vertices: collider.vertices.map((vertex) => {
@@ -443,11 +455,29 @@ export function sweepCompoundCollidersWithRotation(
 ): CompoundTimeOfImpact | null {
   // Cache only within this query. Reusing a caller's body on the next tick
   // cannot retain stale positions/velocities or accumulate unbounded samples.
-  return sweepCachedPoseBodies(
-    { ...first, poseSamples: new Map() },
-    { ...second, poseSamples: new Map() },
-    maximumTimeSeconds,
-  )
+  // Returned normals/contacts can reference scratch vertices or cached axes.
+  // Detach them before resetting the arena for the next query.
+  const parentScratch = activeScratch
+  const scratch = parentScratch ? new CollisionScratch() : sweepScratch
+  scratch.reset()
+  activeScratch = scratch
+  try {
+    const result = sweepCachedPoseBodies(
+      { ...first, poseSamples: new Map() },
+      { ...second, poseSamples: new Map() },
+      maximumTimeSeconds,
+    )
+    return result && {
+      timeSeconds: result.timeSeconds,
+      manifolds: result.manifolds.map(manifold => ({
+        ...manifold,
+        normal: { ...manifold.normal },
+        contacts: manifold.contacts.map(contact => ({ ...contact })),
+      })),
+    }
+  } finally {
+    activeScratch = parentScratch
+  }
 }
 
 function sweepCachedPoseBodies(

@@ -3,19 +3,23 @@
 import { execFileSync } from 'node:child_process'
 import { deepStrictEqual } from 'node:assert'
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { build } from 'vite'
 
 const root = process.cwd()
 const baseline = process.argv.includes('--baseline')
+const workerMode = process.argv.includes('--worker')
+if (workerMode && (baseline || !process.argv.includes('--browser') || !process.argv.includes('--fixed-driving'))) {
+  throw new Error('--worker requires --browser --fixed-driving and cannot use --baseline')
+}
 const baselineRef = process.env.PERF_BASE_REF ?? 'HEAD'
 const bundle = await build({
   configFile: false,
   resolve: { alias: { '@': resolve(root, 'src') } },
   logLevel: 'error',
-  build: { ssr: true, write: false, minify: false, rolldownOptions: { input: resolve(root, 'tools/race-performance-entry.ts') } },
+  build: { ssr: true, write: false, minify: false, rolldownOptions: { input: resolve(root, workerMode ? 'tools/race-worker-performance-entry.ts' : 'tools/race-performance-entry.ts') } },
   plugins: baseline ? [{
     name: 'committed-race-baseline',
     enforce: 'pre',
@@ -79,6 +83,12 @@ const bundle = await build({
     process.exit(0)
   }
   const track = JSON.parse(await readFile(resolve(catalogRoot, `${trackId}.json`), 'utf8'))
+  let workerCode = null
+  if (workerMode) {
+    const workerBundle = await build({ configFile: false, logLevel: 'error', resolve: { alias: { '@': resolve(root, 'src') } },
+      build: { ssr: true, write: false, minify: false, rolldownOptions: { input: resolve(root, 'tools/race-worker-benchmark.ts') } } })
+    workerCode = workerBundle.output.find(item => item.type === 'chunk' && item.isEntry).code
+  }
   if (process.argv.includes('--browser')) {
     const playwrightPath = resolve(process.env.PERF_PLAYWRIGHT_MODULE ?? '../never-lift-backend/tools/physics-parity/node_modules/playwright/index.mjs')
     const { chromium } = await import(pathToFileURL(playwrightPath).href)
@@ -86,11 +96,21 @@ const bundle = await build({
     try {
       for (const mode of (process.env.PERF_MODES ?? 'solo,local').split(',')) {
         const page = await browser.newPage({ viewport: { width: Number(process.env.PERF_WIDTH ?? 1920), height: Number(process.env.PERF_HEIGHT ?? 1080) }, deviceScaleFactor: Number(process.env.PERF_DPR ?? 1) })
+        page.on('console', message => { if (message.type() === 'error') console.error(message.text()) })
+        page.on('pageerror', error => console.error(error.message))
+        if (workerMode) {
+          // Give module workers an actual origin; blob:null workers are rejected
+          // by Edge in an about:blank page. This is entirely intercepted locally.
+          await page.route('http://race-benchmark.local/**', route => route.fulfill({
+            contentType: 'text/html', body: '<!doctype html><html><body></body></html>',
+          }))
+          await page.goto('http://race-benchmark.local/')
+        }
         await page.setContent('<style>html,body{margin:0}canvas{display:block;width:100vw;height:100vh}</style><canvas></canvas>')
         const profiler = process.argv.includes('--profile') ? await page.context().newCDPSession(page) : null
         if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
-        const result = await page.evaluate(async ({ moduleUrl, track, mode, driving, fixedDriving, frames, maximumSeconds, cars, timeOfDay }) => {
-          const { RaceEngine, RaceRenderer, raceGraphicsSettings, performanceRacers } = await import(moduleUrl)
+        const result = await page.evaluate(async ({ moduleUrl, workerCode, track, mode, driving, fixedDriving, frames, maximumSeconds, cars, timeOfDay, opaqueCanvas, desynchronized, diagnosticNoShadowBlur }) => {
+          const { RaceEngine, RaceRenderer, LocalRaceRuntime, raceGraphicsSettings, performanceRacers } = await import(moduleUrl)
           const count = cars ?? (mode === 'solo' ? 22 : 2)
           const racers = performanceRacers(mode, count)
           const engine = new RaceEngine({ track, mode, racers })
@@ -102,25 +122,64 @@ const bundle = await build({
             const step = engine.stepFixed.bind(engine)
             engine.stepFixed = () => { driveHumans(); step() }
           }
+          const workerUrl = workerCode ? URL.createObjectURL(new Blob([workerCode], { type: 'text/javascript' })) : null
+          const runtime = workerUrl ? new LocalRaceRuntime(engine, humanIds, () => new Worker(workerUrl, { type: 'module' })) : null
+          const view = runtime ?? engine
+          if (runtime) {
+            const deadline = performance.now() + 15000
+            while (runtime.getSimulationTimeSeconds() === 0) {
+              await new Promise(resolve => requestAnimationFrame(resolve))
+              runtime.advanceFrame(0, {})
+              if (runtime.getFailure() || !runtime.getDiagnostics().worker || performance.now() > deadline) throw new Error(runtime.getFailure() ?? runtime.getDiagnostics().diagnosticError ?? 'Worker did not start')
+            }
+            if (!runtime.getDiagnostics().worker) throw new Error('Worker silently fell back')
+          }
+          if (opaqueCanvas || desynchronized) document.querySelector('canvas').getContext('2d', { alpha: !opaqueCanvas, desynchronized })
+          // Diagnostic ablation ONLY; never used by the shipped app or acceptance results.
+          if (diagnosticNoShadowBlur) Object.defineProperty(document.querySelector('canvas').getContext('2d'), 'shadowBlur', { get: () => 0, set: () => {} })
           const renderer = new RaceRenderer(document.querySelector('canvas'), track, { ...(raceGraphicsSettings?.(mode, count) ?? {}), timeOfDay })
-          const physicsMs = [], renderMs = [], frameMs = []
+          const physicsMs = [], renderMs = [], frameMs = [], workerPhysicsMs = [], snapshotAgeMs = []
+          let lastSnapshot = 0
+          const simulationStart = view.getSimulationTimeSeconds()
           for (let frame = 0; frame < frames; frame++) {
             const timestamp = await new Promise(resolve => requestAnimationFrame(resolve))
             const deltaSeconds = frameMs.length === 0 ? 0 : (timestamp - frameMs.at(-1)) / 1000
             frameMs.push(timestamp)
             const start = performance.now()
             if (driving && !fixedDriving) driveHumans()
-            engine.advanceFrame(deltaSeconds)
+            if (runtime) runtime.advanceFrame(deltaSeconds, {})
+            else engine.advanceFrame(deltaSeconds)
             const physicsEnd = performance.now()
-            renderer.render(engine, deltaSeconds)
+            renderer.render(view, deltaSeconds)
+            if (runtime) {
+              if (runtime.getFailure()) throw new Error(runtime.getFailure())
+              const diagnostics = runtime.getDiagnostics()
+              snapshotAgeMs.push(diagnostics.snapshotAgeMs)
+              if (diagnostics.snapshotTimestamp !== lastSnapshot) {
+                workerPhysicsMs.push(diagnostics.physicsMilliseconds)
+                lastSnapshot = diagnostics.snapshotTimestamp
+              }
+            }
             if (frame >= 5) { physicsMs.push(physicsEnd - start); renderMs.push(performance.now() - physicsEnd) }
             if (timestamp - frameMs[0] >= maximumSeconds * 1000) break
           }
           const stats = values => ({ mean: values.reduce((a,b) => a+b,0)/values.length, p95: [...values].sort((a,b) => a-b)[Math.floor(values.length * .95)] })
           const wallSeconds = (frameMs.at(-1) - frameMs[0]) / 1000
-          return { mode, cars: count, humans: racers.filter(r => r.kind === 'human').length, bots: racers.filter(r => r.kind === 'bot').length, timeOfDay, raceStatus: engine.getStatus(), movingCars: engine.getInterpolatedVehicles().filter(v => Math.hypot(v.velocity.x,v.velocity.y)>1).length, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds: engine.getSimulationTimeSeconds(), simulationToWallRatio: engine.getSimulationTimeSeconds() / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
-        }, { moduleUrl, track, mode, driving: process.argv.includes('--driving'), fixedDriving: process.argv.includes('--fixed-driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15), cars: process.env.PERF_CARS ? Number(process.env.PERF_CARS) : null, timeOfDay: process.env.PERF_TIME_OF_DAY ?? 'day' })
-        console.log(JSON.stringify({ baseline, browser: await browser.version(), track: trackId, ...result }))
+          const simulatedSeconds = view.getSimulationTimeSeconds() - simulationStart
+          const result = { mode, cars: count, humans: racers.filter(r => r.kind === 'human').length, bots: racers.filter(r => r.kind === 'bot').length, timeOfDay, raceStatus: view.getStatus(), movingCars: view.getInterpolatedVehicles().filter(v => Math.hypot(v.velocity.x,v.velocity.y)>1).length, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds, simulationToWallRatio: simulatedSeconds / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), worker: runtime ? { responses: workerPhysicsMs.length, physics: stats(workerPhysicsMs), snapshotAgeMs: stats(snapshotAgeMs) } : null, renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
+          runtime?.dispose()
+          if (workerUrl) URL.revokeObjectURL(workerUrl)
+          return result
+        }, { moduleUrl, workerCode, track, mode, driving: process.argv.includes('--driving'), fixedDriving: process.argv.includes('--fixed-driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15), cars: process.env.PERF_CARS ? Number(process.env.PERF_CARS) : null, timeOfDay: process.env.PERF_TIME_OF_DAY ?? 'day', opaqueCanvas: process.env.PERF_OPAQUE === '1', desynchronized: process.env.PERF_DESYNCHRONIZED === '1', diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1' })
+        const contextAttributes = await page.evaluate(() => document.querySelector('canvas').getContext('2d').getContextAttributes())
+        const record = { baseline, browser: await browser.version(), track: trackId, contextAttributes,
+          diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1', ...result }
+        console.log(JSON.stringify(record))
+        if (process.env.PERF_REPORT) {
+          const report = resolve(process.env.PERF_REPORT)
+          await mkdir(dirname(report), { recursive: true })
+          await appendFile(report, JSON.stringify(record) + '\n')
+        }
         if (profiler) {
           const { profile } = await profiler.send('Profiler.stop')
           const hits = new Map()
