@@ -32,10 +32,10 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - Identificadores de código sempre em **inglês**, mesmo com a documentação em português.
 
 ## Regra fixa: seleção de modelo e esforço
-- Antes de executar qualquer ação solicitada em um novo prompt, informar de forma breve qual modelo e esforço oferecem a melhor relação entre qualidade, desempenho e consumo para aquela tarefa.
+- Antes de executar uma tarefa não trivial solicitada em um novo prompt, informar de forma breve qual modelo e esforço oferecem a melhor relação entre qualidade, desempenho e consumo. Em perguntas rápidas e correções simples, manter a escolha atual do usuário e prosseguir sem recomendação.
 - Usar `GPT-5.6 Sol` como recomendação padrão para implementação rotineira, testes, documentação, interface, manutenção de Git e correções localizadas. Reservar `GPT-6 Astra` para arquitetura de alto risco, física/paridade entre repositórios, concorrência/WebSocket, otimização difícil, investigação ambígua ou refatoração ampla.
 - Ajustar o esforço proporcionalmente: `low` para tarefas simples, `medium` como equilíbrio padrão, `high`/`xhigh` para problemas complexos e `max` somente quando a dificuldade comprovadamente justificar o consumo adicional.
-- Não pedir confirmação da recomendação nem interromper o trabalho por causa dela. Se o ambiente oferecer troca automática do modelo e do esforço da tarefa ativa, aplicá-la; caso contrário, apenas registrar a recomendação e prosseguir com a configuração selecionada pelo usuário.
+- Nas tarefas não triviais, não pedir confirmação da recomendação nem interromper o trabalho por causa dela. Se o ambiente oferecer troca automática do modelo e do esforço da tarefa ativa, aplicá-la; caso contrário, apenas registrar a recomendação e prosseguir com a configuração selecionada pelo usuário.
 
 ## Regras de arquitetura
 - O estado da corrida (tempo real) vive **fora** do ciclo de render do React — um store dedicado (ex. Zustand), lido diretamente pelo loop de `requestAnimationFrame` do Canvas. Nunca colocar posição de carro em `useState` re-renderizado a 20-30x/segundo.
