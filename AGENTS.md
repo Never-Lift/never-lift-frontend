@@ -31,6 +31,12 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - Tailwind CSS + shadcn/ui pra "casca" do app (formulário, diálogo, tabela, toast) — não usar dentro do `<canvas>` da corrida.
 - Identificadores de código sempre em **inglês**, mesmo com a documentação em português.
 
+## Regra fixa: seleção de modelo e esforço
+- Antes de executar uma tarefa não trivial solicitada em um novo prompt, informar de forma breve qual modelo e esforço oferecem a melhor relação entre qualidade, desempenho e consumo. Em perguntas rápidas e correções simples, manter a escolha atual do usuário e prosseguir sem recomendação.
+- Usar `GPT-5.6 Sol` como recomendação padrão para implementação rotineira, testes, documentação, interface, manutenção de Git e correções localizadas. Reservar `GPT-6 Astra` para arquitetura de alto risco, física/paridade entre repositórios, concorrência/WebSocket, otimização difícil, investigação ambígua ou refatoração ampla.
+- Ajustar o esforço proporcionalmente: `low` para tarefas simples, `medium` como equilíbrio padrão, `high`/`xhigh` para problemas complexos e `max` somente quando a dificuldade comprovadamente justificar o consumo adicional.
+- Nas tarefas não triviais, não pedir confirmação textual da recomendação. Se o ambiente oferecer troca automática do modelo e do esforço da tarefa ativa, aplicá-la e prosseguir; caso contrário, parar imediatamente depois da recomendação e aguardar o usuário trocar a configuração e solicitar a continuação.
+
 ## Regras de arquitetura
 - O estado da corrida (tempo real) vive **fora** do ciclo de render do React — um store dedicado (ex. Zustand), lido diretamente pelo loop de `requestAnimationFrame` do Canvas. Nunca colocar posição de carro em `useState` re-renderizado a 20-30x/segundo.
 - O mesmo `RaceEngine` do Módulo 2 é reaproveitado como motor de predição no Módulo 3 — não duplicar a física numa segunda implementação.
