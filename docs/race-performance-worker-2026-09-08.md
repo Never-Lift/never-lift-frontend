@@ -199,18 +199,40 @@ custo do blur. Não atribuir toda a queda à concorrência nem ao novo cache:
 **repetir A/B controlado antes de concluir ganho/regressão ou aprovar 40 FPS**.
 Também não esconder a desaceleração da simulação por trás do FPS do Canvas.
 
+### Repetição controlada de 09/09/2026
+
+Após interromper outros testes e cargas conhecidas, a suíte foi repetida no Edge
+152 por 30 segundos em cada caso. Nenhuma corrida, vídeo ou benchmark adicional
+foi iniciado pelo processo de validação durante as medições. Os resultados brutos
+ficam em `output/performance/controlled-2026-09-09.jsonl` (arquivo local ignorado
+pelo Git).
+
+| Circuito | Condição | FPS médio aproximado | Intervalo p95 | Simulado/real |
+|---|---|---:|---:|---:|
+| Mônaco | solo 1+21, dia, 1920x1080 | 58,0 | 16,8 ms | 93,1% |
+| Mônaco | local 2+20, dia, divisão vertical | 24,7 | 83,3 ms | 94,0% |
+| Spa | local 2+20, noite, divisão horizontal 1080x1920 | 32,5 | 50,1 ms | 100,1% |
+| Mônaco | local 2+0, dia, divisão vertical | 59,3 | 16,8 ms | 100,0% |
+
+O caso-controle 2+0 demonstra que o split-screen isolado continua fluido neste
+hardware. O grid completo, especialmente em congestionamento, permanece abaixo
+de 40 FPS no modo local; portanto, esta rodada **não encerra nem garante** a meta
+universal de 40 FPS. O solo de Mônaco desenhou próximo de 60 FPS, mas também não
+pode ser aprovado como tempo real enquanto a razão simulada permanecer em 93,1%.
+O patch segue publicável em rascunho por preservar física e imagem e por melhorar
+a arquitetura, mantendo essa pendência explícita para a próxima rodada.
+
 ## Ponto de retomada
 
 - Código e documentação na branch `codex/race-performance-worker`; testes
   completos 393/393, build/lint, paridade de colisões/geometrias e comparação
   visual das 24 pistas aprovados. A meta de desempenho permanece incompleta.
-- Próximo teste: repetir base e candidato com a mesma carga, sem outra corrida,
-  vídeo ou benchmark concorrendo por GPU/CPU; incluir 1+21, 2+20, local sem bots,
-  noite e divisão horizontal. Não alterar recursos para atingir o número.
-- A publicação da atualização remota da issue #60 foi bloqueada pelo controle
-  de permissões; foi solicitada confirmação explícita do autor para publicar
-  código, métricas e pendências na issue/Project e em PR para `develop`.
-  Não há autorização para mesclar nem promover esta rodada para `main`.
+- A repetição controlada incluiu 1+21, 2+20, local sem bots, noite e divisão
+  horizontal. Ela confirmou que o caso local com grid cheio ainda fica abaixo
+  da meta; os números estão na seção anterior.
+- O autor autorizou publicar código, métricas e pendências na issue #60 e em PR
+  **em rascunho** para `develop`. Não há autorização para mesclar nem promover
+  esta rodada para `main`.
 - Nenhuma mudança no backend é necessária para este patch equivalente; se
   um próximo passo alterar a matemática ou o contrato, exigir revisão de
   paridade sincronizada antes de publicar.
