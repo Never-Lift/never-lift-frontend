@@ -285,9 +285,26 @@ quadros por caso, manteve **zero canais diferentes** da base `9391e7e`.
 Assim, esta entrega melhora e estabiliza a arquitetura sem alterar pixels nem
 física, mas **não satisfaz a meta universal de 40 FPS no local com 2+20**. Para
 buscar esse último patamar será necessário um passo arquitetural maior no
-renderer (por exemplo, renderização paralela dos viewports) ou aceitar cache/LOD
-com equivalência perceptiva em vez de igualdade RGBA. Nenhuma dessas concessões
-foi aplicada silenciosamente nesta rodada.
+renderer, como uma migração mais ampla para WebGL, ou aceitar cache/LOD com
+equivalência perceptiva em vez de igualdade RGBA. Nenhuma dessas concessões foi
+aplicada silenciosamente nesta rodada.
+
+### Experimento de renderização paralela descartado
+
+Foi prototipada uma segunda etapa com `OffscreenCanvas` e um worker exclusivo
+para o renderer. No Edge, em Mônaco local 2+20, dia e 1920x1080, o resultado
+caiu para aproximadamente **19,1 FPS**, com intervalo p95 de **150 ms** e apenas
+**91,8%** de tempo simulado/real. A serialização dos 22 estados visuais e a
+concorrência entre os workers de física e desenho custaram mais do que o trabalho
+retirado da thread principal.
+
+O experimento foi rejeitado e removido integralmente antes da publicação. Não há
+`OffscreenCanvas`, protocolo ou worker de renderização no código entregue; ficam
+somente as otimizações equivalentes já aprovadas. Portanto, “separar os viewports
+em outro worker” deixa de ser uma recomendação para esta arquitetura Canvas 2D.
+Os caminhos tecnicamente restantes são cache/LOD com equivalência perceptiva,
+migração mais ampla para WebGL ou manutenção do visual exato aceitando o limite
+medido no split-screen com grid cheio.
 
 ## Ponto de retomada
 
