@@ -299,22 +299,65 @@ concorrência entre os workers de física e desenho custaram mais do que o traba
 retirado da thread principal.
 
 O experimento foi rejeitado e removido integralmente antes da publicação. Não há
-`OffscreenCanvas`, protocolo ou worker de renderização no código entregue; ficam
-somente as otimizações equivalentes já aprovadas. Portanto, “separar os viewports
-em outro worker” deixa de ser uma recomendação para esta arquitetura Canvas 2D.
-Os caminhos tecnicamente restantes são cache/LOD com equivalência perceptiva,
-migração mais ampla para WebGL ou manutenção do visual exato aceitando o limite
-medido no split-screen com grid cheio.
+`OffscreenCanvas`, protocolo ou worker de renderização no código entregue.
+Portanto, “separar os viewports em outro worker” deixa de ser uma recomendação
+para esta arquitetura Canvas 2D. O cache com equivalência perceptiva testado em
+seguida está descrito abaixo; WebGL e a manutenção do visual RGBA exato continuam
+como alternativas, não como mudanças aplicadas.
+
+### Cache perceptivo dos monopostos remotos
+
+Para grids densos em qualidade baixa, os monopostos que não são o foco da câmera
+passam a reutilizar sprites transparentes em alta resolução. O carro focal de
+cada viewport continua no painter vetorial contínuo. O cache:
+
+- usa poses em intervalos de dois graus, o que limita o deslocamento máximo da
+  extremidade de um carro remoto a aproximadamente um pixel na escala aprovada;
+- rasteriza em 2× e reduz na composição final, preservando bordas e detalhes;
+- separa corpo e sombra. A sombra é compartilhada entre cores e danos e mantém
+  seu deslocamento angular contínuo, evitando multiplicar combinações no cache;
+- preserva cor e cada estado de dano em entradas distintas;
+- é LRU e limitado a 16 milhões de pixels de backing store, cerca de 61 MiB RGBA;
+- só entra com pelo menos dez carros e nunca altera física, colisão, pista,
+  câmera, minimapa, HUD ou a escala do carro.
+
+O benchmark ganhou uma chave A/B (`PERF_DISABLE_VEHICLE_SPRITES=1`) e a auditoria
+de imagem passou a informar erro absoluto/RMS, mantendo falha por qualquer pixel
+diferente no modo exato e permitindo auditoria explícita com
+`PERF_PERCEPTUAL_AUDIT=1`.
+
+A primeira matriz do cache percorreu os 24 circuitos, com 1+21 e 2+20, durante
+oito segundos por caso e os 22 carros em movimento. As 48 execuções ficaram
+entre **42,0 e 59,5 FPS** de média e não tiveram falhas. Depois, corpo e sombra
+foram separados para eliminar a troca excessiva observada no pior caso:
+
+| Circuito | Condição final refinada | FPS médio aproximado | Intervalo p95 | Simulado/real |
+|---|---|---:|---:|---:|
+| Las Vegas | local 2+20, dia, 1920x1080, 20 s | 57,9 | 16,9 ms | 100,2% |
+| Mônaco | local 2+20, dia, 1920x1080, 60 s | 59,6 | 16,8 ms | 100,0% |
+| Spa | local 2+20, noite, horizontal 1080x1920, 30 s | 58,3 | 16,8 ms | 100,0% |
+
+Na auditoria de quatro pistas em dia/noite, o erro absoluto médio ficou abaixo
+de **0,35 nível de canal em 255**. As capturas foram inspecionadas em resolução
+original sem diferença perceptível; igualdade RGBA não é alegada para os carros
+remotos. O carro focal permanece no caminho vetorial exato. Esses resultados são
+evidência no hardware de teste, não garantia de FPS mínimo em todo equipamento ou
+em cada frame; a validação manual do autor ainda é necessária.
+
+O gate final aprovou `npm run check` com **403 testes/49 arquivos**, lint e build,
+além do smoke real do Edge (cinco workers criados e encerrados), 24 circuitos/648
+amostras de geometria e 512 sweeps CCD/318 contatos com o hash de referência
+`8a47702e6a2051c8ed655cd32518fc0a2becc823282d4ea0b2117e2d0ea01e36`.
 
 ## Ponto de retomada
 
 - Código e documentação na branch `codex/race-performance-worker`; suíte completa,
-  smoke do worker, comparação visual e medições finais foram repetidos. Paridades
-  longa, de CCD, geometria e imagem permanecem exatas.
-- A repetição final incluiu 1+21, 2+20, local sem bots, noite e divisão horizontal.
-  Ela confirmou que o caso local com grid cheio ainda fica abaixo da meta; os
-  números estão na seção anterior. A pendência agora é de desempenho/decisão de
-  arquitetura, não de validação automatizada deste patch equivalente.
+  smoke do worker, auditoria visual e medições finais foram repetidos. Física,
+  CCD e geometria permanecem exatos; carros remotos usam equivalência perceptiva.
+- A matriz incluiu 1+21 e 2+20 nos 24 circuitos. A repetição final prolongada
+  cobriu os três casos críticos, noite e divisão horizontal, todos próximos de
+  58–60 FPS e 100% de tempo simulado/real. Resta a validação manual no navegador
+  e hardware do autor antes de declarar a meta aprovada fora do ambiente medido.
 - O autor autorizou publicar código, métricas e pendências na issue #60 e em PR
   **em rascunho** para `develop`. Não há autorização para mesclar nem promover
   esta rodada para `main`.
@@ -364,5 +407,5 @@ para esconder divergências.
 
 Se o mínimo de 40 continuar obrigatório em todos os instantes, a entrega não
 pode ser marcada como desempenho aprovado só por ter média acima desse valor.
-Qualquer proposta de reduzir detalhes, limite de carros ou fidelidade física
-exige nova decisão do autor; esta rodada não toma essa liberdade.
+Qualquer proposta adicional de reduzir detalhes, limite de carros ou fidelidade
+física exige nova decisão do autor; esta rodada não toma essa liberdade.

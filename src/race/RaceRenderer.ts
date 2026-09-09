@@ -44,8 +44,13 @@ import {
 import type { InterpolatedVehicleState, Vector2 } from '@/race/types'
 import {
   drawVehicleVisual,
+  type DrawVehicleVisualOptions,
   vehicleYawRelativeToCamera,
 } from '@/race/vehicle-visuals'
+import {
+  VehicleSpriteCache,
+  type VehicleSpriteCacheStats,
+} from '@/race/VehicleSpriteCache'
 import {
   AMBIENT_PARTICLE_BUDGET,
   DEFAULT_GRAPHICS_QUALITY,
@@ -97,6 +102,7 @@ export type RenderStats = {
   totalChunks: number
   visibleChunksByViewport: number[]
   ambientParticlesByViewport: number[]
+  vehicleSpriteCache?: VehicleSpriteCacheStats
 }
 
 export type RaceRendererOptions = {
@@ -104,6 +110,7 @@ export type RaceRendererOptions = {
   quality?: GraphicsQuality
   splitScreenAspectRatio?: () => number
   pixelRatioCap?: number
+  vehicleSpriteCache?: boolean
 }
 
 const SURFACE_COLORS: Record<TrackSurfaceMaterial, string> = {
@@ -453,6 +460,7 @@ export class RaceRenderer {
   private readonly pitInfrastructure: PitInfrastructureGeometry | null
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
+  private readonly vehicleSpriteCache?: VehicleSpriteCache
   private opacityLayerCanvas?: HTMLCanvasElement
   private opacityLayerContext?: CanvasRenderingContext2D
   private frameCount = 0
@@ -472,6 +480,8 @@ export class RaceRenderer {
       options.splitScreenAspectRatio ??
       (() => this.canvas.width / this.canvas.height)
     this.pixelRatioCap = Math.max(1, options.pixelRatioCap ?? 2)
+    this.vehicleSpriteCache =
+      options.vehicleSpriteCache === false ? undefined : new VehicleSpriteCache()
     this.trackCullMarginMeters = trackCullMarginMeters(track, this.geometry)
     this.suzukaCrossings = findSuzukaCrossingPoints(track)
     for (const chunk of track.chunks) {
@@ -567,6 +577,7 @@ export class RaceRenderer {
       totalChunks: this.track.chunks.length,
       visibleChunksByViewport,
       ambientParticlesByViewport,
+      vehicleSpriteCache: this.vehicleSpriteCache?.getStats(),
     }
     this.frameCount += 1
   }
@@ -578,6 +589,9 @@ export class RaceRenderer {
       ambientParticlesByViewport: [
         ...this.renderStats.ambientParticlesByViewport,
       ],
+      vehicleSpriteCache: this.renderStats.vehicleSpriteCache
+        ? { ...this.renderStats.vehicleSpriteCache }
+        : undefined,
     }
   }
 
@@ -710,7 +724,14 @@ export class RaceRenderer {
           transform,
         )
         for (const vehicle of vehiclesAtLayer) {
-          this.drawVehicle(vehicle, transform, showDriverNames)
+          this.drawVehicle(
+            vehicle,
+            transform,
+            showDriverNames,
+            this.quality === 'low' &&
+              vehicles.length >= 10 &&
+              vehicle.id !== focusedVehicle.id,
+          )
         }
       }
       if (isFadedSuzukaUpperLayer) {
@@ -3329,6 +3350,7 @@ export class RaceRenderer {
     vehicle: InterpolatedVehicleState,
     transform: CameraTransform,
     showName: boolean,
+    useSpriteCache = false,
   ) {
     const context = this.context
     const profile = PHYSICS_CONSTANTS.vehicleVisual
@@ -3347,7 +3369,7 @@ export class RaceRenderer {
       },
       transform,
     )
-    drawVehicleVisual(context, {
+    const visualOptions: DrawVehicleVisualOptions = {
       color: vehicle.color,
       x: point.x,
       y: point.y,
@@ -3366,7 +3388,13 @@ export class RaceRenderer {
       ),
       shadowDistanceToWidthRatio: shadowSettings.distanceToWidthRatio,
       shadowOpacity: shadowSettings.opacity,
-    })
+    }
+    if (
+      !useSpriteCache ||
+      !this.vehicleSpriteCache?.draw(context, visualOptions)
+    ) {
+      drawVehicleVisual(context, visualOptions)
+    }
 
     if (showName) {
       context.fillStyle = '#f0f0fa'

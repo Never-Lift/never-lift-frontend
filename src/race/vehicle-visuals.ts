@@ -37,6 +37,23 @@ export type DrawVehicleVisualOptions = {
   shadowAngleRadians?: number
   shadowDistanceToWidthRatio?: number
   shadowOpacity?: number
+  drawShadow?: boolean
+}
+
+export type DrawVehicleShadowOptions = Pick<
+  DrawVehicleVisualOptions,
+  | 'x'
+  | 'y'
+  | 'relativeYawRadians'
+  | 'length'
+  | 'width'
+  | 'groundDepthScale'
+  | 'heightScale'
+  | 'shadowAngleRadians'
+  | 'shadowDistanceToWidthRatio'
+  | 'shadowOpacity'
+> & {
+  shadowDistancePixels?: number
 }
 
 type FormulaSection = {
@@ -1315,6 +1332,47 @@ function paintGroundShadow(
   context.restore()
 }
 
+export function drawVehicleShadowVisual(
+  context: CanvasRenderingContext2D,
+  {
+    x,
+    y,
+    relativeYawRadians,
+    length,
+    width,
+    groundDepthScale = CAMERA_GROUND_DEPTH_SCALE,
+    heightScale = CAMERA_HEIGHT_SCALE,
+    shadowAngleRadians = VEHICLE_SHADOW_SETTINGS.day.worldAngleRadians,
+    shadowDistanceToWidthRatio =
+      VEHICLE_SHADOW_SETTINGS.day.distanceToWidthRatio,
+    shadowOpacity = VEHICLE_SHADOW_SETTINGS.day.opacity,
+    shadowDistancePixels,
+  }: DrawVehicleShadowOptions,
+) {
+  if (length <= 0 || width <= 0 || shadowOpacity <= 0) return
+  const continuousYaw = normalizeSignedAngle(relativeYawRadians)
+  const projection: VehicleProjection = {
+    relativeYawRadians: continuousYaw,
+    length,
+    width,
+    groundDepthScale,
+    heightScale,
+    sinYaw: Math.sin(continuousYaw),
+    cosYaw: Math.cos(continuousYaw),
+  }
+  context.save()
+  context.translate(x, y)
+  paintGroundShadow(
+    context,
+    projection,
+    shadowAngleRadians,
+    shadowDistancePixels ??
+      Math.max(1.5, width * shadowDistanceToWidthRatio),
+    shadowOpacity,
+  )
+  context.restore()
+}
+
 /**
  * Paints one original F1 master from a continuous 2.5D view.
  * Coordinates are screen-space pixels and never affect physics or collision.
@@ -1336,6 +1394,7 @@ export function drawVehicleVisual(
     shadowDistanceToWidthRatio =
       VEHICLE_SHADOW_SETTINGS.day.distanceToWidthRatio,
     shadowOpacity = VEHICLE_SHADOW_SETTINGS.day.opacity,
+    drawShadow = true,
   }: DrawVehicleVisualOptions,
 ) {
   if (length <= 0 || width <= 0) return
@@ -1361,13 +1420,15 @@ export function drawVehicleVisual(
 
   context.save()
   context.translate(x, y)
-  paintGroundShadow(
-    context,
-    projection,
-    shadowAngleRadians,
-    Math.max(1.5, width * shadowDistanceToWidthRatio),
-    shadowOpacity,
-  )
+  if (drawShadow && shadowOpacity > 0) {
+    paintGroundShadow(
+      context,
+      projection,
+      shadowAngleRadians,
+      Math.max(1.5, width * shadowDistanceToWidthRatio),
+      shadowOpacity,
+    )
+  }
   paintSuspension(context, projection, detail)
   paintSurfaces(context, colors.surfaces, projection, detail)
   paintCockpitAndLivery(context, projection, colors, detail, damage)

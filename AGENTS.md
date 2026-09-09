@@ -91,6 +91,8 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 
 > Complemento local 2+20: testes prolongados revelaram desempenho insuficiente em congestionamentos de Mônaco. Ajustes adicionais ajudam, mas **não declarar 22 carros no split-screen como desempenho aprovado**. Resultados e limites em `docs/race-performance-2026-09-04.md`.
 
+> Rodada perceptiva de 09/09/2026: cache raster 2× limitado a carros remotos em grids densos levou os casos refinados de Las Vegas, Mônaco e Spa com 22 carros a 57,9–59,6 FPS médios e tempo simulado/real de 100% no hardware de teste. Física, pistas, câmera e carros focais permanecem inalterados; a imagem remota é perceptivamente equivalente, não RGBA idêntica. Validação manual pendente antes de declarar o desempenho aprovado no equipamento do autor. Evidências em `docs/race-performance-worker-2026-09-08.md`.
+
 > Revisão equivalente de 09/09/2026: física/colisões e alocações do modelo visual foram otimizadas sem diferenças físicas ou RGBA. A medição final manteve a simulação em tempo real e registrou 57,6 FPS em Mônaco solo 1+21, mas somente 31,5 FPS em Mônaco local 2+20 e 30,7 FPS em Spa local 2+20 noturna. A meta universal de 40 FPS continua pendente; detalhes e ponto de decisão em `docs/race-performance-worker-2026-09-08.md`.
 
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.

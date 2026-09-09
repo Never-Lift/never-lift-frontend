@@ -109,7 +109,7 @@ const bundle = await build({
         await page.setContent('<style>html,body{margin:0}canvas{display:block;width:100vw;height:100vh}</style><canvas></canvas>')
         const profiler = process.argv.includes('--profile') ? await page.context().newCDPSession(page) : null
         if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
-        const result = await page.evaluate(async ({ moduleUrl, workerCode, track, mode, driving, fixedDriving, frames, maximumSeconds, cars, timeOfDay, opaqueCanvas, desynchronized, diagnosticNoShadowBlur }) => {
+        const result = await page.evaluate(async ({ moduleUrl, workerCode, track, mode, driving, fixedDriving, frames, maximumSeconds, cars, timeOfDay, opaqueCanvas, desynchronized, diagnosticNoShadowBlur, disableVehicleSprites }) => {
           const { RaceEngine, RaceRenderer, LocalRaceRuntime, raceGraphicsSettings, performanceRacers } = await import(moduleUrl)
           const count = cars ?? (mode === 'solo' ? 22 : 2)
           const racers = performanceRacers(mode, count)
@@ -137,7 +137,7 @@ const bundle = await build({
           if (opaqueCanvas || desynchronized) document.querySelector('canvas').getContext('2d', { alpha: !opaqueCanvas, desynchronized })
           // Diagnostic ablation ONLY; never used by the shipped app or acceptance results.
           if (diagnosticNoShadowBlur) Object.defineProperty(document.querySelector('canvas').getContext('2d'), 'shadowBlur', { get: () => 0, set: () => {} })
-          const renderer = new RaceRenderer(document.querySelector('canvas'), track, { ...(raceGraphicsSettings?.(mode, count) ?? {}), timeOfDay })
+          const renderer = new RaceRenderer(document.querySelector('canvas'), track, { ...(raceGraphicsSettings?.(mode, count) ?? {}), timeOfDay, vehicleSpriteCache: !disableVehicleSprites })
           const physicsMs = [], renderMs = [], frameMs = [], workerPhysicsMs = [], snapshotAgeMs = []
           let lastSnapshot = 0
           const simulationStart = view.getSimulationTimeSeconds()
@@ -170,7 +170,7 @@ const bundle = await build({
           runtime?.dispose()
           if (workerUrl) URL.revokeObjectURL(workerUrl)
           return result
-        }, { moduleUrl, workerCode, track, mode, driving: process.argv.includes('--driving'), fixedDriving: process.argv.includes('--fixed-driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15), cars: process.env.PERF_CARS ? Number(process.env.PERF_CARS) : null, timeOfDay: process.env.PERF_TIME_OF_DAY ?? 'day', opaqueCanvas: process.env.PERF_OPAQUE === '1', desynchronized: process.env.PERF_DESYNCHRONIZED === '1', diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1' })
+        }, { moduleUrl, workerCode, track, mode, driving: process.argv.includes('--driving'), fixedDriving: process.argv.includes('--fixed-driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15), cars: process.env.PERF_CARS ? Number(process.env.PERF_CARS) : null, timeOfDay: process.env.PERF_TIME_OF_DAY ?? 'day', opaqueCanvas: process.env.PERF_OPAQUE === '1', desynchronized: process.env.PERF_DESYNCHRONIZED === '1', diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1', disableVehicleSprites: process.env.PERF_DISABLE_VEHICLE_SPRITES === '1' })
         const contextAttributes = await page.evaluate(() => document.querySelector('canvas').getContext('2d').getContextAttributes())
         const record = { baseline, browser: await browser.version(), track: trackId, contextAttributes,
           diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1', ...result }

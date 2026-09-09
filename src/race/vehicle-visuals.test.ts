@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   classifyVehicleView,
+  drawVehicleShadowVisual,
   drawVehicleVisual,
   getFormulaWheelSpecs,
   projectVehiclePoint,
@@ -201,6 +202,40 @@ describe('multidirectional F1 view', () => {
 })
 
 describe('single F1 visual painter', () => {
+  it('can paint the ground shadow independently for the dense-grid cache', () => {
+    const recording = createRecordingContext()
+    drawVehicleShadowVisual(recording.context, {
+      x: 50,
+      y: 60,
+      relativeYawRadians: Math.PI / 3,
+      length: 60,
+      width: 22,
+      shadowAngleRadians: Math.PI / 4,
+      shadowDistanceToWidthRatio: 0,
+      shadowOpacity: 0.22,
+    })
+
+    expect(recording.operations[0]).toBe('save')
+    expect(recording.operations).toContain('fill:rgba(0, 0, 0, 0.22)')
+    expect(recording.operations.at(-1)).toBe('restore')
+  })
+
+  it('can omit the integrated shadow without changing the body painter', () => {
+    const recording = createRecordingContext()
+    drawVehicleVisual(recording.context, {
+      color: '#2d7dff',
+      x: 160,
+      y: 90,
+      relativeYawRadians: 0,
+      length: 60,
+      width: 22,
+      drawShadow: false,
+    })
+
+    expect(recording.operations).not.toContain('fill:rgba(0, 0, 0, 0.22)')
+    expect(recording.operations).toContain('fill:#2d7dff')
+  })
+
   it('keeps tire envelopes inside the declared car width with plausible diameters', () => {
     const vehicleLengthMeters = 5.6
     const vehicleWidthMeters = 2

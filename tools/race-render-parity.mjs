@@ -1,12 +1,13 @@
 // Compare actual Canvas pixels from identical poses, not screenshots at different race times.
 import { build } from 'vite'
 import { execFileSync } from 'node:child_process'
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const root = process.cwd()
 const baseRef = process.env.PERF_BASE_REF ?? '9391e7e'
+const perceptualAudit = process.env.PERF_PERCEPTUAL_AUDIT === '1'
 async function bundle(baseline) {
   const result = await build({ configFile: false, logLevel: 'error', resolve: { alias: { '@': resolve('src') } },
     build: { ssr: true, write: false, minify: false, rolldownOptions: { input: resolve('tools/race-performance-entry.ts') } },
@@ -33,7 +34,8 @@ try {
         const engine = new current.RaceEngine({ track, mode: 'local', racers: current.performanceRacers('local', 22) })
         const a = new original.RaceRenderer(document.getElementById('before'), track, { ...current.raceGraphicsSettings('local', 22), timeOfDay })
         const b = new current.RaceRenderer(document.getElementById('after'), track, { ...current.raceGraphicsSettings('local', 22), timeOfDay })
-        let differing = 0, maximumChannelError = 0
+        let differing = 0, differingPixels = 0, maximumChannelError = 0
+        let absoluteError = 0, squaredError = 0, comparedChannels = 0
         for (let frame = 0; frame < 4; frame++) {
           // Both see precisely the same state, including crossed layers/bounds.
           const vehicles = engine.getInterpolatedVehicles()
@@ -49,14 +51,41 @@ try {
           a.render(view, 1 / 60); b.render(view, 1 / 60)
           const left = document.getElementById('before').getContext('2d').getImageData(0, 0, 1920, 1080).data
           const right = document.getElementById('after').getContext('2d').getImageData(0, 0, 1920, 1080).data
-          for (let i = 0; i < left.length; i++) if (left[i] !== right[i]) {
-            differing++; maximumChannelError = Math.max(maximumChannelError, Math.abs(left[i] - right[i]))
+          comparedChannels += left.length
+          for (let i = 0; i < left.length; i += 4) {
+            let pixelDiffers = false
+            for (let channel = 0; channel < 4; channel++) {
+              const difference = Math.abs(left[i + channel] - right[i + channel])
+              if (difference > 0) { differing++; pixelDiffers = true }
+              absoluteError += difference
+              squaredError += difference * difference
+              maximumChannelError = Math.max(maximumChannelError, difference)
+            }
+            if (pixelDiffers) differingPixels++
           }
         }
-        return { frames: 4, differingChannels: differing, maximumChannelError }
+        return {
+          frames: 4,
+          differingChannels: differing,
+          differingPixels,
+          differingPixelPercent: differingPixels / (comparedChannels / 4) * 100,
+          meanAbsoluteChannelError: absoluteError / comparedChannels,
+          rootMeanSquareChannelError: Math.sqrt(squaredError / comparedChannels),
+          maximumChannelError,
+        }
       }, { before, after, track, timeOfDay })
       console.log(JSON.stringify({ track: id, timeOfDay, baseRef, ...result }))
-      if (result.differingChannels) failed = true
+      if (process.env.PERF_CAPTURE_VISUAL === '1') {
+        await mkdir('output/performance/perceptual-audit', { recursive: true })
+        for (const canvasId of ['before', 'after']) {
+          const dataUrl = await page.$eval(`#${canvasId}`, canvas => canvas.toDataURL('image/png'))
+          await writeFile(
+            `output/performance/perceptual-audit/${id}-${timeOfDay}-${canvasId}.png`,
+            Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'),
+          )
+        }
+      }
+      if (result.differingChannels && !perceptualAudit) failed = true
     }
   }
   await mkdir('output/performance', { recursive: true })

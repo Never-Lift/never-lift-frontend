@@ -106,6 +106,52 @@ describe('RaceRenderer 2.5D camera integration', () => {
     expect(minimap.mock.calls.some(call => call.some(value => value === vehicles))).toBe(true)
   })
 
+  it('keeps both focused cars vector-based and caches remote cars only in dense grids', () => {
+    const context = createNoopContext()
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK, {
+      quality: 'low',
+    })
+    const baseVehicles = createVehicles()
+    const vehicles = [
+      ...baseVehicles,
+      ...Array.from({ length: 8 }, (_, index) => ({
+        ...baseVehicles[0],
+        id: `bot-${index}`,
+        name: `Bot ${index}`,
+        kind: 'bot' as const,
+        renderPosition: { x: 2 + index * 0.25, y: 2 + index * 0.2 },
+      })),
+    ]
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const element = originalCreateElement(tagName)
+      if (tagName === 'canvas') {
+        Object.defineProperty(element, 'getContext', {
+          value: () => createNoopContext(),
+        })
+      }
+      return element
+    })
+
+    renderer.render(
+      {
+        mode: 'local',
+        getInterpolatedVehicles: () => vehicles,
+      } as RaceEngine,
+      1 / 60,
+    )
+
+    const stats = renderer.getRenderStats().vehicleSpriteCache
+    expect(stats?.entries).toBeGreaterThan(0)
+    expect(stats?.misses).toBeGreaterThan(0)
+    expect(stats?.hits).toBeGreaterThan(0)
+    const vectorColors = drawVehicleVisualMock.mock.calls.map(
+      (call) => call[1].color,
+    )
+    expect(vectorColors).toContain('#31c7ff')
+    expect(vectorColors).toContain('#ff2e88')
+  })
+
   it('precomputes pit projections instead of searching the circuit every frame in two viewports', () => {
     const project = vi.spyOn(TrackGeometry.prototype, 'project')
     const renderer = new RaceRenderer(createCanvas(createNoopContext()), SHORT_TRACK)
