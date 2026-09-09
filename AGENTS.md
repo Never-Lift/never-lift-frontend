@@ -91,6 +91,8 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 
 > Complemento local 2+20: testes prolongados revelaram desempenho insuficiente em congestionamentos de Mônaco. Ajustes adicionais ajudam, mas **não declarar 22 carros no split-screen como desempenho aprovado**. Resultados e limites em `docs/race-performance-2026-09-04.md`.
 
+> Revisão equivalente de 09/09/2026: física/colisões e alocações do modelo visual foram otimizadas sem diferenças físicas ou RGBA. A medição final manteve a simulação em tempo real e registrou 57,6 FPS em Mônaco solo 1+21, mas somente 31,5 FPS em Mônaco local 2+20 e 30,7 FPS em Spa local 2+20 noturna. A meta universal de 40 FPS continua pendente; detalhes e ponto de decisão em `docs/race-performance-worker-2026-09-08.md`.
+
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.
 
 > Rodada de 08/09/2026: solo/local usam o mesmo motor 120 Hz em Web Worker, com mensagens limitadas e renderização desacoplada. Colisões e caches foram otimizados sem mudar física 2.0.3 nem design. Ver `docs/race-performance-worker-2026-09-08.md`: média não equivale a mínimo de 40 FPS; validação manual pendente. Nenhuma promoção à main nem implementação do M3c nesta rodada.

@@ -65,7 +65,7 @@ sem reutilizar automaticamente a sessão local como autoridade online.
 
 ## Evidências automatizadas
 
-- `npm run check`: 393 testes em 47 arquivos, lint e build de produção aprovados.
+- `npm run check`: 398 testes em 48 arquivos, lint e build de produção aprovados.
 - Referência congelada: 11 cenários / 413 estados, diferenças máximas iguais a
   zero em Node 22, Chrome 152 e Edge 152; não foram regenerados oracles.
 - Geometria: 24 circuitos / 648 amostras, incluindo superfície, barreiras e bots,
@@ -252,20 +252,52 @@ hardware.
 A referência continuou exata em 24 circuitos/648 amostras e em 512 sweeps CCD
 (318 contatos), com hash
 `8a47702e6a2051c8ed655cd32518fc0a2becc823282d4ea0b2117e2d0ea01e36`.
-O benchmark final do sistema completo no Edge ainda precisa ser repetido depois
-desta revisão. Portanto, mesmo com a redução de CPU, a meta universal de 40 FPS
-continua pendente até existir medição real de solo 1+21 e local 2+20; não inferir
-FPS a partir do tempo isolado de um passo.
+O modelo visual também deixou de recriar, para cada carro e quadro, os mesmos
+vetores imutáveis de cockpit, pintura, volante, suspensão e sombra. O traçado e
+a ordem de pintura não mudaram. Uma tentativa de agrupar faces em um único fill
+foi rejeitada antes da publicação porque alterava antialiasing/oclusão; ela não
+faz parte da branch.
+
+### Validação final equivalente de 09/09/2026
+
+Depois da revisão de colisões e da remoção de alocações visuais, foram executados
+novamente casos reais no Edge 152. O arquivo bruto local ignorado pelo Git é
+`output/performance/final-equivalent-2026-09-09.jsonl`.
+
+| Circuito | Condição | FPS médio aproximado | Intervalo p95 | Renderer médio | Simulado/real |
+|---|---|---:|---:|---:|---:|
+| Mônaco | solo 1+21, dia, 1920x1080 | 57,6 | 16,9 ms | 3,52 ms | 100,1% |
+| Mônaco | local 2+20, dia, divisão vertical | 31,5 | 50,0 ms | 7,88 ms | 100,1% |
+| Spa | local 2+20, noite, divisão horizontal 1080x1920 | 30,7 | 50,1 ms | 8,40 ms | 100,0% |
+| Mônaco | local 2+0, dia, divisão vertical | 59,7 | 16,8 ms | 4,85 ms | 100,1% |
+
+Em todos os casos a física acompanhou o relógio real. O controle 2+0 confirma que
+o split-screen e o ambiente do navegador não impõem sozinhos o teto próximo de
+30 FPS. O custo restante aparece com muitos monopostos visíveis e com a física
+do grid completo, duplicando o desenho detalhado no modo local. O solo sustenta
+quase 60 FPS; Mônaco e Spa locais continuam abaixo de 40 FPS.
+
+`npm run check` aprovou 398 testes/48 arquivos, lint e build. O smoke do worker
+no Edge aprovou cinco ciclos de criação/encerramento, reinício, saída e resultado.
+A comparação visual repetida em Mônaco, Austin, Suzuka e Spa, dia/noite e quatro
+quadros por caso, manteve **zero canais diferentes** da base `9391e7e`.
+
+Assim, esta entrega melhora e estabiliza a arquitetura sem alterar pixels nem
+física, mas **não satisfaz a meta universal de 40 FPS no local com 2+20**. Para
+buscar esse último patamar será necessário um passo arquitetural maior no
+renderer (por exemplo, renderização paralela dos viewports) ou aceitar cache/LOD
+com equivalência perceptiva em vez de igualdade RGBA. Nenhuma dessas concessões
+foi aplicada silenciosamente nesta rodada.
 
 ## Ponto de retomada
 
-- Código e documentação na branch `codex/race-performance-worker`; a suíte
-  completa e a comparação visual precisam ser repetidas após a segunda revisão.
-  As paridades longa, de CCD e de geometria já permanecem exatas. A meta de
-  desempenho continua incompleta até a nova medição no navegador.
-- A repetição controlada incluiu 1+21, 2+20, local sem bots, noite e divisão
-  horizontal. Ela confirmou que o caso local com grid cheio ainda fica abaixo
-  da meta; os números estão na seção anterior.
+- Código e documentação na branch `codex/race-performance-worker`; suíte completa,
+  smoke do worker, comparação visual e medições finais foram repetidos. Paridades
+  longa, de CCD, geometria e imagem permanecem exatas.
+- A repetição final incluiu 1+21, 2+20, local sem bots, noite e divisão horizontal.
+  Ela confirmou que o caso local com grid cheio ainda fica abaixo da meta; os
+  números estão na seção anterior. A pendência agora é de desempenho/decisão de
+  arquitetura, não de validação automatizada deste patch equivalente.
 - O autor autorizou publicar código, métricas e pendências na issue #60 e em PR
   **em rascunho** para `develop`. Não há autorização para mesclar nem promover
   esta rodada para `main`.
