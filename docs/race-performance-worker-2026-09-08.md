@@ -222,11 +222,47 @@ pode ser aprovado como tempo real enquanto a razão simulada permanecer em 93,1%
 O patch segue publicável em rascunho por preservar física e imagem e por melhorar
 a arquitetura, mantendo essa pendência explícita para a próxima rodada.
 
+### Segunda revisão de colisões de 09/09/2026
+
+O perfil prolongado mostrou que o custo restante em congestionamentos vinha
+principalmente da reconstrução das 22 peças convexas de cada monoposto e de
+objetos temporários do CCD. A revisão adicional:
+
+- reescreve somente os buffers privados de poses já pertencentes à consulta de
+  colisão, sem publicar geometria mutável para o renderer ou snapshots;
+- conserva convexidade e raio sob transformações rígidas e invalida limites,
+  eixos e centros dependentes da pose;
+- reutiliza os invólucros do arena temporário e as opções imutáveis de resposta;
+- evita objetos de projeção, mapas intermediários e pares `{ collider, bounds }`
+  descartáveis no SAT/CCD;
+- compartilha a projeção já calculada antes da integração entre o planejador do
+  bot e a consulta de superfície, sem alterar comandos ou materiais;
+- preserva o segundo passe de barreiras para todo carro que tocou um muro ou
+  outro carro. Um experimento que considerava apenas contatos carro-carro parecia
+  mais rápido, mas divergiu no teste prolongado e foi removido antes da publicação.
+
+Em Mônaco local 2+20, com 120 passos de aquecimento e 3.600 medidos, o custo de
+CPU caiu de 6,91 ms por passo na evidência anterior para 4,43 ms por passo nesta
+execução. O estado final permaneceu exatamente
+`2bb080541a9d8d80d9ed0869601f0037b1f08fb0a35ccb040676fb2d31a51aa3`.
+Em cinco execuções mais curtas de 1.200 passos, a mediana foi 2,92 ms por passo.
+Esses tempos são diagnósticos locais e não constituem um gate dependente de
+hardware.
+
+A referência continuou exata em 24 circuitos/648 amostras e em 512 sweeps CCD
+(318 contatos), com hash
+`8a47702e6a2051c8ed655cd32518fc0a2becc823282d4ea0b2117e2d0ea01e36`.
+O benchmark final do sistema completo no Edge ainda precisa ser repetido depois
+desta revisão. Portanto, mesmo com a redução de CPU, a meta universal de 40 FPS
+continua pendente até existir medição real de solo 1+21 e local 2+20; não inferir
+FPS a partir do tempo isolado de um passo.
+
 ## Ponto de retomada
 
-- Código e documentação na branch `codex/race-performance-worker`; testes
-  completos 393/393, build/lint, paridade de colisões/geometrias e comparação
-  visual das 24 pistas aprovados. A meta de desempenho permanece incompleta.
+- Código e documentação na branch `codex/race-performance-worker`; a suíte
+  completa e a comparação visual precisam ser repetidas após a segunda revisão.
+  As paridades longa, de CCD e de geometria já permanecem exatas. A meta de
+  desempenho continua incompleta até a nova medição no navegador.
 - A repetição controlada incluiu 1+21, 2+20, local sem bots, noite e divisão
   horizontal. Ela confirmou que o caso local com grid cheio ainda fica abaixo
   da meta; os números estão na seção anterior.

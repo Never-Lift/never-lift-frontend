@@ -18,7 +18,7 @@ describe('bounded collision scratch storage', () => {
     const next = scratch.transform(shape, (vertex, target) => { target.x = vertex.x + 10; target.y = vertex.y + 10 })
     expect(next.vertices).toBe(first.vertices)
     expect(cache.axes).toBeUndefined(); expect(cache.sweepAxes).toBeUndefined()
-    expect(cache.center).toBeUndefined(); expect(cache.convex).toBeUndefined(); expect(cache.radius).toBeUndefined()
+    expect(cache.center).toBeUndefined(); expect(cache.convex).toBe(true); expect(cache.radius).toBeUndefined()
     expect(colliderBounds(next).minX).toBe(10)
     expect(shape.vertices[0].x).toBe(0)
     expect(Object.keys(next.vertices)).toEqual(['0', '1', '2'])

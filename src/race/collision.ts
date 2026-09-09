@@ -26,6 +26,7 @@ import { recordImpactDamage } from '@/race/vehicle-physics'
 import {
   createVehicleWorldCollider,
   F1_VEHICLE_COLLIDER,
+  updateVehicleWorldCollider,
   type WorldConvexCollider,
 } from '@/race/vehicle-geometry'
 
@@ -70,7 +71,9 @@ function cachedVehiclePose(vehicle: VehicleState, previous = false) {
   ) {
     return cached.colliders
   }
-  const colliders = createVehicleWorldCollider({ position, angle })
+  const colliders = cached
+    ? updateVehicleWorldCollider(cached.colliders, { position, angle })
+    : createVehicleWorldCollider({ position, angle })
   cache.set(vehicle, { x: position.x, y: position.y, angle, colliders })
   return colliders
 }
@@ -110,11 +113,25 @@ function responseOptions(
   }
 }
 
+const CAR_RESPONSE_OPTIONS = responseOptions(
+  PHYSICS_CONSTANTS.collision.carRestitution,
+  PHYSICS_CONSTANTS.collision.carTangentialFriction,
+)
+
+const BARRIER_RESPONSE_OPTIONS = new Map(
+  Object.entries(PHYSICS_CONSTANTS.collision.barrierMaterials).map(
+    ([material, calibration]) => [
+      material,
+      responseOptions(
+        calibration.restitution,
+        calibration.tangentialFriction,
+      ),
+    ],
+  ),
+)
+
 function carResponseOptions() {
-  return responseOptions(
-    PHYSICS_CONSTANTS.collision.carRestitution,
-    PHYSICS_CONSTANTS.collision.carTangentialFriction,
-  )
+  return CAR_RESPONSE_OPTIONS
 }
 
 function barrierResponseOptions(manifold: CollisionManifold) {
@@ -124,12 +141,11 @@ function barrierResponseOptions(manifold: CollisionManifold) {
       'Collider de barreira sem material físico canônico do contrato v2.',
     )
   }
-  const calibration =
-    PHYSICS_CONSTANTS.collision.barrierMaterials[material]
-  return responseOptions(
-    calibration.restitution,
-    calibration.tangentialFriction,
-  )
+  const options = BARRIER_RESPONSE_OPTIONS.get(material)
+  if (!options) {
+    throw new Error(`Material físico de barreira desconhecido: ${material}.`)
+  }
+  return options
 }
 
 function synchronizeResolvedBody(vehicle: VehicleState, body: RigidBody2D) {
@@ -264,10 +280,15 @@ function vehicleColliders(body: RigidBody2D) {
   if (cached && Object.is(cached.x, body.position.x) && Object.is(cached.y, body.position.y) && Object.is(cached.angle, body.angle)) {
     return cached.colliders
   }
-  const colliders = createVehicleWorldCollider({
-    position: body.position,
-    angle: body.angle,
-  })
+  const colliders = cached
+    ? updateVehicleWorldCollider(cached.colliders, {
+        position: body.position,
+        angle: body.angle,
+      })
+    : createVehicleWorldCollider({
+        position: body.position,
+        angle: body.angle,
+      })
   bodyPoseCache.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, colliders })
   return colliders
 }

@@ -1,6 +1,7 @@
 import vehicleDefinition from '../../contracts/module-2/v2/vehicle-definition.json'
 
 import * as PortableMath from '@/race/portable-math'
+import { polygonGeometry, resetPolygonGeometry } from '@/race/polygon-cache'
 import type { Vector2 } from '@/race/types'
 
 export type LocalConvexCollider = {
@@ -11,7 +12,7 @@ export type LocalConvexCollider = {
 
 export type WorldConvexCollider = {
   id: string
-  /** A pose is immutable; movement must create a new array for geometry caches. */
+  /** Public poses are immutable; collision-owned caches may rewrite private buffers. */
   readonly vertices: readonly Readonly<Vector2>[]
   /** Present only for canonical static track barriers. */
   collisionMaterial?:
@@ -124,12 +125,15 @@ export function transformConvexCollider(
   cosine = PortableMath.cos(transform.angle),
   sine = PortableMath.sin(transform.angle),
 ): WorldConvexCollider {
+  const vertices = part.vertices.map((vertex) => ({
+    x: transform.position.x + (vertex.x * cosine - vertex.y * sine),
+    y: transform.position.y + (vertex.x * sine + vertex.y * cosine),
+  }))
+  const geometry = polygonGeometry(vertices)
+  geometry.convex = true
   return {
     id: part.id,
-    vertices: part.vertices.map((vertex) => ({
-      x: transform.position.x + (vertex.x * cosine - vertex.y * sine),
-      y: transform.position.y + (vertex.x * sine + vertex.y * cosine),
-    })),
+    vertices,
   }
 }
 
@@ -142,6 +146,49 @@ export function createVehicleWorldCollider(
   return definition.parts.map((part) =>
     transformConvexCollider(part, transform, cosine, sine),
   )
+}
+
+/** Rewrites a collision-owned pose without publishing mutable geometry. */
+export function updateVehicleWorldCollider(
+  colliders: WorldConvexCollider[],
+  transform: ColliderTransform,
+  definition = F1_VEHICLE_COLLIDER,
+) {
+  if (colliders.length !== definition.parts.length) {
+    return createVehicleWorldCollider(transform, definition)
+  }
+  const cosine = PortableMath.cos(transform.angle)
+  const sine = PortableMath.sin(transform.angle)
+  for (let partIndex = 0; partIndex < definition.parts.length; partIndex += 1) {
+    const part = definition.parts[partIndex]
+    const collider = colliders[partIndex]
+    const vertices = collider.vertices as Vector2[]
+    if (collider.id !== part.id || vertices.length !== part.vertices.length) {
+      return createVehicleWorldCollider(transform, definition)
+    }
+    const previousRadius = polygonGeometry(vertices).radius?.value
+    resetPolygonGeometry(vertices)
+    for (let vertexIndex = 0; vertexIndex < vertices.length; vertexIndex += 1) {
+      const source = part.vertices[vertexIndex]
+      const target = vertices[vertexIndex]
+      target.x =
+        transform.position.x +
+        (source.x * cosine - source.y * sine)
+      target.y =
+        transform.position.y +
+        (source.x * sine + source.y * cosine)
+    }
+    const geometry = polygonGeometry(vertices)
+    geometry.convex = true
+    if (previousRadius !== undefined) {
+      geometry.radius = {
+        x: transform.position.x,
+        y: transform.position.y,
+        value: previousRadius,
+      }
+    }
+  }
+  return colliders
 }
 
 export function vehicleYawInertia(

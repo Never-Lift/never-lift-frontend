@@ -100,6 +100,10 @@ function cachedStaticColliderBounds(collider: WorldConvexCollider) {
 function axesOf(vertices: readonly Vector2[]) {
   const cached = polygonGeometry(vertices)
   if (cached.sweepAxes) return cached.sweepAxes
+  if (cached.axes) {
+    cached.sweepAxes = cached.axes
+    return cached.axes
+  }
   const axes: Vector2[] = []
   for (let index = 0; index < vertices.length; index += 1) {
     const edge = subtract(
@@ -118,10 +122,15 @@ function axesOf(vertices: readonly Vector2[]) {
     axes.push(axis)
   }
   cached.sweepAxes = axes
+  cached.axes = axes
   return axes
 }
 
-function project(vertices: readonly Vector2[], axis: Vector2) {
+function project(
+  vertices: readonly Vector2[],
+  axis: Vector2,
+  projection: { minimum: number; maximum: number },
+) {
   let minimum = dot(vertices[0], axis)
   let maximum = minimum
   for (let index = 1; index < vertices.length; index += 1) {
@@ -130,7 +139,8 @@ function project(vertices: readonly Vector2[], axis: Vector2) {
     minimum = Math.min(minimum, value)
     maximum = Math.max(maximum, value)
   }
-  return { minimum, maximum }
+  projection.minimum = minimum
+  projection.maximum = maximum
 }
 
 function translateCollider(
@@ -156,23 +166,28 @@ function sweptBounds(
   maximumTimeSeconds: number,
 ) {
   const start = colliderBounds(collider)
-  const offset = scale(velocity, maximumTimeSeconds)
+  const offsetX = velocity.x * maximumTimeSeconds
+  const offsetY = velocity.y * maximumTimeSeconds
   return {
-    minX: Math.min(start.minX, start.minX + offset.x),
-    minY: Math.min(start.minY, start.minY + offset.y),
-    maxX: Math.max(start.maxX, start.maxX + offset.x),
-    maxY: Math.max(start.maxY, start.maxY + offset.y),
+    minX: Math.min(start.minX, start.minX + offsetX),
+    minY: Math.min(start.minY, start.minY + offsetY),
+    maxX: Math.max(start.maxX, start.maxX + offsetX),
+    maxY: Math.max(start.maxY, start.maxY + offsetY),
   }
 }
 
 function centerOf(collider: WorldConvexCollider) {
-  return scale(
+  const geometry = polygonGeometry(collider.vertices)
+  if (geometry.center) return geometry.center
+  const center = scale(
     collider.vertices.reduce(
       (sum, vertex) => add(sum, vertex),
       { x: 0, y: 0 },
     ),
     1 / collider.vertices.length,
   )
+  geometry.center = center
+  return center
 }
 
 function colliderRadius(
@@ -183,14 +198,13 @@ function colliderRadius(
   const geometry = polygonGeometry(collider.vertices)
   const cached = geometry.radius
   if (cached && cached.x === x && cached.y === y) return cached.value
-  const radius = collider.vertices.reduce(
-    (radius, vertex) =>
-      Math.max(
-        radius,
-        PortableMath.hypot(vertex.x - body.position.x, vertex.y - body.position.y),
-      ),
-    0,
-  )
+  let radius = 0
+  for (const vertex of collider.vertices) {
+    radius = Math.max(
+      radius,
+      PortableMath.hypot(vertex.x - x, vertex.y - y),
+    )
+  }
   geometry.radius = { x, y, value: radius }
   return radius
 }
@@ -239,10 +253,11 @@ function colliderAtPoseTime(
 }
 
 function maximumColliderRadius(body: SweptPoseColliderBody) {
-  return body.colliders.reduce(
-    (maximum, collider) => Math.max(maximum, colliderRadius(collider, body)),
-    0,
-  )
+  let maximum = 0
+  for (const collider of body.colliders) {
+    maximum = Math.max(maximum, colliderRadius(collider, body))
+  }
+  return maximum
 }
 
 function colliderMotionBounds(
@@ -280,21 +295,22 @@ function candidateColliderPairs(
   second: SweptPoseColliderBody,
   maximumTimeSeconds: number,
 ): PoseColliderPair[] {
-  const firstEntries = first.colliders.map((collider) => ({
-    collider,
-    bounds: colliderMotionBounds(collider, first, maximumTimeSeconds),
-  }))
-  const secondEntries = second.colliders.map((collider) => ({
-    collider,
-    bounds: colliderMotionBounds(collider, second, maximumTimeSeconds),
-  }))
+  const firstBounds = first.colliders.map((collider) =>
+    colliderMotionBounds(collider, first, maximumTimeSeconds),
+  )
+  const secondBounds = second.colliders.map((collider) =>
+    colliderMotionBounds(collider, second, maximumTimeSeconds),
+  )
   const pairs: PoseColliderPair[] = []
-  for (const firstEntry of firstEntries) {
-    for (const secondEntry of secondEntries) {
-      if (!colliderBoundsIntersect(firstEntry.bounds, secondEntry.bounds)) {
+  for (let firstIndex = 0; firstIndex < first.colliders.length; firstIndex += 1) {
+    for (let secondIndex = 0; secondIndex < second.colliders.length; secondIndex += 1) {
+      if (!colliderBoundsIntersect(firstBounds[firstIndex], secondBounds[secondIndex])) {
         continue
       }
-      pairs.push({ first: firstEntry.collider, second: secondEntry.collider })
+      pairs.push({
+        first: first.colliders[firstIndex],
+        second: second.colliders[secondIndex],
+      })
     }
   }
   return pairs.sort(
@@ -354,20 +370,10 @@ function manifoldsForPairsAtPoseTime(
   pairs: readonly PoseColliderPair[],
   timeSeconds: number,
 ): CollisionManifold[] {
-  const firstAtTime = new Map<string, WorldConvexCollider>()
-  const secondAtTime = new Map<string, WorldConvexCollider>()
   const manifolds: CollisionManifold[] = []
   for (const pair of pairs) {
-    let firstCollider = firstAtTime.get(pair.first.id)
-    if (!firstCollider) {
-      firstCollider = colliderAtPoseTime(pair.first, first, timeSeconds)
-      firstAtTime.set(pair.first.id, firstCollider)
-    }
-    let secondCollider = secondAtTime.get(pair.second.id)
-    if (!secondCollider) {
-      secondCollider = colliderAtPoseTime(pair.second, second, timeSeconds)
-      secondAtTime.set(pair.second.id, secondCollider)
-    }
+    const firstCollider = colliderAtPoseTime(pair.first, first, timeSeconds)
+    const secondCollider = colliderAtPoseTime(pair.second, second, timeSeconds)
     // A motion envelope is deliberately conservative. Reject separated poses
     // before narrowphase validation/axis construction, retaining every probe
     // time and the same canonical order for pairs that can actually touch.
@@ -675,12 +681,16 @@ export function sweepConvexColliders(
   let entryTime = 0
   let exitTime = maximumTimeSeconds
   let entryAxis: Vector2 | null = null
-  for (const axis of [
-    ...axesOf(first.vertices),
-    ...axesOf(second.vertices),
-  ]) {
-    const firstProjection = project(first.vertices, axis)
-    const secondProjection = project(second.vertices, axis)
+  const firstAxes = axesOf(first.vertices)
+  const secondAxes = axesOf(second.vertices)
+  const firstProjection = { minimum: 0, maximum: 0 }
+  const secondProjection = { minimum: 0, maximum: 0 }
+  for (let index = 0; index < firstAxes.length + secondAxes.length; index += 1) {
+    const axis = index < firstAxes.length
+      ? firstAxes[index]
+      : secondAxes[index - firstAxes.length]
+    project(first.vertices, axis, firstProjection)
+    project(second.vertices, axis, secondProjection)
     const relativeAxisVelocity = dot(relativeVelocity, axis)
     if (Math.abs(relativeAxisVelocity) <= SWEEP_EPSILON) {
       if (
@@ -746,24 +756,22 @@ export function sweepCompoundColliders(
   second: SweptColliderBody,
   maximumTimeSeconds: number,
 ) {
-  const firstSweptBounds = first.colliders.map((collider) => ({
-    collider,
-    bounds: sweptBounds(collider, first.velocity, maximumTimeSeconds),
-  }))
-  const secondSweptBounds = second.colliders.map((collider) => ({
-    collider,
-    bounds: sweptBounds(collider, second.velocity, maximumTimeSeconds),
-  }))
+  const firstSweptBounds = first.colliders.map((collider) =>
+    sweptBounds(collider, first.velocity, maximumTimeSeconds),
+  )
+  const secondSweptBounds = second.colliders.map((collider) =>
+    sweptBounds(collider, second.velocity, maximumTimeSeconds),
+  )
   let earliest: TimeOfImpact | null = null
-  for (const firstEntry of firstSweptBounds) {
-    for (const secondEntry of secondSweptBounds) {
-      if (!colliderBoundsIntersect(firstEntry.bounds, secondEntry.bounds)) {
+  for (let firstIndex = 0; firstIndex < first.colliders.length; firstIndex += 1) {
+    for (let secondIndex = 0; secondIndex < second.colliders.length; secondIndex += 1) {
+      if (!colliderBoundsIntersect(firstSweptBounds[firstIndex], secondSweptBounds[secondIndex])) {
         continue
       }
       const impact = sweepConvexColliders(
-        firstEntry.collider,
+        first.colliders[firstIndex],
         first.velocity,
-        secondEntry.collider,
+        second.colliders[secondIndex],
         second.velocity,
         maximumTimeSeconds,
       )
