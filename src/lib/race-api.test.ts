@@ -76,6 +76,47 @@ describe('raceApi', () => {
     )
   })
 
+  it('reuses a compatible track definition request in the bounded memory cache', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(SHORT_TRACK))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const [first, second] = await Promise.all([
+      raceApi.getTrack('monaco'),
+      raceApi.getTrack('monaco'),
+    ])
+
+    expect(first).toEqual(SHORT_TRACK)
+    expect(second).toBe(first)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('discards failed track requests so a retry can recover', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: 'temporary failure' }, 503))
+      .mockResolvedValueOnce(jsonResponse(SHORT_TRACK))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(raceApi.getTrack('monaco')).rejects.toThrow()
+    await expect(raceApi.getTrack('monaco')).resolves.toEqual(SHORT_TRACK)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('evicts the least recently used definition after four cached tracks', async () => {
+    const fetchMock = vi.fn().mockImplementation((requestUrl: string) => {
+      const trackId = requestUrl.split('/').at(-1) ?? 'unknown'
+      return Promise.resolve(jsonResponse({ ...SHORT_TRACK, id: trackId }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    for (const trackId of ['track-1', 'track-2', 'track-3', 'track-4', 'track-5']) {
+      await raceApi.getTrack(trackId)
+    }
+    await raceApi.getTrack('track-1')
+
+    expect(fetchMock).toHaveBeenCalledTimes(6)
+  })
+
   it('posts a contract-compatible local result with the in-memory token', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ persistedCount: 2, resultIds: ['result-1', 'result-2'] }, 201),
