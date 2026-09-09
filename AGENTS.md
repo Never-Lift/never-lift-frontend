@@ -23,6 +23,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/module-3b-authoritative-physics.md` — entrega da Parte 3b, paridade, snapshot completo e limites em relação à 3c.
 - `docs/module-3b-portability.md` — revisão aprovada 2.0.3, kernel numérico compartilhado, evidências e teste manual curto antes da 3c.
 - `docs/race-performance-2026-09-04.md` — otimizações de grid completo/split-screen, benchmarks, paridade e limites; validação manual desta rodada pendente.
+- `docs/race-performance-worker-2026-09-08.md` — worker local, colisões e caches equivalentes, testes e medições; mínimo de 40 FPS ainda não comprovado e validação manual pendente.
 - `docs/module-3-online-decisions.md` — registro aprovado das 80 decisões de produto e arquitetura para o online; consultar antes de implementar o Módulo 3.
 - `docs/contracts/module-2-shared-contracts.md`, `docs/contracts/module-2-physics-v2-proposal.md` e `contracts/module-2/v1/`/`v2/` — decisões e contratos publicados do Módulo 2. O `v1` é histórico imutável; o `v2` é a linha executável da Parte 2d.
 
@@ -90,4 +91,10 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 
 > Complemento local 2+20: testes prolongados revelaram desempenho insuficiente em congestionamentos de Mônaco. Ajustes adicionais ajudam, mas **não declarar 22 carros no split-screen como desempenho aprovado**. Resultados e limites em `docs/race-performance-2026-09-04.md`.
 
+> Rodada perceptiva de 09/09/2026: cache raster 2× limitado a carros remotos em grids densos levou os casos refinados de Las Vegas, Mônaco e Spa com 22 carros a 57,9–59,6 FPS médios e tempo simulado/real de 100% no hardware de teste. Física, pistas, câmera e carros focais permanecem inalterados; a imagem remota é perceptivamente equivalente, não RGBA idêntica. Validação manual pendente antes de declarar o desempenho aprovado no equipamento do autor. Evidências em `docs/race-performance-worker-2026-09-08.md`.
+
+> Revisão equivalente de 09/09/2026: física/colisões e alocações do modelo visual foram otimizadas sem diferenças físicas ou RGBA. A medição final manteve a simulação em tempo real e registrou 57,6 FPS em Mônaco solo 1+21, mas somente 31,5 FPS em Mônaco local 2+20 e 30,7 FPS em Spa local 2+20 noturna. A meta universal de 40 FPS continua pendente; detalhes e ponto de decisão em `docs/race-performance-worker-2026-09-08.md`.
+
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.
+
+> Rodada de 08/09/2026: solo/local usam o mesmo motor 120 Hz em Web Worker, com mensagens limitadas e renderização desacoplada. Colisões e caches foram otimizados sem mudar física 2.0.3 nem design. Ver `docs/race-performance-worker-2026-09-08.md`: média não equivale a mínimo de 40 FPS; validação manual pendente. Nenhuma promoção à main nem implementação do M3c nesta rodada.

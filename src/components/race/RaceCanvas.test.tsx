@@ -26,6 +26,7 @@ import {
 } from '@/components/race/RaceCanvas'
 import { RaceEngine } from '@/race/RaceEngine'
 import { LocalRaceSession } from '@/race/LocalRaceSession'
+import { LocalRaceRuntime } from '@/race/LocalRaceRuntime'
 import { SHORT_TRACK } from '@/test/track-fixtures'
 
 afterEach(() => {
@@ -33,6 +34,7 @@ afterEach(() => {
   rendererCapture.options.length = 0
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 function telemetry(
@@ -96,6 +98,32 @@ describe('DriverTelemetryCard', () => {
 })
 
 describe('RaceCanvas layout', () => {
+  it('dismisses runtime failure after five seconds and does not carry it into a restarted race', () => {
+    vi.useFakeTimers()
+    let frame: FrameRequestCallback = () => {}
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback) => { frame = callback; return 1 }))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const createEngine = () => new RaceEngine({ track: SHORT_TRACK, mode: 'solo', racers: [
+      { id: 'player-1', name: 'P1', kind: 'human', color: '#fff' },
+    ] })
+    const failure = vi.spyOn(LocalRaceRuntime.prototype, 'getFailure').mockReturnValue('Simulação interrompida')
+    const props = { mode: 'solo' as const, timeOfDay: 'day' as const, onAbort: vi.fn(), onRestart: vi.fn(), onFinished: vi.fn() }
+    const { rerender } = render(<RaceCanvas {...props} engine={createEngine()} />)
+    act(() => frame(0))
+    expect(screen.getByRole('alert')).toHaveTextContent('Simulação interrompida')
+    act(() => vi.advanceTimersByTime(5000))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    rerender(<RaceCanvas {...props} engine={createEngine()} />)
+    act(() => frame(0))
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar aviso' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    rerender(<RaceCanvas {...props} engine={createEngine()} />)
+    act(() => frame(0))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    failure.mockReturnValue(null)
+    rerender(<RaceCanvas {...props} engine={createEngine()} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
   it('applies the dense-grid renderer profile when a solo race has 22 cars', () => {
     vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
     vi.stubGlobal('cancelAnimationFrame', vi.fn())

@@ -37,6 +37,23 @@ export type DrawVehicleVisualOptions = {
   shadowAngleRadians?: number
   shadowDistanceToWidthRatio?: number
   shadowOpacity?: number
+  drawShadow?: boolean
+}
+
+export type DrawVehicleShadowOptions = Pick<
+  DrawVehicleVisualOptions,
+  | 'x'
+  | 'y'
+  | 'relativeYawRadians'
+  | 'length'
+  | 'width'
+  | 'groundDepthScale'
+  | 'heightScale'
+  | 'shadowAngleRadians'
+  | 'shadowDistanceToWidthRatio'
+  | 'shadowOpacity'
+> & {
+  shadowDistancePixels?: number
 }
 
 type FormulaSection = {
@@ -102,6 +119,104 @@ const FORMULA_WHEEL_SPECS: FormulaWheelSpec[] = [
     heightSize: 0.38,
   },
 ]
+const VEHICLE_SIDES = [-1, 1] as const
+const COCKPIT_SURROUND: VehiclePoint3[] = [
+  { longitudinal: 0.085, lateral: 0, height: 0.43 },
+  { longitudinal: 0.045, lateral: 0.085, height: 0.45 },
+  { longitudinal: -0.08, lateral: 0.132, height: 0.47 },
+  { longitudinal: -0.18, lateral: 0.12, height: 0.48 },
+  { longitudinal: -0.255, lateral: 0, height: 0.49 },
+  { longitudinal: -0.18, lateral: -0.12, height: 0.48 },
+  { longitudinal: -0.08, lateral: -0.132, height: 0.47 },
+  { longitudinal: 0.045, lateral: -0.085, height: 0.45 },
+]
+const COCKPIT_OPENING: VehiclePoint3[] = [
+  { longitudinal: 0.045, lateral: 0, height: 0.475 },
+  { longitudinal: 0.005, lateral: 0.06, height: 0.49 },
+  { longitudinal: -0.105, lateral: 0.092, height: 0.505 },
+  { longitudinal: -0.19, lateral: 0.075, height: 0.515 },
+  { longitudinal: -0.225, lateral: 0, height: 0.52 },
+  { longitudinal: -0.19, lateral: -0.075, height: 0.515 },
+  { longitudinal: -0.105, lateral: -0.092, height: 0.505 },
+  { longitudinal: 0.005, lateral: -0.06, height: 0.49 },
+]
+const LIVERY_STRIPE: VehiclePoint3[] = [
+  { longitudinal: 0.48, lateral: -0.008, height: 0.145 },
+  { longitudinal: 0.48, lateral: 0.008, height: 0.145 },
+  { longitudinal: 0.14, lateral: 0.034, height: 0.315 },
+  { longitudinal: -0.04, lateral: 0.045, height: 0.435 },
+  { longitudinal: -0.39, lateral: 0.026, height: 0.315 },
+  { longitudinal: -0.39, lateral: -0.026, height: 0.315 },
+  { longitudinal: -0.04, lateral: -0.045, height: 0.435 },
+  { longitudinal: 0.14, lateral: -0.034, height: 0.315 },
+]
+const LIVERY_ACCENT_STRIPE: VehiclePoint3[] = [
+  { longitudinal: 0.488, lateral: -0.004, height: 0.152 },
+  { longitudinal: 0.488, lateral: 0.004, height: 0.152 },
+  { longitudinal: 0.08, lateral: 0.011, height: 0.39 },
+  { longitudinal: -0.42, lateral: 0.008, height: 0.31 },
+  { longitudinal: -0.42, lateral: -0.008, height: 0.31 },
+  { longitudinal: 0.08, lateral: -0.011, height: 0.39 },
+]
+const STEERING_WHEEL: VehiclePoint3[] = [
+  { longitudinal: -0.02, lateral: -0.045, height: 0.515 },
+  { longitudinal: -0.015, lateral: 0.045, height: 0.515 },
+  { longitudinal: 0.012, lateral: 0.035, height: 0.54 },
+  { longitudinal: 0.008, lateral: -0.035, height: 0.54 },
+]
+const GROUND_SHADOW_FOOTPRINT: VehiclePoint3[] = [
+  { longitudinal: 0.5, lateral: -0.51, height: 0 },
+  { longitudinal: 0.5, lateral: 0.51, height: 0 },
+  { longitudinal: -0.4, lateral: 0.56, height: 0 },
+  { longitudinal: -0.5, lateral: 0.47, height: 0 },
+  { longitudinal: -0.5, lateral: -0.47, height: 0 },
+  { longitudinal: -0.4, lateral: -0.56, height: 0 },
+]
+const HELMET_CENTER: VehiclePoint3 = { longitudinal: -0.11, lateral: 0, height: 0.545 }
+const VISOR_CENTER: VehiclePoint3 = { longitudinal: -0.083, lateral: 0, height: 0.56 }
+const HALO_FRONT: VehiclePoint3 = { longitudinal: 0.055, lateral: 0, height: 0.595 }
+const SUSPENSION_LINES = (() => {
+  const lines: Array<{
+    from: VehiclePoint3
+    to: VehiclePoint3
+    previewColor: boolean
+    minimumWidth: number
+    widthRatio: number
+  }> = []
+  const arms = [
+    { axle: 0.27, bodyFront: 0.2, bodyRear: 0.11, bodyHalfWidth: 0.115, wheelHalfWidth: 0.33 },
+    { axle: -0.31, bodyFront: -0.19, bodyRear: -0.35, bodyHalfWidth: 0.19, wheelHalfWidth: 0.3 },
+  ]
+  for (const arm of arms) {
+    for (const side of VEHICLE_SIDES) {
+      for (const bodyLongitudinal of [arm.bodyFront, arm.bodyRear]) {
+        lines.push({
+          from: { longitudinal: bodyLongitudinal, lateral: side * arm.bodyHalfWidth, height: 0.125 },
+          to: {
+            longitudinal: arm.axle + (bodyLongitudinal === arm.bodyFront ? 0.022 : -0.022),
+            lateral: side * arm.wheelHalfWidth,
+            height: 0.17,
+          },
+          previewColor: false,
+          minimumWidth: 0.65,
+          widthRatio: 0.017,
+        })
+      }
+      lines.push({
+        from: {
+          longitudinal: (arm.bodyFront + arm.bodyRear) / 2,
+          lateral: side * (arm.bodyHalfWidth - 0.025),
+          height: 0.09,
+        },
+        to: { longitudinal: arm.axle, lateral: side * arm.wheelHalfWidth, height: 0.22 },
+        previewColor: true,
+        minimumWidth: 0.5,
+        widthRatio: 0.012,
+      })
+    }
+  }
+  return lines
+})()
 const FORMULA_MODEL_CACHE = new Map<
   string,
   ReturnType<typeof createFormulaSurfaces>
@@ -324,17 +439,6 @@ function mixHexColor(color: string, target: string, amount: number) {
     sourceChannels.green,
     targetChannels.green,
   )}${channel(sourceChannels.blue, targetChannels.blue)}`
-}
-
-function tracePolygon(
-  context: CanvasRenderingContext2D,
-  points: Array<{ x: number; y: number }>,
-) {
-  if (points.length === 0) return
-  context.beginPath()
-  context.moveTo(points[0].x, points[0].y)
-  for (let index = 1; index < points.length; index++) context.lineTo(points[index].x, points[index].y)
-  context.closePath()
 }
 
 /** Same continuous projection without allocating a screen-point array per face. */
@@ -953,14 +1057,11 @@ function paintSurfaces(
       SURFACE_ORDER_BUCKET_COUNT) %
     SURFACE_ORDER_BUCKET_COUNT
   const orderAngle = (orderBucket / SURFACE_ORDER_BUCKET_COUNT) * FULL_CIRCLE
-  const orderKey = [
-    orderBucket,
-    projection.length / projection.width,
-    projection.groundDepthScale,
-    projection.heightScale,
-  ]
-    .map((value) => value.toFixed(4))
-    .join(':')
+  const orderKey = `${orderBucket}:${(
+    projection.length / projection.width
+  ).toFixed(4)}:${projection.groundDepthScale.toFixed(
+    4,
+  )}:${projection.heightScale.toFixed(4)}`
   let ordered = orders.get(orderKey)
   if (!ordered) {
     const orderProjection: VehicleProjection = {
@@ -969,26 +1070,36 @@ function paintSurfaces(
       sinYaw: Math.sin(orderAngle),
       cosYaw: Math.cos(orderAngle),
     }
-    ordered = [...surfaces].sort((first, second) => {
-      const averageDepth = (surface: FormulaSurface) =>
-        surface.points.reduce(
-          (sum, point) => sum + cameraDepth(point, orderProjection),
-          0,
-        ) / surface.points.length
-      return averageDepth(second) - averageDepth(first)
-    })
+    // Exactly the same depth and stable order, computed once per face rather
+    // than again for every comparison made by Array.sort.
+    ordered = surfaces.map(surface => ({ surface, depth:
+      surface.points.reduce((sum, point) => sum + cameraDepth(point, orderProjection), 0) / surface.points.length,
+    })).sort((first, second) => second.depth - first.depth).map(entry => entry.surface)
     orders.set(orderKey, ordered)
   }
 
+  let fillStyle: string | undefined
+  let strokeStyle: string | undefined
+  let lineWidth: number | undefined
+  const defaultLineWidth = Math.max(0.45, projection.width * 0.014)
   for (const surface of ordered) {
     if (surface.visibility === 'preview' && detail !== 'preview') continue
     traceVehiclePolygon(context, surface.points, projection)
-    context.fillStyle = surface.fill
+    if (fillStyle !== surface.fill) {
+      fillStyle = surface.fill
+      context.fillStyle = fillStyle
+    }
     context.fill()
     if (surface.stroke) {
-      context.strokeStyle = surface.stroke
-      context.lineWidth =
-        surface.lineWidth ?? Math.max(0.45, projection.width * 0.014)
+      if (strokeStyle !== surface.stroke) {
+        strokeStyle = surface.stroke
+        context.strokeStyle = strokeStyle
+      }
+      const nextLineWidth = surface.lineWidth ?? defaultLineWidth
+      if (lineWidth !== nextLineWidth) {
+        lineWidth = nextLineWidth
+        context.lineWidth = lineWidth
+      }
       context.stroke()
     }
   }
@@ -1018,61 +1129,16 @@ function paintSuspension(
   detail: VehicleVisualDetail,
 ) {
   context.lineCap = 'round'
-  const arms = [
-    {
-      axle: 0.27,
-      bodyFront: 0.2,
-      bodyRear: 0.11,
-      bodyHalfWidth: 0.115,
-      wheelHalfWidth: 0.33,
-    },
-    {
-      axle: -0.31,
-      bodyFront: -0.19,
-      bodyRear: -0.35,
-      bodyHalfWidth: 0.19,
-      wheelHalfWidth: 0.3,
-    },
-  ]
-  for (const arm of arms) {
-    for (const side of [-1, 1]) {
-      for (const bodyLongitudinal of [arm.bodyFront, arm.bodyRear]) {
-        strokeVehicleLine(
-          context,
-          projection,
-          {
-            longitudinal: bodyLongitudinal,
-            lateral: side * arm.bodyHalfWidth,
-            height: 0.125,
-          },
-          {
-            longitudinal:
-              arm.axle +
-              (bodyLongitudinal === arm.bodyFront ? 0.022 : -0.022),
-            lateral: side * arm.wheelHalfWidth,
-            height: 0.17,
-          },
-          CARBON_HIGHLIGHT_COLOR,
-          Math.max(0.65, projection.width * 0.017),
-        )
-      }
-      strokeVehicleLine(
-        context,
-        projection,
-        {
-          longitudinal: (arm.bodyFront + arm.bodyRear) / 2,
-          lateral: side * (arm.bodyHalfWidth - 0.025),
-          height: 0.09,
-        },
-        {
-          longitudinal: arm.axle,
-          lateral: side * arm.wheelHalfWidth,
-          height: 0.22,
-        },
-        detail === 'preview' ? '#778696' : CARBON_COLOR,
-        Math.max(0.5, projection.width * 0.012),
-      )
-    }
+  for (const line of SUSPENSION_LINES) {
+    strokeVehicleLine(
+      context,
+      projection,
+      line.from,
+      line.to,
+      line.previewColor && detail === 'preview' ? '#778696' :
+        line.previewColor ? CARBON_COLOR : CARBON_HIGHLIGHT_COLOR,
+      Math.max(line.minimumWidth, projection.width * line.widthRatio),
+    )
   }
 }
 
@@ -1089,76 +1155,23 @@ function paintCockpitAndLivery(
   detail: VehicleVisualDetail,
   damage: DamageKind,
 ) {
-  const cockpitSurround = [
-    { longitudinal: 0.085, lateral: 0, height: 0.43 },
-    { longitudinal: 0.045, lateral: 0.085, height: 0.45 },
-    { longitudinal: -0.08, lateral: 0.132, height: 0.47 },
-    { longitudinal: -0.18, lateral: 0.12, height: 0.48 },
-    { longitudinal: -0.255, lateral: 0, height: 0.49 },
-    { longitudinal: -0.18, lateral: -0.12, height: 0.48 },
-    { longitudinal: -0.08, lateral: -0.132, height: 0.47 },
-    { longitudinal: 0.045, lateral: -0.085, height: 0.45 },
-  ]
-  tracePolygon(
-    context,
-    cockpitSurround.map((point) => projectVehiclePoint(point, projection)),
-  )
+  traceVehiclePolygon(context, COCKPIT_SURROUND, projection)
   context.fillStyle = colors.accentColor
   context.fill()
 
-  const cockpit = [
-    { longitudinal: 0.045, lateral: 0, height: 0.475 },
-    { longitudinal: 0.005, lateral: 0.06, height: 0.49 },
-    { longitudinal: -0.105, lateral: 0.092, height: 0.505 },
-    { longitudinal: -0.19, lateral: 0.075, height: 0.515 },
-    { longitudinal: -0.225, lateral: 0, height: 0.52 },
-    { longitudinal: -0.19, lateral: -0.075, height: 0.515 },
-    { longitudinal: -0.105, lateral: -0.092, height: 0.505 },
-    { longitudinal: 0.005, lateral: -0.06, height: 0.49 },
-  ]
-  tracePolygon(
-    context,
-    cockpit.map((point) => projectVehiclePoint(point, projection)),
-  )
+  traceVehiclePolygon(context, COCKPIT_OPENING, projection)
   context.fillStyle = COCKPIT_COLOR
   context.fill()
 
-  const stripe = [
-    { longitudinal: 0.48, lateral: -0.008, height: 0.145 },
-    { longitudinal: 0.48, lateral: 0.008, height: 0.145 },
-    { longitudinal: 0.14, lateral: 0.034, height: 0.315 },
-    { longitudinal: -0.04, lateral: 0.045, height: 0.435 },
-    { longitudinal: -0.39, lateral: 0.026, height: 0.315 },
-    { longitudinal: -0.39, lateral: -0.026, height: 0.315 },
-    { longitudinal: -0.04, lateral: -0.045, height: 0.435 },
-    { longitudinal: 0.14, lateral: -0.034, height: 0.315 },
-  ]
-  tracePolygon(
-    context,
-    stripe.map((point) => projectVehiclePoint(point, projection)),
-  )
+  traceVehiclePolygon(context, LIVERY_STRIPE, projection)
   context.fillStyle = colors.secondaryColor
   context.fill()
 
-  const accentStripe = [
-    { longitudinal: 0.488, lateral: -0.004, height: 0.152 },
-    { longitudinal: 0.488, lateral: 0.004, height: 0.152 },
-    { longitudinal: 0.08, lateral: 0.011, height: 0.39 },
-    { longitudinal: -0.42, lateral: 0.008, height: 0.31 },
-    { longitudinal: -0.42, lateral: -0.008, height: 0.31 },
-    { longitudinal: 0.08, lateral: -0.011, height: 0.39 },
-  ]
-  tracePolygon(
-    context,
-    accentStripe.map((point) => projectVehiclePoint(point, projection)),
-  )
+  traceVehiclePolygon(context, LIVERY_ACCENT_STRIPE, projection)
   context.fillStyle = colors.accentColor
   context.fill()
 
-  const helmet = projectVehiclePoint(
-    { longitudinal: -0.11, lateral: 0, height: 0.545 },
-    projection,
-  )
+  const helmet = projectVehiclePoint(HELMET_CENTER, projection)
   context.beginPath()
   context.ellipse(
     helmet.x,
@@ -1175,10 +1188,7 @@ function paintCockpitAndLivery(
   context.lineWidth = Math.max(0.65, projection.width * 0.014)
   context.stroke()
 
-  const visor = projectVehiclePoint(
-    { longitudinal: -0.083, lateral: 0, height: 0.56 },
-    projection,
-  )
+  const visor = projectVehiclePoint(VISOR_CENTER, projection)
   context.beginPath()
   context.ellipse(
     visor.x,
@@ -1192,17 +1202,12 @@ function paintCockpitAndLivery(
   context.fillStyle = HELMET_VISOR_COLOR
   context.fill()
 
-  const haloFront: VehiclePoint3 = {
-    longitudinal: 0.055,
-    lateral: 0,
-    height: 0.595,
-  }
-  for (const side of [-1, 1]) {
+  for (const side of VEHICLE_SIDES) {
     strokeVehicleLine(
       context,
       projection,
       { longitudinal: -0.2, lateral: side * 0.12, height: 0.55 },
-      haloFront,
+      HALO_FRONT,
       colors.baseColor,
       Math.max(1, projection.width * 0.03),
     )
@@ -1232,7 +1237,7 @@ function paintCockpitAndLivery(
     Math.max(0.45, projection.width * 0.01),
   )
 
-  for (const side of [-1, 1]) {
+  for (const side of VEHICLE_SIDES) {
     const mirror = projectVehiclePoint(
       { longitudinal: 0.015, lateral: side * 0.205, height: 0.49 },
       projection,
@@ -1254,7 +1259,7 @@ function paintCockpitAndLivery(
     context.stroke()
   }
 
-  for (const side of [-1, 1]) {
+  for (const side of VEHICLE_SIDES) {
     strokeVehicleLine(
       context,
       projection,
@@ -1266,23 +1271,14 @@ function paintCockpitAndLivery(
   }
 
   if (detail === 'preview') {
-    const steeringWheel = [
-      { longitudinal: -0.02, lateral: -0.045, height: 0.515 },
-      { longitudinal: -0.015, lateral: 0.045, height: 0.515 },
-      { longitudinal: 0.012, lateral: 0.035, height: 0.54 },
-      { longitudinal: 0.008, lateral: -0.035, height: 0.54 },
-    ]
-    tracePolygon(
-      context,
-      steeringWheel.map((point) => projectVehiclePoint(point, projection)),
-    )
+    traceVehiclePolygon(context, STEERING_WHEEL, projection)
     context.fillStyle = CARBON_HIGHLIGHT_COLOR
     context.fill()
     context.strokeStyle = colors.accentColor
     context.lineWidth = Math.max(0.45, projection.width * 0.008)
     context.stroke()
 
-    for (const side of [-1, 1]) {
+    for (const side of VEHICLE_SIDES) {
       strokeVehicleLine(
         context,
         projection,
@@ -1323,27 +1319,57 @@ function paintGroundShadow(
   shadowDistance: number,
   shadowOpacity: number,
 ) {
-  const footprint: VehiclePoint3[] = [
-    { longitudinal: 0.5, lateral: -0.51, height: 0 },
-    { longitudinal: 0.5, lateral: 0.51, height: 0 },
-    { longitudinal: -0.4, lateral: 0.56, height: 0 },
-    { longitudinal: -0.5, lateral: 0.47, height: 0 },
-    { longitudinal: -0.5, lateral: -0.47, height: 0 },
-    { longitudinal: -0.4, lateral: -0.56, height: 0 },
-  ]
   context.save()
   context.translate(
     Math.cos(shadowAngleRadians) * shadowDistance,
     Math.sin(shadowAngleRadians) * shadowDistance,
   )
-  tracePolygon(
-    context,
-    footprint.map((point) => projectVehiclePoint(point, projection)),
-  )
+  traceVehiclePolygon(context, GROUND_SHADOW_FOOTPRINT, projection)
   context.fillStyle = `rgba(0, 0, 0, ${shadowOpacity})`
   context.shadowColor = `rgba(0, 0, 0, ${shadowOpacity * 0.7})`
   context.shadowBlur = Math.max(2, projection.width * 0.12)
   context.fill()
+  context.restore()
+}
+
+export function drawVehicleShadowVisual(
+  context: CanvasRenderingContext2D,
+  {
+    x,
+    y,
+    relativeYawRadians,
+    length,
+    width,
+    groundDepthScale = CAMERA_GROUND_DEPTH_SCALE,
+    heightScale = CAMERA_HEIGHT_SCALE,
+    shadowAngleRadians = VEHICLE_SHADOW_SETTINGS.day.worldAngleRadians,
+    shadowDistanceToWidthRatio =
+      VEHICLE_SHADOW_SETTINGS.day.distanceToWidthRatio,
+    shadowOpacity = VEHICLE_SHADOW_SETTINGS.day.opacity,
+    shadowDistancePixels,
+  }: DrawVehicleShadowOptions,
+) {
+  if (length <= 0 || width <= 0 || shadowOpacity <= 0) return
+  const continuousYaw = normalizeSignedAngle(relativeYawRadians)
+  const projection: VehicleProjection = {
+    relativeYawRadians: continuousYaw,
+    length,
+    width,
+    groundDepthScale,
+    heightScale,
+    sinYaw: Math.sin(continuousYaw),
+    cosYaw: Math.cos(continuousYaw),
+  }
+  context.save()
+  context.translate(x, y)
+  paintGroundShadow(
+    context,
+    projection,
+    shadowAngleRadians,
+    shadowDistancePixels ??
+      Math.max(1.5, width * shadowDistanceToWidthRatio),
+    shadowOpacity,
+  )
   context.restore()
 }
 
@@ -1368,6 +1394,7 @@ export function drawVehicleVisual(
     shadowDistanceToWidthRatio =
       VEHICLE_SHADOW_SETTINGS.day.distanceToWidthRatio,
     shadowOpacity = VEHICLE_SHADOW_SETTINGS.day.opacity,
+    drawShadow = true,
   }: DrawVehicleVisualOptions,
 ) {
   if (length <= 0 || width <= 0) return
@@ -1393,13 +1420,15 @@ export function drawVehicleVisual(
 
   context.save()
   context.translate(x, y)
-  paintGroundShadow(
-    context,
-    projection,
-    shadowAngleRadians,
-    Math.max(1.5, width * shadowDistanceToWidthRatio),
-    shadowOpacity,
-  )
+  if (drawShadow && shadowOpacity > 0) {
+    paintGroundShadow(
+      context,
+      projection,
+      shadowAngleRadians,
+      Math.max(1.5, width * shadowDistanceToWidthRatio),
+      shadowOpacity,
+    )
+  }
   paintSuspension(context, projection, detail)
   paintSurfaces(context, colors.surfaces, projection, detail)
   paintCockpitAndLivery(context, projection, colors, detail, damage)

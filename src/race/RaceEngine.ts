@@ -1,4 +1,5 @@
 import * as PortableMath from '@/race/portable-math'
+import { VehicleBroadphase } from '@/race/vehicle-broadphase'
 
 import {
   resolveVehicleBarrierCollisions,
@@ -16,7 +17,7 @@ import {
   normalizeAngle,
   signedAngleDelta,
 } from '@/race/math'
-import { crossesGate, TrackGeometry } from '@/race/TrackGeometry'
+import { crossesGate, TrackGeometry, type TrackProjection } from '@/race/TrackGeometry'
 import type {
   DriverInput,
   InterpolatedVehicleState,
@@ -120,7 +121,10 @@ export class RaceEngine {
   private status: RaceStatus = 'running'
   private readonly geometry: TrackGeometry
   private readonly vehicles: VehicleState[]
+  private readonly humanVehicles: VehicleState[]
+  private readonly postIntegrationProjections: TrackProjection[] = []
   private readonly inputs = new Map<string, DriverInput>()
+  private readonly broadphase = new VehicleBroadphase()
 
   constructor(options: RaceEngineOptions) {
     if (
@@ -145,6 +149,9 @@ export class RaceEngine {
       )
     this.vehicles = options.racers.map((racer, index) =>
       createVehicle(racer, index, this.geometry),
+    )
+    this.humanVehicles = this.vehicles.filter(
+      (vehicle) => vehicle.kind === 'human',
     )
     for (const vehicle of this.vehicles) {
       this.inputs.set(vehicle.id, { ...NEUTRAL_INPUT })
@@ -191,81 +198,113 @@ export class RaceEngine {
   stepFixed() {
     if (this.status === 'finished') return
 
-    for (const vehicle of this.vehicles) {
-      vehicle.previousPosition = { ...vehicle.position }
+    let barrierRecheckMask = 0
+    for (let index = 0; index < this.vehicles.length; index += 1) {
+      const vehicle = this.vehicles[index]
+      vehicle.previousPosition.x = vehicle.position.x
+      vehicle.previousPosition.y = vehicle.position.y
       vehicle.previousAngle = vehicle.angle
 
+      const currentProjection = this.geometry.project(
+        vehicle.position,
+        vehicle.trackDistanceMeters,
+      )
       const input = vehicle.finished
-        ? { ...NEUTRAL_INPUT }
+        ? NEUTRAL_INPUT
         : vehicle.kind === 'bot'
-          ? this.createBotInput(vehicle)
+          ? this.createBotInput(vehicle, currentProjection)
           : (this.inputs.get(vehicle.id) ?? NEUTRAL_INPUT)
       const surface = this.geometry.getSurfaceAt(
         vehicle.position,
         vehicle.trackDistanceMeters,
+        currentProjection,
       )
       integrateVehicle(vehicle, input, surface, PHYSICS_STEP_SECONDS)
-      resolveVehicleBarrierCollisions(
-        vehicle,
-        this.geometry,
-        PHYSICS_STEP_SECONDS,
-      )
+      if (
+        resolveVehicleBarrierCollisions(
+          vehicle,
+          this.geometry,
+          PHYSICS_STEP_SECONDS,
+        )
+      ) {
+        barrierRecheckMask |= 1 << index
+      }
       const trackProjection = this.geometry.project(
         vehicle.position,
         vehicle.trackDistanceMeters,
       )
       vehicle.trackDistanceMeters = trackProjection.distanceMeters
       vehicle.trackLayer = trackProjection.elevationLayer
+      this.postIntegrationProjections[index] = trackProjection
     }
 
+    this.broadphase.rebuild(this.vehicles)
     for (let firstIndex = 0; firstIndex < this.vehicles.length; firstIndex += 1) {
+      let candidates = this.broadphase.candidates(firstIndex)
       for (
         let secondIndex = firstIndex + 1;
         secondIndex < this.vehicles.length;
         secondIndex += 1
       ) {
         if (
+          (candidates & (1 << secondIndex)) === 0 ||
           this.vehicles[firstIndex].trackLayer !==
           this.vehicles[secondIndex].trackLayer
         ) {
           continue
         }
-        resolveVehicleCollision(
+        const collided = resolveVehicleCollision(
           this.vehicles[firstIndex],
           this.vehicles[secondIndex],
           PHYSICS_STEP_SECONDS,
         )
+        if (collided) {
+          barrierRecheckMask |= (1 << firstIndex) | (1 << secondIndex)
+          this.broadphase.update(firstIndex, this.vehicles[firstIndex])
+          this.broadphase.update(secondIndex, this.vehicles[secondIndex])
+          candidates = this.broadphase.candidates(firstIndex)
+        }
       }
     }
 
     // A car-car impulse can move a vehicle into a nearby canonical wall face.
     // Resolve only the resulting overlap here; replaying the whole swept step
     // would apply the vehicle's already-consumed motion a second time.
-    for (const vehicle of this.vehicles) {
-      resolveVehicleBarrierCollisions(vehicle, this.geometry, 0)
+    for (let index = 0; index < this.vehicles.length; index += 1) {
+      if ((barrierRecheckMask & (1 << index)) !== 0) {
+        resolveVehicleBarrierCollisions(this.vehicles[index], this.geometry, 0)
+      }
     }
 
     this.simulationTimeSeconds += PHYSICS_STEP_SECONDS
-    for (const vehicle of this.vehicles) this.updateProgress(vehicle)
+    for (let index = 0; index < this.vehicles.length; index += 1) {
+      this.updateProgress(
+        this.vehicles[index],
+        (barrierRecheckMask & (1 << index)) === 0
+          ? this.postIntegrationProjections[index]
+          : undefined,
+      )
+    }
 
-    const humanRacers = this.vehicles.filter((vehicle) => vehicle.kind === 'human')
     if (
-      humanRacers.every((vehicle) => vehicle.finished) ||
+      this.humanVehicles.every((vehicle) => vehicle.finished) ||
       this.simulationTimeSeconds >= this.maximumRaceSeconds
     ) {
       this.status = 'finished'
     }
   }
 
-  private createBotInput(vehicle: VehicleState): DriverInput {
+  private createBotInput(
+    vehicle: VehicleState,
+    knownProjection?: TrackProjection,
+  ): DriverInput {
     const difficultyId = vehicle.botDifficulty ?? 'normal'
     const difficulty = PHYSICS_CONSTANTS.bots[difficultyId]
     const planner = PHYSICS_CONSTANTS.bots.planner
     const speed = magnitude(vehicle.velocity)
-    const projection = this.geometry.project(
-      vehicle.position,
-      vehicle.trackDistanceMeters,
-    )
+    const projection =
+      knownProjection ??
+      this.geometry.project(vehicle.position, vehicle.trackDistanceMeters)
     const steeringLookAheadMeters =
       planner.steeringLookAheadBaseMeters +
       speed * planner.steeringLookAheadSpeedSeconds +
@@ -353,7 +392,10 @@ export class RaceEngine {
     }
   }
 
-  private updateProgress(vehicle: VehicleState) {
+  private updateProgress(
+    vehicle: VehicleState,
+    knownProjection?: TrackProjection,
+  ) {
     if (vehicle.finished) return
 
     const checkpoints = this.track.checkpoints
@@ -375,10 +417,9 @@ export class RaceEngine {
       )
     }
 
-    const projection = this.geometry.project(
-      vehicle.position,
-      vehicle.trackDistanceMeters,
-    )
+    const projection =
+      knownProjection ??
+      this.geometry.project(vehicle.position, vehicle.trackDistanceMeters)
     const previousGateDistance =
       vehicle.nextCheckpointIndex === 0
         ? 0

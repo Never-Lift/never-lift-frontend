@@ -29,6 +29,7 @@ import {
 import { PHYSICS_CONSTANTS } from '@/race/constants'
 import type { LocalRaceOverlayState } from '@/race/LocalRaceSession'
 import { magnitude } from '@/race/math'
+import { screenBoundsVisible, screenPathVisible } from '@/race/screen-culling'
 import type { RaceEngine } from '@/race/RaceEngine'
 import {
   classifySceneryKind,
@@ -43,8 +44,13 @@ import {
 import type { InterpolatedVehicleState, Vector2 } from '@/race/types'
 import {
   drawVehicleVisual,
+  type DrawVehicleVisualOptions,
   vehicleYawRelativeToCamera,
 } from '@/race/vehicle-visuals'
+import {
+  VehicleSpriteCache,
+  type VehicleSpriteCacheStats,
+} from '@/race/VehicleSpriteCache'
 import {
   AMBIENT_PARTICLE_BUDGET,
   DEFAULT_GRAPHICS_QUALITY,
@@ -80,10 +86,23 @@ type PitInfrastructureGeometry = {
   garages: PitGarageVisualGeometry[]
 }
 
+type BarrierDraw = {
+  path: TrackBarrierPathPoint[]
+  barrier: TrackDefinition['barrierGeometry']['segments'][number]
+  startCap: boolean
+  endCap: boolean
+}
+type FenceDraw = {
+  path: TrackBarrierPathPoint[]
+  offsetPath: Vector2[]
+  style: TrackFenceVisualStyle
+}
+
 export type RenderStats = {
   totalChunks: number
   visibleChunksByViewport: number[]
   ambientParticlesByViewport: number[]
+  vehicleSpriteCache?: VehicleSpriteCacheStats
 }
 
 export type RaceRendererOptions = {
@@ -91,6 +110,7 @@ export type RaceRendererOptions = {
   quality?: GraphicsQuality
   splitScreenAspectRatio?: () => number
   pixelRatioCap?: number
+  vehicleSpriteCache?: boolean
 }
 
 const SURFACE_COLORS: Record<TrackSurfaceMaterial, string> = {
@@ -415,6 +435,7 @@ export function sortVehiclesByProjectedDepth(
 export class RaceRenderer {
   private readonly outputContext: CanvasRenderingContext2D
   private activeContext: CanvasRenderingContext2D
+  private drawingViewport?: Viewport
   private readonly canvas: HTMLCanvasElement
   private readonly track: TrackDefinition
   private readonly geometry: TrackGeometry
@@ -426,6 +447,12 @@ export class RaceRenderer {
   private readonly suzukaCrossings: Vector2[]
   private readonly chunkPoints = new Map<number, TrackDefinition['centerline']>()
   private readonly chunkSections = new Map<number, ElevationTrackSection[]>()
+  private readonly trackRanges = new WeakMap<TrackDefinition['centerline'], Map<string, TrackDefinition['centerline']>>()
+  private readonly trackOffsets = new WeakMap<TrackDefinition['centerline'][number], Map<string, Vector2>>()
+  private readonly minimapPaths = new Map<string, Path2D>()
+  private readonly barrierDraws = new WeakMap<TrackDefinition['centerline'], BarrierDraw[]>()
+  private readonly fenceDraws = new WeakMap<TrackDefinition['centerline'], FenceDraw[]>()
+  private readonly polylineOffsets = new WeakMap<Vector2[], Map<string, Vector2[]>>()
   private readonly sceneryByLayer: Record<
     'ground' | 'overhead',
     TrackSceneryObject[]
@@ -433,6 +460,7 @@ export class RaceRenderer {
   private readonly pitInfrastructure: PitInfrastructureGeometry | null
   private readonly tireMarks: TireMark[] = []
   private readonly cameras = new Map<string, RaceCamera>()
+  private readonly vehicleSpriteCache?: VehicleSpriteCache
   private opacityLayerCanvas?: HTMLCanvasElement
   private opacityLayerContext?: CanvasRenderingContext2D
   private frameCount = 0
@@ -452,6 +480,8 @@ export class RaceRenderer {
       options.splitScreenAspectRatio ??
       (() => this.canvas.width / this.canvas.height)
     this.pixelRatioCap = Math.max(1, options.pixelRatioCap ?? 2)
+    this.vehicleSpriteCache =
+      options.vehicleSpriteCache === false ? undefined : new VehicleSpriteCache()
     this.trackCullMarginMeters = trackCullMarginMeters(track, this.geometry)
     this.suzukaCrossings = findSuzukaCrossingPoints(track)
     for (const chunk of track.chunks) {
@@ -488,7 +518,7 @@ export class RaceRenderer {
   }
 
   render(
-    engine: RaceEngine,
+    engine: Pick<RaceEngine, 'mode' | 'getInterpolatedVehicles'>,
     deltaSeconds: number,
     overlayState?: LocalRaceOverlayState,
   ) {
@@ -530,20 +560,24 @@ export class RaceRenderer {
         Math.max(24, this.trackCullMarginMeters * transform.pixelsPerMeter),
       )
       visibleChunksByViewport.push(visibleChunks.length)
-      ambientParticlesByViewport.push(this.drawViewport(
-        viewport,
-        transform,
-        visibleChunks,
-        vehicles,
-        focusedVehicle,
-        overlayState,
-      ))
+      this.drawingViewport = viewport
+      try {
+        ambientParticlesByViewport.push(this.drawViewport(
+          viewport,
+          transform,
+          visibleChunks,
+          vehicles,
+          focusedVehicle,
+          overlayState,
+        ))
+      } finally { this.drawingViewport = undefined }
     })
     this.drawSplitDivider(viewports)
     this.renderStats = {
       totalChunks: this.track.chunks.length,
       visibleChunksByViewport,
       ambientParticlesByViewport,
+      vehicleSpriteCache: this.vehicleSpriteCache?.getStats(),
     }
     this.frameCount += 1
   }
@@ -555,6 +589,9 @@ export class RaceRenderer {
       ambientParticlesByViewport: [
         ...this.renderStats.ambientParticlesByViewport,
       ],
+      vehicleSpriteCache: this.renderStats.vehicleSpriteCache
+        ? { ...this.renderStats.vehicleSpriteCache }
+        : undefined,
     }
   }
 
@@ -687,7 +724,14 @@ export class RaceRenderer {
           transform,
         )
         for (const vehicle of vehiclesAtLayer) {
-          this.drawVehicle(vehicle, transform, showDriverNames)
+          this.drawVehicle(
+            vehicle,
+            transform,
+            showDriverNames,
+            this.quality === 'low' &&
+              vehicles.length >= 10 &&
+              vehicle.id !== focusedVehicle.id,
+          )
         }
       }
       if (isFadedSuzukaUpperLayer) {
@@ -1185,6 +1229,10 @@ export class RaceRenderer {
     fromDistanceMeters: number,
     toDistanceMeters: number,
   ) {
+    const key = `${fromDistanceMeters}:${toDistanceMeters}`
+    let ranges = this.trackRanges.get(points)
+    const cached = ranges?.get(key)
+    if (cached) return cached
     const pointAt = (distanceMeters: number) => {
       const exact = points.find(
         (point) => Math.abs(point.distanceMeters - distanceMeters) <= 1e-6,
@@ -1203,7 +1251,7 @@ export class RaceRenderer {
         distanceMeters,
       )
     }
-    return [
+    const result = [
       pointAt(fromDistanceMeters),
       ...points.filter(
         (point) =>
@@ -1212,6 +1260,12 @@ export class RaceRenderer {
       ),
       pointAt(toDistanceMeters),
     ]
+    if (!ranges) {
+      ranges = new Map()
+      this.trackRanges.set(points, ranges)
+    }
+    if (ranges.size < 2048) ranges.set(key, result)
+    return result
   }
 
   private interpolateTrackPointAtDistance(
@@ -1357,13 +1411,14 @@ export class RaceRenderer {
       ),
     ].map((point) => worldToCamera(point, transform))
 
+    this.context.fillStyle = color
+    if (!screenPathVisible(corners, transform.viewport, 2)) return
     this.context.beginPath()
     this.context.moveTo(corners[0].x, corners[0].y)
     for (const corner of corners.slice(1)) {
       this.context.lineTo(corner.x, corner.y)
     }
     this.context.closePath()
-    this.context.fillStyle = color
     this.context.fill()
   }
 
@@ -1398,6 +1453,16 @@ export class RaceRenderer {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) {
+    for (const { path, barrier, startCap, endCap } of this.getBarrierDraws(points)) {
+      this.drawCanonicalBarrierPath(path, barrier.side, barrier.thicknessMeters,
+        BARRIER_STYLES[barrier.material], transform, startCap, endCap)
+    }
+  }
+
+  private getBarrierDraws(points: TrackDefinition['centerline']): BarrierDraw[] {
+    const cached = this.barrierDraws.get(points)
+    if (cached) return cached
+    const result: BarrierDraw[] = []
     const visibleFromDistance = points[0]?.distanceMeters ?? 0
     const visibleToDistance = points.at(-1)?.distanceMeters ?? 0
     const visibleElevationLayer = points[0]?.elevationLayer ?? 0
@@ -1408,7 +1473,6 @@ export class RaceRenderer {
       ) {
         continue
       }
-      const style = BARRIER_STYLES[barrier.material]
       const firstVisibleSegment = barrier.path.findIndex(
         (point, index) =>
           index < barrier.path.length - 1 &&
@@ -1427,16 +1491,11 @@ export class RaceRenderer {
         firstVisibleSegment,
         Math.min(barrier.path.length, lastVisibleSegment + 1),
       )
-      this.drawCanonicalBarrierPath(
-        path,
-        barrier.side,
-        barrier.thicknessMeters,
-        style,
-        transform,
-        firstVisibleSegment === 0,
-        lastVisibleSegment >= barrier.path.length - 1,
-      )
+      result.push({ path, barrier, startCap: firstVisibleSegment === 0,
+        endCap: lastVisibleSegment >= barrier.path.length - 1 })
     }
+    this.barrierDraws.set(points, result)
+    return result
   }
 
   private drawBrakingMarkers(
@@ -1537,6 +1596,10 @@ export class RaceRenderer {
     offsetMeters: number,
   ): Vector2[] {
     if (path.length < 2) return path
+    const key = `${side}:${offsetMeters}`
+    let offsets = this.polylineOffsets.get(path)
+    const cached = offsets?.get(key)
+    if (cached) return cached
     const direction = side === 'left' ? 1 : -1
     const normals = path.slice(0, -1).map((point, index) => {
       const next = path[index + 1]
@@ -1547,7 +1610,7 @@ export class RaceRenderer {
         y: (delta.x / length) * direction,
       }
     })
-    return path.map((point, index) => {
+    const result = path.map((point, index) => {
       if (index === 0) {
         return {
           x: point.x + normals[0].x * offsetMeters,
@@ -1578,6 +1641,12 @@ export class RaceRenderer {
         y: point.y + miter.y * miterLength,
       }
     })
+    if (!offsets) {
+      offsets = new Map()
+      this.polylineOffsets.set(path, offsets)
+    }
+    if (offsets.size < 32) offsets.set(key, result)
+    return result
   }
 
   private drawCanonicalBarrierPath(
@@ -1690,6 +1759,15 @@ export class RaceRenderer {
     points: TrackDefinition['centerline'],
     transform: CameraTransform,
   ) {
+    for (const { path, offsetPath, style } of this.getFenceDraws(points)) {
+      this.drawFencePath(path, offsetPath, transform, style)
+    }
+  }
+
+  private getFenceDraws(points: TrackDefinition['centerline']): FenceDraw[] {
+    const cached = this.fenceDraws.get(points)
+    if (cached) return cached
+    const result: FenceDraw[] = []
     const visibleFromDistance = points[0]?.distanceMeters ?? 0
     const visibleToDistance = points.at(-1)?.distanceMeters ?? 0
     const visibleElevationLayer = points[0]?.elevationLayer ?? 0
@@ -1717,13 +1795,11 @@ export class RaceRenderer {
         barrier.thicknessMeters +
         FENCE_GAP_METERS +
         FENCE_WIDTH_METERS / 2
-      this.drawFencePath(
-        visiblePath,
-        this.offsetPolyline(visiblePath, barrier.side, offset),
-        transform,
-        visualStyle,
-      )
+      result.push({ path: visiblePath,
+        offsetPath: this.offsetPolyline(visiblePath, barrier.side, offset), style: visualStyle })
     }
+    this.fenceDraws.set(points, result)
+    return result
   }
 
   private drawFencePath(
@@ -1821,13 +1897,23 @@ export class RaceRenderer {
     side: 'left' | 'right',
     offsetMeters: number,
   ): Vector2 {
+    const key = `${side}:${offsetMeters}`
+    let offsets = this.trackOffsets.get(point)
+    const cached = offsets?.get(key)
+    if (cached) return cached
     const tangent = this.geometry.getCenterlineTangent(point.distanceMeters)
     const normal = { x: -tangent.y, y: tangent.x }
     const direction = side === 'left' ? 1 : -1
-    return {
+    const result = {
       x: point.x + normal.x * offsetMeters * direction,
       y: point.y + normal.y * offsetMeters * direction,
     }
+    if (!offsets) {
+      offsets = new Map()
+      this.trackOffsets.set(point, offsets)
+    }
+    if (offsets.size < 32) offsets.set(key, result)
+    return result
   }
 
   private strokeSegment(
@@ -1837,13 +1923,17 @@ export class RaceRenderer {
     color: string,
     lineCap: CanvasLineCap = 'round',
   ) {
-    this.context.beginPath()
-    this.context.moveTo(from.x, from.y)
-    this.context.lineTo(to.x, to.y)
+    // Preserve drawing state even when the raster operation is unnecessary.
+    // Full stroke width also covers square caps; two pixels cover antialiasing.
     this.context.lineCap = lineCap
     this.context.lineJoin = 'round'
     this.context.lineWidth = Math.max(1, width)
     this.context.strokeStyle = color
+    if (!screenBoundsVisible(Math.min(from.x, to.x), Math.min(from.y, to.y),
+      Math.max(from.x, to.x), Math.max(from.y, to.y), this.drawingViewport, Math.max(1, width) + 2)) return
+    this.context.beginPath()
+    this.context.moveTo(from.x, from.y)
+    this.context.lineTo(to.x, to.y)
     this.context.stroke()
   }
 
@@ -1854,13 +1944,14 @@ export class RaceRenderer {
     lineCap: CanvasLineCap = 'round',
   ) {
     if (points.length < 2) return
-    this.context.beginPath()
-    this.context.moveTo(points[0].x, points[0].y)
-    for (const point of points.slice(1)) this.context.lineTo(point.x, point.y)
     this.context.lineCap = lineCap
     this.context.lineJoin = 'round'
     this.context.lineWidth = Math.max(1, width)
     this.context.strokeStyle = color
+    if (!screenPathVisible(points, this.drawingViewport, Math.max(1, width) + 2)) return
+    this.context.beginPath()
+    this.context.moveTo(points[0].x, points[0].y)
+    for (const point of points.slice(1)) this.context.lineTo(point.x, point.y)
     this.context.stroke()
   }
 
@@ -2173,11 +2264,12 @@ export class RaceRenderer {
     color: string,
   ) {
     const projected = points.map((point) => worldToCamera(point, transform))
+    this.context.fillStyle = color
+    if (!screenPathVisible(projected, transform.viewport, 2)) return
     this.context.beginPath()
     this.context.moveTo(projected[0].x, projected[0].y)
     for (const point of projected.slice(1)) this.context.lineTo(point.x, point.y)
     this.context.closePath()
-    this.context.fillStyle = color
     this.context.fill()
   }
 
@@ -3258,6 +3350,7 @@ export class RaceRenderer {
     vehicle: InterpolatedVehicleState,
     transform: CameraTransform,
     showName: boolean,
+    useSpriteCache = false,
   ) {
     const context = this.context
     const profile = PHYSICS_CONSTANTS.vehicleVisual
@@ -3276,7 +3369,7 @@ export class RaceRenderer {
       },
       transform,
     )
-    drawVehicleVisual(context, {
+    const visualOptions: DrawVehicleVisualOptions = {
       color: vehicle.color,
       x: point.x,
       y: point.y,
@@ -3295,7 +3388,13 @@ export class RaceRenderer {
       ),
       shadowDistanceToWidthRatio: shadowSettings.distanceToWidthRatio,
       shadowOpacity: shadowSettings.opacity,
-    })
+    }
+    if (
+      !useSpriteCache ||
+      !this.vehicleSpriteCache?.draw(context, visualOptions)
+    ) {
+      drawVehicleVisual(context, visualOptions)
+    }
 
     if (showName) {
       context.fillStyle = '#f0f0fa'
@@ -3344,16 +3443,33 @@ export class RaceRenderer {
     context.fill()
     context.stroke()
 
-    context.beginPath()
-    this.track.centerline.forEach((point, index) => {
-      const screen = worldToMinimap(point, transform)
-      if (index === 0) context.moveTo(screen.x, screen.y)
-      else context.lineTo(screen.x, screen.y)
-    })
+    // Vector path, not a world-sized bitmap. Only viewport dimensions/offsets
+    // affect this fixed-orientation map; moving dots still use world positions.
+    const mapKey = `${minimapViewport.x}:${minimapViewport.y}:${width}:${height}`
+    let mapPath = this.minimapPaths.get(mapKey)
+    if (!mapPath && typeof Path2D !== 'undefined') {
+      mapPath = new Path2D()
+      this.track.centerline.forEach((point, index) => {
+        const screen = worldToMinimap(point, transform)
+        if (index === 0) mapPath!.moveTo(screen.x, screen.y)
+        else mapPath!.lineTo(screen.x, screen.y)
+      })
+      if (this.minimapPaths.size >= 4) this.minimapPaths.clear()
+      this.minimapPaths.set(mapKey, mapPath)
+    }
+    if (!mapPath) {
+      context.beginPath()
+      this.track.centerline.forEach((point, index) => {
+        const screen = worldToMinimap(point, transform)
+        if (index === 0) context.moveTo(screen.x, screen.y)
+        else context.lineTo(screen.x, screen.y)
+      })
+    }
     context.strokeStyle = 'rgba(240, 240, 250, 0.65)'
     context.lineWidth = 2
     context.lineJoin = 'round'
-    context.stroke()
+    if (mapPath) context.stroke(mapPath)
+    else context.stroke()
 
     const gate = this.track.startFinish
     const lateral = { x: -gate.forward.y, y: gate.forward.x }

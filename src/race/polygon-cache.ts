@@ -38,3 +38,14 @@ export function polygonGeometry(vertices: readonly Vector2[]): PolygonCache {
   Object.defineProperty(vertices, geometryKey, { value: geometry })
   return geometry
 }
+
+/** Only for scratch vertices owned by a collision query, never published poses. */
+export function resetPolygonGeometry(vertices: readonly Vector2[]) {
+  const cache = polygonGeometry(vertices)
+  cache.bounds = undefined
+  cache.axes = undefined
+  cache.sweepAxes = undefined
+  cache.center = undefined
+  cache.convex = undefined
+  cache.radius = undefined
+}

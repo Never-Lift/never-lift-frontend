@@ -15,6 +15,9 @@ export type CameraState = {
 }
 
 export type CameraTransform = CameraState & {
+  orientationSine?: number
+  orientationCosine?: number
+  basisOrientation?: number
   pixelsPerMeter: number
   groundDepthScale: number
   viewport: Viewport
@@ -119,6 +122,9 @@ export function createCameraTransform(
 ): CameraTransform {
   return {
     ...camera,
+    orientationSine: Math.sin(camera.orientation),
+    orientationCosine: Math.cos(camera.orientation),
+    basisOrientation: camera.orientation,
     viewport,
     groundDepthScale: CAMERA_GROUND_DEPTH_SCALE,
     pixelsPerMeter:
@@ -173,8 +179,10 @@ export function worldVectorToCamera(
   transform: CameraTransform,
 ): Vector2 {
   const forward = {
-    x: Math.cos(transform.orientation),
-    y: Math.sin(transform.orientation),
+    x: transform.basisOrientation === transform.orientation
+      ? transform.orientationCosine ?? Math.cos(transform.orientation) : Math.cos(transform.orientation),
+    y: transform.basisOrientation === transform.orientation
+      ? transform.orientationSine ?? Math.sin(transform.orientation) : Math.sin(transform.orientation),
   }
   const right = { x: forward.y, y: -forward.x }
   return {

@@ -792,6 +792,7 @@ export class TrackGeometry {
   getSurfaceAt(
     point: Vector2,
     preferredDistanceMeters?: number,
+    knownProjection?: TrackProjection,
   ): SurfaceId {
     if (
       this.definition.pitLane.path.length >= 2 &&
@@ -807,7 +808,8 @@ export class TrackGeometry {
         distanceToPath(point, road.path) <= road.widthMeters / 2,
     )
     if (physicalEscapeRoad) return this.definition.surfaceModel.onTrack
-    const projection = this.project(point, preferredDistanceMeters)
+    const projection =
+      knownProjection ?? this.project(point, preferredDistanceMeters)
     const environment = this.environmentForProjection(point, projection)
     const curb = this.definition.curbs.find(
       (candidate) =>
@@ -897,7 +899,6 @@ export class TrackGeometry {
 
   private getBarrierRecords(bounds?: TrackBounds) {
     if (!bounds) return this.barrierColliderRecords
-    const allowedChunks = new Set(this.getBarrierChunkIndexes(bounds))
     const minimumCellX = Math.floor(
       bounds.minX / BARRIER_BROADPHASE_CELL_METERS,
     )
@@ -915,7 +916,6 @@ export class TrackGeometry {
       for (let cellY = minimumCellY; cellY <= maximumCellY; cellY += 1) {
         for (const record of this.barrierRecordsByCell.get(`${cellX}:${cellY}`) ?? []) {
           if (
-            record.face.chunkIndexes.some((index) => allowedChunks.has(index)) &&
             colliderBoundsIntersect(record.bounds, bounds)
           ) {
             records.set(record.face.id, record)

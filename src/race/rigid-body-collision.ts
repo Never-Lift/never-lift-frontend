@@ -152,7 +152,8 @@ function polygonCenter(vertices: readonly Vector2[]): Vector2 {
 function projectPolygon(
   vertices: readonly Vector2[],
   axis: Vector2,
-): Projection {
+  projection: Projection,
+) {
   let minimum = dot(vertices[0], axis)
   let maximum = minimum
   for (let index = 1; index < vertices.length; index += 1) {
@@ -161,12 +162,17 @@ function projectPolygon(
     minimum = Math.min(minimum, projected)
     maximum = Math.max(maximum, projected)
   }
-  return { minimum, maximum }
+  projection.minimum = minimum
+  projection.maximum = maximum
 }
 
 function polygonAxes(vertices: readonly Vector2[]) {
   const cached = polygonGeometry(vertices)
   if (cached.axes) return cached.axes
+  if (cached.sweepAxes) {
+    cached.axes = cached.sweepAxes
+    return cached.sweepAxes
+  }
   const axes: Vector2[] = []
   for (let index = 0; index < vertices.length; index += 1) {
     const edge = subtract(
@@ -185,6 +191,7 @@ function polygonAxes(vertices: readonly Vector2[]) {
     axes.push(axis)
   }
   cached.axes = axes
+  cached.sweepAxes = axes
   return axes
 }
 
@@ -238,12 +245,16 @@ function segmentIntersection(
 function uniquePoints(points: Vector2[]) {
   const unique: Vector2[] = []
   for (const point of points) {
-    if (
-      unique.every(
-        (candidate) =>
-          distanceSquared(candidate, point) > CONTACT_MERGE_DISTANCE_SQUARED,
-      )
-    ) {
+    let duplicate = false
+    for (const candidate of unique) {
+      if (
+        distanceSquared(candidate, point) <= CONTACT_MERGE_DISTANCE_SQUARED
+      ) {
+        duplicate = true
+        break
+      }
+    }
+    if (!duplicate) {
       unique.push(point)
     }
   }
@@ -298,7 +309,7 @@ function collisionContacts(
   if (contacts.length <= planarContactLimit) return contacts
 
   const tangent = perpendicularLeft(normal)
-  const sorted = [...contacts].sort(
+  const sorted = contacts.sort(
     (left, right) => dot(left, tangent) - dot(right, tangent),
   )
   if (planarContactLimit === 1) return [sorted[0]]
@@ -356,12 +367,14 @@ export function findCollisionManifold(
   let minimumAxis: Vector2 | null = null
   const firstAxes = polygonAxes(first.vertices)
   const secondAxes = polygonAxes(second.vertices)
+  const firstProjection: Projection = { minimum: 0, maximum: 0 }
+  const secondProjection: Projection = { minimum: 0, maximum: 0 }
   for (let index = 0; index < firstAxes.length + secondAxes.length; index += 1) {
     const axis = index < firstAxes.length
       ? firstAxes[index]
       : secondAxes[index - firstAxes.length]
-    const firstProjection = projectPolygon(first.vertices, axis)
-    const secondProjection = projectPolygon(second.vertices, axis)
+    projectPolygon(first.vertices, axis, firstProjection)
+    projectPolygon(second.vertices, axis, secondProjection)
     const overlap =
       Math.min(firstProjection.maximum, secondProjection.maximum) -
       Math.max(firstProjection.minimum, secondProjection.minimum)
@@ -785,14 +798,22 @@ export function resolveRigidBodyCollisions(
   let normalImpulseVector: Vector2 = { x: 0, y: 0 }
   const firstVelocityBefore = { ...first.velocity }
   const secondVelocityBefore = { ...second.velocity }
+  const adjustedOptions = new WeakMap<
+    CollisionResponseOptions,
+    CollisionResponseOptions
+  >()
   for (let iteration = 0; iteration < iterations; iteration += 1) {
     for (const manifold of ordered) {
       const manifoldOptions =
         typeof options === 'function' ? options(manifold) : options
-      const iterationOptions = {
-        ...manifoldOptions,
-        positionCorrectionPercent:
-          manifoldOptions.positionCorrectionPercent / iterations,
+      let iterationOptions = adjustedOptions.get(manifoldOptions)
+      if (!iterationOptions) {
+        iterationOptions = {
+          ...manifoldOptions,
+          positionCorrectionPercent:
+            manifoldOptions.positionCorrectionPercent / iterations,
+        }
+        adjustedOptions.set(manifoldOptions, iterationOptions)
       }
       const resolution = resolveRigidBodyCollision(
         first,
