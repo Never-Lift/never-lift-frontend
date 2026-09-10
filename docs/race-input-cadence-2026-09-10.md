@@ -99,11 +99,13 @@ evento no navegador, mas não mede o hardware do teclado ou o monitor.
 Registros: `output/performance/input-browser-probe.json` e
 `output/performance/input-probe-<modo>-<carros>.json`.
 
-Na retomada, a sonda recebeu um complemento para aceleração+direção,
-freio+direção e soltura completa dos dois pilotos. A nova execução foi bloqueada
-pelo limite do sistema de aprovações antes de iniciar. **Esse complemento ainda
-não foi executado**; os 120 toques e tempos da tabela são da rodada anterior já
-concluída. Comando de retomada: `node tools/local-input-browser-probe.mjs`.
+Na retomada, o teste complementar de aceleração+direção, freio+direção e soltura
+completa **também passou nas quatro configurações e para todos os pilotos humanos**.
+O bloqueio anterior do sistema de aprovações foi resolvido. A rodada repetiu os
+120 toques curtos, novamente sem perdas ou erros de página: latência média entre
+4,13 e 5,42 ms por configuração, máximo de 12,50 ms. Os tempos da tabela acima
+continuam sendo da primeira rodada, não foram misturados com a repetição.
+Registro da nova execução: `output/performance/input-browser-combined-probe.json`.
 
 Verificações adicionais de 30 segundos, também sequenciais:
 
