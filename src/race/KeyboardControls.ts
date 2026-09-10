@@ -1,7 +1,12 @@
 import { NUMERIC_SPEED_EPSILON_METERS_PER_SECOND } from '@/race/constants'
+import {
+  KEYBOARD_CONTROL_SCHEMES,
+  getKeyboardControlScheme,
+  type KeyboardControlSchemeId,
+} from '@/race/control-schemes'
 import { clamp, dot } from '@/race/math'
 import { bodyAxes } from '@/race/physics-utils'
-import type { DriverInput, RaceMode, VehicleState } from '@/race/types'
+import type { DriverInput, VehicleState } from '@/race/types'
 
 type SteeringVehicle = Pick<VehicleState, 'angle' | 'velocity'>
 
@@ -13,80 +18,16 @@ function travelSteer(steer: number, vehicle?: SteeringVehicle | null) {
 }
 
 const CONTROL_KEYS = new Set([
-  'KeyW',
-  'KeyA',
-  'KeyS',
-  'KeyD',
-  'ArrowUp',
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-  'KeyI',
-  'KeyJ',
-  'KeyK',
-  'KeyL',
+  ...KEYBOARD_CONTROL_SCHEMES.flatMap((scheme) => Object.values(scheme.bindings)),
   'Space',
 ])
-
-const PLAYER_TWO_ALTERNATIVE = {
-  throttle: 'KeyI',
-  brake: 'KeyK',
-  left: 'KeyJ',
-  right: 'KeyL',
-} as const
-
-export type KeyboardBindings = {
-  playerOne: {
-    throttle: string
-    brake: string
-    left: string
-    right: string
-  }
-  playerTwo: {
-    throttle: string
-    brake: string
-    left: string
-    right: string
-  }
-}
-
-export const DEFAULT_KEYBOARD_BINDINGS: KeyboardBindings = {
-  playerOne: {
-    throttle: 'KeyW',
-    brake: 'KeyS',
-    left: 'KeyA',
-    right: 'KeyD',
-  },
-  playerTwo: {
-    throttle: 'ArrowUp',
-    brake: 'ArrowDown',
-    left: 'ArrowLeft',
-    right: 'ArrowRight',
-  },
-}
-
-/** A second local layout avoids relying on the arrow-key matrix of a keyboard. */
-export const ALTERNATIVE_LOCAL_KEYBOARD_BINDINGS: KeyboardBindings = {
-  playerOne: DEFAULT_KEYBOARD_BINDINGS.playerOne,
-  playerTwo: {
-    throttle: 'KeyI',
-    brake: 'KeyK',
-    left: 'KeyJ',
-    right: 'KeyL',
-  },
-}
 
 export class KeyboardControls {
   private readonly pressed = new Set<string>()
   private readonly target: Window
-  private bindings: KeyboardBindings
 
-  constructor(
-    target: Window = window,
-    bindings: KeyboardBindings = DEFAULT_KEYBOARD_BINDINGS,
-  ) {
+  constructor(target: Window = window) {
     this.target = target
-    this.bindings = bindings
     target.addEventListener('keydown', this.handleKeyDown)
     target.addEventListener('keyup', this.handleKeyUp)
     target.addEventListener('blur', this.handleBlur)
@@ -115,11 +56,6 @@ export class KeyboardControls {
     }
   }
 
-  setBindings(bindings: KeyboardBindings) {
-    this.bindings = bindings
-    this.pressed.clear()
-  }
-
   getPressedCodes() {
     return [...this.pressed].sort()
   }
@@ -128,62 +64,18 @@ export class KeyboardControls {
     return this.isPressed('Space')
   }
 
-  getPlayerOneInput(
-    mode: RaceMode,
+  getInput(
+    schemeId: KeyboardControlSchemeId,
     vehicle?: SteeringVehicle | null,
   ): DriverInput {
-    const includeArrows = mode === 'solo'
+    const bindings = getKeyboardControlScheme(schemeId).bindings
     return {
-      throttle:
-        this.isPressed(this.bindings.playerOne.throttle) ||
-        (includeArrows && this.isPressed(this.bindings.playerTwo.throttle))
-          ? 1
-          : 0,
-      brake:
-        this.isPressed(this.bindings.playerOne.brake) ||
-        (includeArrows && this.isPressed(this.bindings.playerTwo.brake))
-          ? 1
-          : 0,
+      throttle: this.isPressed(bindings.throttle) ? 1 : 0,
+      brake: this.isPressed(bindings.brake) ? 1 : 0,
       steer: travelSteer(
         clamp(
-          (this.isPressed(this.bindings.playerOne.left) ||
-          (includeArrows && this.isPressed(this.bindings.playerTwo.left))
-            ? 1
-            : 0) -
-            (this.isPressed(this.bindings.playerOne.right) ||
-            (includeArrows && this.isPressed(this.bindings.playerTwo.right))
-              ? 1
-              : 0),
-          -1,
-          1,
-        ),
-        vehicle,
-      ),
-    }
-  }
-
-  getPlayerTwoInput(vehicle?: SteeringVehicle | null): DriverInput {
-    return {
-      throttle:
-        this.isPressed(this.bindings.playerTwo.throttle) ||
-        this.isPressed(PLAYER_TWO_ALTERNATIVE.throttle)
-          ? 1
-          : 0,
-      brake:
-        this.isPressed(this.bindings.playerTwo.brake) ||
-        this.isPressed(PLAYER_TWO_ALTERNATIVE.brake)
-          ? 1
-          : 0,
-      steer: travelSteer(
-        clamp(
-          (this.isPressed(this.bindings.playerTwo.left) ||
-          this.isPressed(PLAYER_TWO_ALTERNATIVE.left)
-            ? 1
-            : 0) -
-            (this.isPressed(this.bindings.playerTwo.right) ||
-            this.isPressed(PLAYER_TWO_ALTERNATIVE.right)
-              ? 1
-              : 0),
+          (this.isPressed(bindings.left) ? 1 : 0) -
+            (this.isPressed(bindings.right) ? 1 : 0),
           -1,
           1,
         ),

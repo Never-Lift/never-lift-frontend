@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
 import { RaceCanvas } from '@/components/race/RaceCanvas'
+import { ControlSchemeSelector } from '@/components/race/ControlSchemeSelector'
 import { CountStepper } from '@/components/race/CountStepper'
 import { DifficultyButton } from '@/components/race/DifficultyButton'
 import { TrackCarousel } from '@/components/race/TrackCarousel'
@@ -26,6 +27,12 @@ import {
 } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error-messages'
 import { MAX_RACE_PARTICIPANTS, RaceEngine } from '@/race/RaceEngine'
+import {
+  firstAvailableKeyboardControlScheme,
+  loadKeyboardControlPreferences,
+  saveKeyboardControlPreferences,
+  type KeyboardControlSchemeId,
+} from '@/race/control-schemes'
 import type {
   BotDifficulty,
   RaceMode,
@@ -194,11 +201,17 @@ function PlayerConfigurator({
   label,
   selection,
   otherSelection,
+  controlScheme,
+  blockedControlScheme,
+  onControlSchemeChange,
   onChange,
 }: {
   label: string
   selection: PlayerSelection
   otherSelection?: PlayerSelection
+  controlScheme: KeyboardControlSchemeId
+  blockedControlScheme?: KeyboardControlSchemeId
+  onControlSchemeChange: (scheme: KeyboardControlSchemeId) => void
   onChange: (selection: PlayerSelection) => void
 }) {
   const selectedColor = normalizeVehiclePaintColor(selection.color)
@@ -247,6 +260,17 @@ function PlayerConfigurator({
           A pintura do outro jogador fica indisponível.
         </p>
       )}
+      <div className="mt-4 border-t border-border/60 pt-3">
+        <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+          Grupo de teclas
+        </p>
+        <ControlSchemeSelector
+          blocked={blockedControlScheme ? [blockedControlScheme] : []}
+          label={`Grupo de teclas do ${label}`}
+          onChange={onControlSchemeChange}
+          value={controlScheme}
+        />
+      </div>
     </fieldset>
   )
 }
@@ -269,11 +293,41 @@ export function RacePage() {
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDayPreset>('day')
   const [playerOne, setPlayerOne] = useState(defaultPlayerOne)
   const [playerTwo, setPlayerTwo] = useState(defaultPlayerTwo)
+  const [controlPreferences, setControlPreferences] = useState(
+    loadKeyboardControlPreferences,
+  )
   const [engine, setEngine] = useState<RaceEngine | null>(null)
   const [results, setResults] = useState<RaceResultEntry[] | null>(null)
   const [submission, setSubmission] = useState<SubmissionState>({ status: 'idle' })
   const humanCount = mode === 'local' ? 2 : 1
   const maximumBotCount = MAX_RACE_PARTICIPANTS - humanCount
+
+  useEffect(() => {
+    saveKeyboardControlPreferences(controlPreferences)
+  }, [controlPreferences])
+
+  const setPrimaryControlScheme = useCallback(
+    (primary: KeyboardControlSchemeId) => {
+      setControlPreferences((current) => ({
+        version: 1,
+        primary,
+        secondary:
+          current.secondary === primary
+            ? firstAvailableKeyboardControlScheme(primary)
+            : current.secondary,
+      }))
+    },
+    [],
+  )
+
+  const setSecondaryControlScheme = useCallback(
+    (secondary: KeyboardControlSchemeId) => {
+      setControlPreferences((current) =>
+        secondary === current.primary ? current : { ...current, secondary },
+      )
+    },
+    [],
+  )
 
   useEffect(() => {
     setBotCount((current) => Math.min(current, maximumBotCount))
@@ -459,6 +513,10 @@ export function RacePage() {
   if (engine) {
     return (
       <RaceCanvas
+        controlSchemes={{
+          playerOne: controlPreferences.primary,
+          playerTwo: mode === 'local' ? controlPreferences.secondary : undefined,
+        }}
         engine={engine}
         mode={mode}
         timeOfDay={timeOfDay}
@@ -630,15 +688,21 @@ export function RacePage() {
                 </h3>
                 <div className="mt-3 space-y-3">
                   <PlayerConfigurator
+                    blockedControlScheme={mode === 'local' ? controlPreferences.secondary : undefined}
+                    controlScheme={controlPreferences.primary}
                     label="Jogador 1"
                     onChange={setPlayerOne}
+                    onControlSchemeChange={setPrimaryControlScheme}
                     otherSelection={mode === 'local' ? playerTwo : undefined}
                     selection={playerOne}
                   />
                   {mode === 'local' && (
                     <PlayerConfigurator
+                      blockedControlScheme={controlPreferences.primary}
+                      controlScheme={controlPreferences.secondary}
                       label="Jogador 2"
                       onChange={setPlayerTwo}
+                      onControlSchemeChange={setSecondaryControlScheme}
                       otherSelection={playerOne}
                       selection={playerTwo}
                     />

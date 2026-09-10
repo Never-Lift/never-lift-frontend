@@ -110,6 +110,7 @@ Esta revisão é normativa e detalha as decisões atualizadas acima:
 - Avisos e erros da tela são notificações no canto superior direito, expiram após cinco segundos e podem ser fechados manualmente.
 - O host pode cancelar a classificação e retornar ao lobby somente enquanto nenhum carro tiver começado a andar; bots adicionados para o grid são removidos e as configurações voltam a ser editáveis.
 - O seletor de dificuldade e o controle numérico do grid reutilizam o mesmo padrão visual e de interação de solo/local. O adaptador humano compensa o esterço na ré antes de enviar `input` ao servidor; a predição recebe exatamente esse mesmo comando. Na corrida online da Parte 3c, `Esc` deve acionar o fluxo normal de saída, com a confirmação aplicável.
+- **Adendo aprovado após as 80 decisões:** cada participante escolhe localmente entre `WASD`, setas e `IJKL`. Essa preferência fica no dispositivo, não integra o estado da sala nem o protocolo, e deve alimentar tanto o input enviado quanto a predição da Parte 3c.
 
 ## Limites e dependências
 

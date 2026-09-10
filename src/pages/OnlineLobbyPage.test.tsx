@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -152,6 +152,7 @@ describe('OnlineLobbyPage', () => {
   afterEach(() => {
     onlineRoomSession.resetForTests()
     cleanup()
+    window.localStorage.clear()
     vi.clearAllMocks()
     vi.useRealTimers()
   })
@@ -238,6 +239,29 @@ describe('OnlineLobbyPage', () => {
     await waitFor(() => expect(api.updateRoom).toHaveBeenCalledWith('1234', expect.objectContaining({ gridSize: 21 }), 'jwt'))
     await user.click(screen.getByRole('button', { name: /Sala pública; tornar privada/i }))
     await waitFor(() => expect(api.updateRoom).toHaveBeenCalledWith('1234', expect.objectContaining({ visibility: 'private' }), 'jwt'))
+  })
+
+  it('stores an independent local keyboard group for the future online race', async () => {
+    const api = {
+      getRoom: vi.fn().mockResolvedValue(room()),
+      getConnectionTicket: vi.fn(),
+    }
+    renderLobby({ api })
+    const controls = await screen.findByRole('group', {
+      name: 'Grupo de teclas online',
+    })
+
+    await userEvent.click(within(controls).getByRole('button', { name: 'IJKL' }))
+
+    expect(within(controls).getByRole('button', { name: 'IJKL' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(
+      JSON.parse(
+        window.localStorage.getItem('never-lift.keyboard-controls.v1') ?? '{}',
+      ),
+    ).toMatchObject({ primary: 'ijkl' })
   })
 
   it('uses the shared difficulty cycle and supports typed 10–19 grids without publishing invalid drafts', async () => {

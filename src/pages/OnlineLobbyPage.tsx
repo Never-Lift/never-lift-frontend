@@ -22,6 +22,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/auth/auth-context'
 import { AppShell } from '@/components/AppShell'
 import { TrackCarousel } from '@/components/race/TrackCarousel'
+import { ControlSchemeSelector } from '@/components/race/ControlSchemeSelector'
 import { CountStepper } from '@/components/race/CountStepper'
 import { DifficultyButton } from '@/components/race/DifficultyButton'
 import {
@@ -58,6 +59,12 @@ import {
   useOnlineRoomSession,
 } from '@/online/OnlineRoomSession'
 import { roomFromPayload } from '@/online/room-state'
+import {
+  firstAvailableKeyboardControlScheme,
+  loadKeyboardControlPreferences,
+  saveKeyboardControlPreferences,
+  type KeyboardControlSchemeId,
+} from '@/race/control-schemes'
 
 type LobbyApi = Pick<
   typeof onlineApi,
@@ -285,9 +292,30 @@ export function OnlineLobbyPage({
   const [submitting, setSubmitting] = useState(false)
   const [readyPending, setReadyPending] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
+  const [controlPreferences, setControlPreferences] = useState(
+    loadKeyboardControlPreferences,
+  )
 
   const genericEntryError = 'Não foi possível entrar nessa sala. Confira o código e a disponibilidade.'
   const gridError = 'O limite de carros deve estar entre 2 e 22.'
+
+  const setOnlineControlScheme = useCallback(
+    (primary: KeyboardControlSchemeId) => {
+      setControlPreferences((current) => ({
+        version: 1,
+        primary,
+        secondary:
+          current.secondary === primary
+            ? firstAvailableKeyboardControlScheme(primary)
+            : current.secondary,
+      }))
+    },
+    [],
+  )
+
+  useEffect(() => {
+    saveKeyboardControlPreferences(controlPreferences)
+  }, [controlPreferences])
 
   const ensureSession = useCallback(() => {
     if (session || requestedGuest.current) return
@@ -694,6 +722,20 @@ export function OnlineLobbyPage({
                   />
                 ))}
               </ul>
+              <div className="mt-5 border-t border-border/70 pt-5">
+                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+                  Seus controles
+                </p>
+                <ControlSchemeSelector
+                  disabled={room.state !== 'lobby'}
+                  label="Grupo de teclas online"
+                  onChange={setOnlineControlScheme}
+                  value={controlPreferences.primary}
+                />
+                <p className="mt-2 text-[11px] font-semibold text-muted-foreground">
+                  Preferência local deste dispositivo; não altera as regras da sala.
+                </p>
+              </div>
               {players.length < 2 && !room.settings?.botsEnabled && <p className="mt-4 text-xs font-semibold text-warning">São necessários pelo menos dois carros para iniciar.</p>}
               <div className="mt-6 flex flex-wrap gap-3 border-t border-border/70 pt-5">
                 {!isHost && (
