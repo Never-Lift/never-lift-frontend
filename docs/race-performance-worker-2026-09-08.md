@@ -383,6 +383,33 @@ tempo simulado/real. Os quatro esvaziamentos diagnosticados coincidiram com uma
 pausa isolada do Edge de até 149,6 ms, não com a cadência normal das curvas.
 A confirmação visual no navegador do autor permanece obrigatória.
 
+### Eliminação de pausas do cache em grids densos — 10/09/2026
+
+O primeiro teste manual da correção acima aprovou praticamente toda a fluidez
+com um carro, mas ainda encontrou o mesmo tipo de pausa curta quando havia muitos
+bots. O contador médio de FPS não revelava a causa: ao mudar o ângulo dos carros
+nas curvas, o LRU removia e recriava canvases grandes continuamente. Em uma
+execução de Mônaco local 2+20 houve 1.844 misses e 1.657 expulsões em 20 segundos.
+
+O cache agora atualiza a idade da entrada sem remover/reinserir o item no `Map`
+em todo hit e mantém uma superfície reserva para reutilizar o backing store da
+entrada expulsa. A superfície é limpa e sua transformação é restaurada antes do
+novo desenho; o limite principal continua em 16 milhões de pixels e o pool fica
+limitado a um único canvas adicional. Isso preserva os mesmos buckets, detalhes,
+sombras, cores e estados de dano.
+
+Na repetição de Mônaco local 2+20, 1.824 misses exigiram somente 188 alocações de
+canvas; 1.636 superfícies foram reutilizadas. O pior tempo do renderer caiu de
+21,2 ms na medição anterior para 10,8 ms, com aproximadamente 59 FPS e 100,1% de
+tempo simulado/real. Em Mônaco solo 1+21, o renderer ficou em 3,15 ms de média,
+4,7 ms no p95 e 7,1 ms no pior quadro medido, também com aproximadamente 60 FPS
+e 100,1% de tempo simulado/real.
+
+A comparação exata contra `f8db9b5` passou em Mônaco, Austin, Suzuka e Spa,
+dia/noite e quatro quadros por caso: zero canais RGBA diferentes. A equivalência
+perceptiva em relação ao painter vetorial original permanece dentro dos limites
+já registrados. A validação manual com muitos bots continua pendente.
+
 ## Ponto de retomada
 
 - Código e documentação na branch `codex/race-performance-worker`; suíte completa,

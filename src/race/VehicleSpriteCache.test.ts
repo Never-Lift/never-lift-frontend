@@ -14,6 +14,7 @@ import { VehicleSpriteCache } from '@/race/VehicleSpriteCache'
 
 describe('dense-grid vehicle sprite cache', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     drawVehicleShadowVisualMock.mockClear()
     drawVehicleVisualMock.mockClear()
   })
@@ -96,5 +97,49 @@ describe('dense-grid vehicle sprite cache', () => {
     expect(drawVehicleVisualMock).toHaveBeenCalledTimes(3)
     expect(drawVehicleShadowVisualMock).toHaveBeenCalledTimes(1)
     expect(cache.getStats().entries).toBe(4)
+  })
+
+  it('recycles evicted canvases and updates LRU age without reinserting hits', () => {
+    const canvases: Array<HTMLCanvasElement> = []
+    const createElement = vi.spyOn(document, 'createElement').mockImplementation(
+      () => {
+        const context = {
+          clearRect: vi.fn(),
+          scale: vi.fn(),
+          setTransform: vi.fn(),
+        } as unknown as CanvasRenderingContext2D
+        const canvas = {
+          width: 0,
+          height: 0,
+          getContext: () => context,
+        } as unknown as HTMLCanvasElement
+        canvases.push(canvas)
+        return canvas
+      },
+    )
+    const output = { drawImage: vi.fn() } as unknown as CanvasRenderingContext2D
+    const cache = new VehicleSpriteCache(150_000)
+    const base = {
+      color: '#365f82',
+      x: 100,
+      y: 80,
+      relativeYawRadians: 0,
+      length: 60,
+      width: 22,
+      detail: 'race' as const,
+      damage: 'none' as const,
+    }
+
+    cache.draw(output, base)
+    cache.draw(output, base)
+    cache.draw(output, { ...base, relativeYawRadians: Math.PI / 4 })
+    cache.draw(output, { ...base, relativeYawRadians: Math.PI / 2 })
+
+    const stats = cache.getStats()
+    expect(createElement).toHaveBeenCalledTimes(3)
+    expect(stats.canvasAllocations).toBe(3)
+    expect(stats.canvasReuses).toBeGreaterThanOrEqual(3)
+    expect(stats.evictions).toBeGreaterThanOrEqual(3)
+    expect(stats.hits).toBeGreaterThanOrEqual(2)
   })
 })

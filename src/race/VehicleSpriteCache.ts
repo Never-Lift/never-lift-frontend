@@ -16,6 +16,7 @@ type VehicleSprite = {
   canvas: HTMLCanvasElement
   logicalSize: number
   pixelCount: number
+  lastUsed: number
 }
 
 export type VehicleSpriteCacheStats = {
@@ -24,6 +25,8 @@ export type VehicleSpriteCacheStats = {
   misses: number
   evictions: number
   pixels: number
+  canvasAllocations: number
+  canvasReuses: number
 }
 
 const FULL_CIRCLE = Math.PI * 2
@@ -54,10 +57,19 @@ function finiteKey(value: number, precision = 3) {
  */
 export class VehicleSpriteCache {
   private readonly sprites = new Map<string, VehicleSprite>()
+  private readonly canvasPool: HTMLCanvasElement[] = []
+  private readonly maximumCachedPixels: number
   private pixelCount = 0
   private hits = 0
   private misses = 0
   private evictions = 0
+  private canvasAllocations = 0
+  private canvasReuses = 0
+  private accessSequence = 0
+
+  constructor(maximumCachedPixels = MAX_CACHED_PIXELS) {
+    this.maximumCachedPixels = maximumCachedPixels
+  }
 
   draw(
     output: CanvasRenderingContext2D,
@@ -148,6 +160,8 @@ export class VehicleSpriteCache {
       misses: this.misses,
       evictions: this.evictions,
       pixels: this.pixelCount,
+      canvasAllocations: this.canvasAllocations,
+      canvasReuses: this.canvasReuses,
     }
   }
 
@@ -155,12 +169,9 @@ export class VehicleSpriteCache {
     const logicalSize = Math.ceil(
       Math.max(options.length, options.width) * 2 + 16,
     )
-    const canvas = document.createElement('canvas')
-    canvas.width = logicalSize * SUPERSAMPLE
-    canvas.height = logicalSize * SUPERSAMPLE
-    const context = canvas.getContext('2d')
+    const canvas = this.acquireCanvas(logicalSize * SUPERSAMPLE)
+    const context = this.prepareContext(canvas)
     if (!context) return undefined
-    context.scale(SUPERSAMPLE, SUPERSAMPLE)
     drawVehicleVisual(context, {
       ...options,
       x: logicalSize / 2,
@@ -170,6 +181,7 @@ export class VehicleSpriteCache {
       canvas,
       logicalSize,
       pixelCount: canvas.width * canvas.height,
+      lastUsed: ++this.accessSequence,
     }
   }
 
@@ -179,12 +191,9 @@ export class VehicleSpriteCache {
     const logicalSize = Math.ceil(
       Math.max(options.length, options.width) * 2 + 16,
     )
-    const canvas = document.createElement('canvas')
-    canvas.width = logicalSize * SUPERSAMPLE
-    canvas.height = logicalSize * SUPERSAMPLE
-    const context = canvas.getContext('2d')
+    const canvas = this.acquireCanvas(logicalSize * SUPERSAMPLE)
+    const context = this.prepareContext(canvas)
     if (!context) return undefined
-    context.scale(SUPERSAMPLE, SUPERSAMPLE)
     drawVehicleShadowVisual(context, {
       ...options,
       x: logicalSize / 2,
@@ -194,6 +203,7 @@ export class VehicleSpriteCache {
       canvas,
       logicalSize,
       pixelCount: canvas.width * canvas.height,
+      lastUsed: ++this.accessSequence,
     }
   }
 
@@ -204,8 +214,7 @@ export class VehicleSpriteCache {
     const cached = this.sprites.get(key)
     if (cached) {
       this.hits += 1
-      this.sprites.delete(key)
-      this.sprites.set(key, cached)
+      cached.lastUsed = ++this.accessSequence
       return cached
     }
     this.misses += 1
@@ -220,14 +229,61 @@ export class VehicleSpriteCache {
   private makeRoom(incomingPixels: number) {
     while (
       this.sprites.size > 0 &&
-      this.pixelCount + incomingPixels > MAX_CACHED_PIXELS
+      this.pixelCount + incomingPixels > this.maximumCachedPixels
     ) {
-      const oldestKey = this.sprites.keys().next().value as string | undefined
+      let oldestKey: string | undefined
+      let oldestUse = Number.POSITIVE_INFINITY
+      for (const [key, sprite] of this.sprites) {
+        if (sprite.lastUsed < oldestUse) {
+          oldestKey = key
+          oldestUse = sprite.lastUsed
+        }
+      }
       if (!oldestKey) break
       const oldest = this.sprites.get(oldestKey)
       this.sprites.delete(oldestKey)
-      if (oldest) this.pixelCount -= oldest.pixelCount
+      if (oldest) {
+        this.pixelCount -= oldest.pixelCount
+        this.recycleCanvas(oldest.canvas)
+      }
       this.evictions += 1
     }
+  }
+
+  private acquireCanvas(backingSize: number) {
+    const pooledIndex = this.canvasPool.findIndex(
+      (canvas) =>
+        canvas.width === backingSize && canvas.height === backingSize,
+    )
+    if (pooledIndex >= 0) {
+      this.canvasReuses += 1
+      return this.canvasPool.splice(pooledIndex, 1)[0]
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = backingSize
+    canvas.height = backingSize
+    this.canvasAllocations += 1
+    return canvas
+  }
+
+  private prepareContext(canvas: HTMLCanvasElement) {
+    const context = canvas.getContext('2d')
+    if (!context) return undefined
+    // Recycled canvases retain their bitmap and transform. Reset both without
+    // resizing the backing store, which would allocate another large surface.
+    context.setTransform?.(1, 0, 0, 1, 0, 0)
+    context.clearRect?.(0, 0, canvas.width, canvas.height)
+    if (context.setTransform) {
+      context.setTransform(SUPERSAMPLE, 0, 0, SUPERSAMPLE, 0, 0)
+    } else {
+      context.scale(SUPERSAMPLE, SUPERSAMPLE)
+    }
+    return context
+  }
+
+  private recycleCanvas(canvas: HTMLCanvasElement) {
+    // One spare is enough for the miss/evict cycle and keeps actual memory
+    // bounded close to the advertised cache budget.
+    if (this.canvasPool.length === 0) this.canvasPool.push(canvas)
   }
 }
