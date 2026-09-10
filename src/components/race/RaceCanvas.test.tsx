@@ -196,9 +196,9 @@ describe('RaceCanvas layout', () => {
       return vehicle
     })
     const inputSpy = vi.spyOn(LocalRaceSession.prototype, 'advanceFrame')
-    render(<RaceCanvas engine={engine} mode="local" timeOfDay="day" onAbort={vi.fn()} onRestart={vi.fn()} onFinished={vi.fn()} />)
-    fireEvent.keyDown(window, { code: 'KeyD' })
+    render(<RaceCanvas controlSchemes={{ playerOne: 'arrows', playerTwo: 'ijkl' }} engine={engine} mode="local" timeOfDay="day" onAbort={vi.fn()} onRestart={vi.fn()} onFinished={vi.fn()} />)
     fireEvent.keyDown(window, { code: 'ArrowRight' })
+    fireEvent.keyDown(window, { code: 'KeyL' })
     act(() => frame(0))
     expect(inputSpy).toHaveBeenCalledWith(0, {
       'player-1': { throttle: 0, brake: 0, steer: 1 },

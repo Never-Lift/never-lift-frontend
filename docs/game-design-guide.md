@@ -269,6 +269,7 @@ Regras:
 - Circuitos usam cards horizontais com silhueta e nome, busca por circuito/localidade e rolagem nativa, por botões ou arrastando. Selecionar um circuito não limita o fim da rolagem.
 - A prévia grande do traçado ocupa um painel de dimensões fixas, independentemente da proporção do circuito, e marca posição e sentido da largada.
 - O F1 atual fica visível e as três pinturas são escolhidas diretamente por amostras clicáveis, sem etapa de “Personalizar” ou “Concluir”.
+- Cada piloto escolhe um grupo fixo entre `WASD`, setas e `IJKL`. No modo local, o grupo usado por um piloto fica indisponível para o outro; no online a escolha é local ao dispositivo e não faz parte das regras da sala.
 - Solo/local permite de zero bots até o limite de 22 carros somando humanos e bots. A dificuldade alterna entre fácil, médio e difícil por um botão de estado com ícone e cor, sem conceder física privilegiada.
 - Ação principal muda entre Iniciar, Pronto e Iniciar como host.
 - No modo local, a colisão entre carros fica ativa. O split-screen divide verticalmente telas largas e horizontalmente telas abaixo da razão de aspecto `1.35`, sempre com uma câmera por jogador.

@@ -6,11 +6,19 @@ import type { RaceEngine } from '@/race/RaceEngine'
 
 const raceCanvasCapture = vi.hoisted(() => ({
   engine: null as RaceEngine | null,
+  controlSchemes: null as { playerOne: string; playerTwo?: string } | null,
 }))
 
 vi.mock('@/components/race/RaceCanvas', () => ({
-  RaceCanvas: ({ engine }: { engine: RaceEngine }) => {
+  RaceCanvas: ({
+    engine,
+    controlSchemes,
+  }: {
+    engine: RaceEngine
+    controlSchemes: { playerOne: string; playerTwo?: string }
+  }) => {
     raceCanvasCapture.engine = engine
+    raceCanvasCapture.controlSchemes = controlSchemes
     return <section aria-label="Corrida de teste iniciada" />
   },
 }))
@@ -34,6 +42,8 @@ function findStartButton() {
 describe('Module 2 local race setup', () => {
   beforeEach(() => {
     raceCanvasCapture.engine = null
+    raceCanvasCapture.controlSchemes = null
+    window.localStorage.clear()
     vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api')
     vi.stubGlobal(
       'fetch',
@@ -64,6 +74,7 @@ describe('Module 2 local race setup', () => {
 
   afterEach(() => {
     cleanup()
+    window.localStorage.clear()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
@@ -77,6 +88,7 @@ describe('Module 2 local race setup', () => {
       'true',
     )
     expect(screen.getByRole('group', { name: 'Jogador 1' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Grupo de teclas do Jogador 1' })).toBeInTheDocument()
     expect(screen.getByRole('searchbox', { name: 'Pesquisar circuitos' })).toBeInTheDocument()
     expect(screen.getByLabelText('2 bots selecionados')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Dificuldade dos bots: Fácil/ })).toBeEnabled()
@@ -110,6 +122,54 @@ describe('Module 2 local race setup', () => {
     expect(
       within(playerTwo).getByRole('button', { name: 'Selecionar pintura Vermelho' }),
     ).toBeEnabled()
+  })
+
+  it('lets each local player choose one of three distinct keyboard groups', async () => {
+    const user = userEvent.setup()
+    renderApp('/race')
+    const startButton = await findStartButton()
+
+    const soloControls = screen.getByRole('group', {
+      name: 'Grupo de teclas do Jogador 1',
+    })
+    expect(within(soloControls).getByRole('button', { name: 'WASD' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await user.click(within(soloControls).getByRole('button', { name: 'Setas' }))
+    await user.click(screen.getByRole('button', { name: /LocalDois jogadores/ }))
+
+    const playerOneControls = screen.getByRole('group', {
+      name: 'Grupo de teclas do Jogador 1',
+    })
+    const playerTwoControls = screen.getByRole('group', {
+      name: 'Grupo de teclas do Jogador 2',
+    })
+    expect(within(playerOneControls).getByRole('button', { name: 'Setas' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(
+      within(playerOneControls).getByRole('button', {
+        name: 'WASD (em uso pelo outro jogador)',
+      }),
+    ).toBeDisabled()
+    expect(within(playerTwoControls).getByRole('button', { name: 'WASD' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(
+      within(playerTwoControls).getByRole('button', {
+        name: 'Setas (em uso pelo outro jogador)',
+      }),
+    ).toBeDisabled()
+
+    await user.click(within(playerTwoControls).getByRole('button', { name: 'IJKL' }))
+    await user.click(startButton)
+    expect(raceCanvasCapture.controlSchemes).toEqual({
+      playerOne: 'arrows',
+      playerTwo: 'ijkl',
+    })
   })
 
   it('offers only the restrained red, blue and green paint presets', async () => {

@@ -7,6 +7,7 @@ import { KeyboardControls } from '@/race/KeyboardControls'
 import { LocalRaceRuntime } from '@/race/LocalRaceRuntime'
 import type { RaceEngine } from '@/race/RaceEngine'
 import { RaceRenderer } from '@/race/RaceRenderer'
+import type { KeyboardControlSchemeId } from '@/race/control-schemes'
 import type {
   DamageKind,
   RaceMode,
@@ -21,6 +22,10 @@ type RaceCanvasProps = {
   onAbort: () => void
   onFinished: (results: RaceResultEntry[]) => void
   onRestart: () => void
+  controlSchemes?: {
+    playerOne: KeyboardControlSchemeId
+    playerTwo?: KeyboardControlSchemeId
+  }
 }
 export type DriverTelemetry = {
   name: string
@@ -117,6 +122,7 @@ export function RaceCanvas({
   onAbort,
   onFinished,
   onRestart,
+  controlSchemes = { playerOne: 'wasd', playerTwo: 'arrows' },
 }: RaceCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const finishedRef = useRef(false)
@@ -208,13 +214,14 @@ export function RaceCanvas({
       previousTimestamp = timestamp
 
       const frameInputs = {
-        'player-1': controls.getPlayerOneInput(
-          mode,
+        'player-1': controls.getInput(
+          controlSchemes.playerOne,
           runtime.getVehicleState('player-1'),
         ),
         ...(mode === 'local'
           ? {
-              'player-2': controls.getPlayerTwoInput(
+              'player-2': controls.getInput(
+                controlSchemes.playerTwo ?? 'arrows',
                 runtime.getVehicleState('player-2'),
               ),
             }
@@ -283,7 +290,7 @@ export function RaceCanvas({
       runtime.dispose()
       controls.destroy()
     }
-  }, [engine, mode, timeOfDay])
+  }, [controlSchemes.playerOne, controlSchemes.playerTwo, engine, mode, timeOfDay])
 
   return (
     <section
