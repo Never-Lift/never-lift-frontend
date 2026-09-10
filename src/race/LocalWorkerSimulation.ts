@@ -41,6 +41,10 @@ export class LocalWorkerSimulation {
 
   hasPendingTick() { return this.pendingSeconds + Number.EPSILON >= PHYSICS_STEP_SECONDS }
 
+  getSnapshotTimestamp(timestamp: number) {
+    return timestamp - this.pendingSeconds * 1000
+  }
+
   snapshot(timestamp: number, physicsMilliseconds: number): LocalWorkerSnapshot {
     const status = this.engine.getStatus()
     return {

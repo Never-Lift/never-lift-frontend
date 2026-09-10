@@ -5,7 +5,10 @@ import type { LocalWorkerSnapshot, RaceWorkerPort } from './local-worker-protoco
 import type { DriverInput } from './types'
 
 const clock = () => performance.timeOrigin + performance.now()
-const INTERPOLATION_DELAY_MS = 1000 / 60
+// Keep three 60 Hz visual frames buffered. A single-frame buffer sits exactly on
+// the worker/RAF boundary: one late message makes the camera hold the newest
+// pose for a frame and then jump, which is especially visible while turning.
+const INTERPOLATION_DELAY_MS = 1000 / 20
 
 /** One local simulation owner, bounded messages, no React position updates. */
 export class LocalRaceRuntime {
@@ -19,6 +22,8 @@ export class LocalRaceRuntime {
   private paused = false
   private failure: string | null = null
   private diagnosticError: string | null = null
+  private interpolationSamples = 0
+  private interpolationUnderruns = 0
   private readonly started: number
   private lastResponseAt: number
   private readonly now: () => number
@@ -38,7 +43,7 @@ export class LocalRaceRuntime {
         if (this.disposed) return
         if (data.type === 'failure') { this.handleFailure(data.message); return }
         this.snapshots.push(data)
-        if (this.snapshots.length > 4) this.snapshots.shift()
+        if (this.snapshots.length > 6) this.snapshots.shift()
         this.inFlight = false
         this.lastResponseAt = this.now()
       }
@@ -91,6 +96,8 @@ export class LocalRaceRuntime {
     const latest = this.latest()
     if (!latest) return this.engine.getInterpolatedVehicles()
     const target = this.now() - INTERPOLATION_DELAY_MS
+    this.interpolationSamples += 1
+    if (target - latest.timestamp > 0.5) this.interpolationUnderruns += 1
     let before = this.snapshots[0]
     let after = before
     for (const snapshot of this.snapshots) {
@@ -108,6 +115,13 @@ export class LocalRaceRuntime {
           y: lerp(previous.renderPosition.y, vehicle.renderPosition.y, alpha),
         },
         renderAngle: lerpAngle(previous.renderAngle, vehicle.renderAngle, alpha),
+        // RaceCamera follows movement direction. Interpolating the render pose
+        // but stepping its velocity once per worker message still makes the
+        // scenery rotate unevenly through corners.
+        velocity: {
+          x: lerp(previous.velocity.x, vehicle.velocity.x, alpha),
+          y: lerp(previous.velocity.y, vehicle.velocity.y, alpha),
+        },
       }
     })
   }
@@ -121,7 +135,9 @@ export class LocalRaceRuntime {
     const snapshot = this.latest()
     return { worker: Boolean(this.worker), diagnosticError: this.diagnosticError, snapshotTimestamp: snapshot?.timestamp ?? 0,
       snapshotAgeMs: snapshot ? Math.max(0, this.now() - snapshot.timestamp) : 0,
-      physicsMilliseconds: snapshot?.physicsMilliseconds ?? 0 }
+      physicsMilliseconds: snapshot?.physicsMilliseconds ?? 0,
+      interpolationSamples: this.interpolationSamples,
+      interpolationUnderruns: this.interpolationUnderruns }
   }
   getOverlayState(showDriverNames = false) {
     return { ...(this.latest()?.overlay ?? this.session.getOverlayState()), showDriverNames }

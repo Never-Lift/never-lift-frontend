@@ -349,6 +349,40 @@ além do smoke real do Edge (cinco workers criados e encerrados), 24 circuitos/6
 amostras de geometria e 512 sweeps CCD/318 contatos com o hash de referência
 `8a47702e6a2051c8ed655cd32518fc0a2becc823282d4ea0b2117e2d0ea01e36`.
 
+### Correção da cadência visual nas curvas — 09/09/2026
+
+A validação manual posterior da otimização encontrou pequenas travadas visuais
+durante curvas, inclusive com um único carro, embora o FPS permanecesse alto.
+O problema não estava na física: o buffer de interpolação tinha exatamente um
+quadro de 60 Hz (16,7 ms), enquanto a idade normal dos snapshots do worker
+ficava ligeiramente acima desse limite. O renderer alcançava o snapshot mais
+novo, mantinha a câmera parada por um quadro e saltava quando a próxima mensagem
+chegava. A troca de direção tornava esse defeito muito mais perceptível.
+
+A correção:
+
+- mantém três quadros de 60 Hz (50 ms) e até seis snapshots para absorver a
+  variação normal entre `requestAnimationFrame` e o worker;
+- interpola também o vetor de movimento usado exclusivamente pela orientação
+  visual da câmera, em vez de trocar sua direção a cada mensagem;
+- quando o worker divide uma recuperação em vários passos, marca o snapshot com
+  o instante realmente simulado, descontando o tempo ainda pendente. A entrega
+  continua responsiva mesmo com 22 carros, sem publicar um estado intermediário
+  como se ele já estivesse no relógio atual;
+- acrescenta diagnóstico de esvaziamento do buffer ao benchmark e regressões
+  automatizadas para snapshots a 30 Hz entregues um quadro atrasados.
+
+Não foram alterados passo fixo, fórmulas, controles, colisões, dano, pistas,
+câmera aprovada ou tuning. O atraso existe somente na apresentação Canvas e é
+limitado a 50 ms; comandos e autoridade física continuam no worker em 120 Hz.
+
+O gate aprovou 405 testes em 49 arquivos, lint e build. O smoke no Edge aprovou
+cinco ciclos de criação/encerramento e o worker do bundle. Em Mônaco local 2+20,
+20 segundos, a medição final registrou aproximadamente 58,4 FPS e 100,2% de
+tempo simulado/real. Os quatro esvaziamentos diagnosticados coincidiram com uma
+pausa isolada do Edge de até 149,6 ms, não com a cadência normal das curvas.
+A confirmação visual no navegador do autor permanece obrigatória.
+
 ## Ponto de retomada
 
 - Código e documentação na branch `codex/race-performance-worker`; suíte completa,

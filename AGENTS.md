@@ -98,3 +98,5 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.
 
 > Rodada de 08/09/2026: solo/local usam o mesmo motor 120 Hz em Web Worker, com mensagens limitadas e renderização desacoplada. Colisões e caches foram otimizados sem mudar física 2.0.3 nem design. Ver `docs/race-performance-worker-2026-09-08.md`: média não equivale a mínimo de 40 FPS; validação manual pendente. Nenhuma promoção à main nem implementação do M3c nesta rodada.
+
+> Correção de cadência visual de 09/09/2026: snapshots locais agora têm buffer de três quadros, movimento visual interpolado e timestamp coerente com o tempo efetivamente simulado durante catch-up. Isso elimina o padrão de segurar/saltar a câmera nas curvas sem alterar a física 2.0.3. Gate automatizado aprovado (405 testes/49 arquivos, lint, build e smoke do Edge); validação visual do autor pendente.
