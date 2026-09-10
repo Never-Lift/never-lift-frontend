@@ -18,7 +18,16 @@ continuation.port1.onmessage = () => tick()
 
 function sendSnapshot() {
   if (!simulation) return
-  scope.postMessage(simulation.snapshot(now(), physicsMilliseconds))
+  const timestamp = now()
+  // A sliced catch-up may still have wall time waiting to be simulated. Stamp
+  // the pose with the instant it actually represents instead of pretending it
+  // already reached `timestamp`; otherwise the following pose appears to jump.
+  scope.postMessage(
+    simulation.snapshot(
+      simulation.getSnapshotTimestamp(timestamp),
+      physicsMilliseconds,
+    ),
+  )
   physicsMilliseconds = 0
   pendingSnapshot = false
 }

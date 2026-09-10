@@ -45,6 +45,16 @@ describe('local worker simulation', () => {
     expect(sliced.engine.getVehicleState('bot-1')).toEqual(whole.engine.getVehicleState('bot-1'))
     expect(sliced.session.getOverlayState()).toEqual(whole.session.getOverlayState())
   })
+
+  it('timestamps a sliced snapshot at the simulated pose rather than unfinished wall time', () => {
+    const worker = new LocalWorkerSimulation(options, ids, 0)
+    worker.tick(20, 1 / 120)
+
+    expect(worker.getSnapshotTimestamp(20)).toBeCloseTo(1000 / 120, 8)
+
+    worker.tick(20, 1 / 120)
+    expect(worker.getSnapshotTimestamp(20)).toBeCloseTo(2000 / 120, 8)
+  })
   it.each([30, 60, 120])('matches the same engine and start procedure exactly at %i Hz', (fps) => {
     const engine = new RaceEngine(options)
     const session = new LocalRaceSession(engine, ids)
@@ -111,7 +121,7 @@ describe('local worker lifecycle and render view', () => {
     second.vehicles[0].renderAngle = -Math.PI + 0.1
     worker.receive(first)
     worker.receive(second)
-    time(1010 + 1000 / 60)
+    time(1010 + 1000 / 20)
     const displayed = runtime.getInterpolatedVehicles()[0]
     expect(displayed.renderPosition.x).toBeCloseTo(5)
     expect(displayed.renderPosition.y).toBeCloseTo(10)
@@ -120,6 +130,37 @@ describe('local worker lifecycle and render view', () => {
     time(3000)
     expect(runtime.getInterpolatedVehicles()[0].renderPosition).toEqual({ x: 10, y: 20 })
     expect(first.vehicles[0].renderPosition).toEqual({ x: 0, y: 0 })
+  })
+
+  it('keeps camera poses advancing when 30 Hz snapshots arrive one visual frame late', () => {
+    const { worker, runtime, simulation, time } = fixture()
+    const snapshotAt = (timestamp: number, x: number) => {
+      const snapshot = simulation.snapshot(timestamp, 0)
+      snapshot.vehicles[0].renderPosition = { x, y: 0 }
+      snapshot.vehicles[0].velocity = { x: 20, y: x / 10 }
+      return snapshot
+    }
+
+    worker.receive(snapshotAt(1000, 0))
+    worker.receive(snapshotAt(1000 + 1000 / 30, 10))
+
+    // The next worker result is delayed past one RAF. A one-frame jitter buffer
+    // used to reach the latest pose here, hold the camera, then jump on receipt.
+    time(1000 + 1000 / 15)
+    const first = runtime.getInterpolatedVehicles()[0]
+    time(1000 + 1000 / 12)
+    const second = runtime.getInterpolatedVehicles()[0]
+
+    worker.receive(snapshotAt(1000 + 1000 / 15, 20))
+    time(1100)
+    const third = runtime.getInterpolatedVehicles()[0]
+
+    expect(first.renderPosition.x).toBeGreaterThan(0)
+    expect(second.renderPosition.x).toBeGreaterThan(first.renderPosition.x)
+    expect(third.renderPosition.x).toBeGreaterThan(second.renderPosition.x)
+    expect(second.velocity.y).toBeGreaterThan(first.velocity.y)
+    expect(third.velocity.y).toBeGreaterThan(second.velocity.y)
+    expect(runtime.getDiagnostics().interpolationUnderruns).toBe(0)
   })
 
   it('falls back safely on startup error/timeout, but never resets an active worker race', () => {

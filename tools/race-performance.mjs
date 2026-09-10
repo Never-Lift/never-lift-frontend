@@ -163,10 +163,11 @@ const bundle = await build({
             if (frame >= 5) { physicsMs.push(physicsEnd - start); renderMs.push(performance.now() - physicsEnd) }
             if (timestamp - frameMs[0] >= maximumSeconds * 1000) break
           }
-          const stats = values => ({ mean: values.reduce((a,b) => a+b,0)/values.length, p95: [...values].sort((a,b) => a-b)[Math.floor(values.length * .95)] })
+          const stats = values => ({ mean: values.reduce((a,b) => a+b,0)/values.length, p95: [...values].sort((a,b) => a-b)[Math.floor(values.length * .95)], max: Math.max(...values) })
           const wallSeconds = (frameMs.at(-1) - frameMs[0]) / 1000
           const simulatedSeconds = view.getSimulationTimeSeconds() - simulationStart
-          const result = { mode, cars: count, humans: racers.filter(r => r.kind === 'human').length, bots: racers.filter(r => r.kind === 'bot').length, timeOfDay, raceStatus: view.getStatus(), movingCars: view.getInterpolatedVehicles().filter(v => Math.hypot(v.velocity.x,v.velocity.y)>1).length, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds, simulationToWallRatio: simulatedSeconds / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), worker: runtime ? { responses: workerPhysicsMs.length, physics: stats(workerPhysicsMs), snapshotAgeMs: stats(snapshotAgeMs) } : null, renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
+          const workerDiagnostics = runtime?.getDiagnostics()
+          const result = { mode, cars: count, humans: racers.filter(r => r.kind === 'human').length, bots: racers.filter(r => r.kind === 'bot').length, timeOfDay, raceStatus: view.getStatus(), movingCars: view.getInterpolatedVehicles().filter(v => Math.hypot(v.velocity.x,v.velocity.y)>1).length, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds, simulationToWallRatio: simulatedSeconds / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), worker: runtime ? { responses: workerPhysicsMs.length, physics: stats(workerPhysicsMs), snapshotAgeMs: stats(snapshotAgeMs), interpolationSamples: workerDiagnostics.interpolationSamples, interpolationUnderruns: workerDiagnostics.interpolationUnderruns } : null, renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
           runtime?.dispose()
           if (workerUrl) URL.revokeObjectURL(workerUrl)
           return result
