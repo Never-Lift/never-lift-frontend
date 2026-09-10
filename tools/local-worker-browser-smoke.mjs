@@ -54,7 +54,7 @@ try {
         if (data.simulationTimeSeconds > 0.1) {
           clearTimeout(timeout); worker.terminate(); resolve({ type: data.type, cars: data.vehicles.length }); return
         }
-        worker.postMessage({ type: 'frame', inputs: {} })
+        worker.postMessage({ type: 'frame' })
       }
       worker.postMessage({ type: 'init', humanIds: ['player-1'], options: {
         track: SHORT_TRACK, mode: 'solo', racers: [{ id: 'player-1', name: 'P1', kind: 'human', color: '#2d7dff' }],

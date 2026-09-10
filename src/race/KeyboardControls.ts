@@ -1,4 +1,3 @@
-import { NUMERIC_SPEED_EPSILON_METERS_PER_SECOND } from '@/race/constants'
 import {
   KEYBOARD_CONTROL_SCHEMES,
   getKeyboardControlScheme,
@@ -10,11 +9,15 @@ import type { DriverInput, VehicleState } from '@/race/types'
 
 type SteeringVehicle = Pick<VehicleState, 'angle' | 'velocity'>
 
+// Input policy, not a physical constant: sub-0.36 km/h settling at rest must
+// not alternate left/right as the longitudinal velocity crosses numeric zero.
+const REVERSE_STEERING_SPEED_METERS_PER_SECOND = 0.1
+
 /** Human left/right follow travel direction in reverse. Apply before physics/transport. */
 function travelSteer(steer: number, vehicle?: SteeringVehicle | null) {
   if (!vehicle || steer === 0) return steer
   const speed = dot(vehicle.velocity, bodyAxes(vehicle.angle).forward)
-  return speed < -NUMERIC_SPEED_EPSILON_METERS_PER_SECOND ? -steer : steer
+  return speed < -REVERSE_STEERING_SPEED_METERS_PER_SECOND ? -steer : steer
 }
 
 const CONTROL_KEYS = new Set([
@@ -25,9 +28,11 @@ const CONTROL_KEYS = new Set([
 export class KeyboardControls {
   private readonly pressed = new Set<string>()
   private readonly target: Window
+  private readonly onChange?: () => void
 
-  constructor(target: Window = window) {
+  constructor(target: Window = window, onChange?: () => void) {
     this.target = target
+    this.onChange = onChange
     target.addEventListener('keydown', this.handleKeyDown)
     target.addEventListener('keyup', this.handleKeyUp)
     target.addEventListener('blur', this.handleBlur)
@@ -37,22 +42,25 @@ export class KeyboardControls {
   private handleKeyDown = (event: KeyboardEvent) => {
     if (!CONTROL_KEYS.has(event.code)) return
     event.preventDefault()
+    if (this.pressed.has(event.code)) return
     this.pressed.add(event.code)
+    this.onChange?.()
   }
 
   private handleKeyUp = (event: KeyboardEvent) => {
     if (!CONTROL_KEYS.has(event.code)) return
     event.preventDefault()
-    this.pressed.delete(event.code)
+    if (this.pressed.delete(event.code)) this.onChange?.()
   }
 
   private handleBlur = () => {
     this.pressed.clear()
+    this.onChange?.()
   }
 
   private handleVisibilityChange = () => {
     if (this.target.document.visibilityState !== 'visible') {
-      this.pressed.clear()
+      this.handleBlur()
     }
   }
 

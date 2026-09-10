@@ -198,6 +198,7 @@ Regras:
 - A velocidade final emerge de potência e arrasto. Frenagem, aceleração e raio de curva são calibrados por cenários mensuráveis e referências primárias da F1 de 2026.
 - As rampas de teclado permitem modular acelerador, freio e esterço, mas não impedem patinagem, travamento ou perda de controle.
 - Na ré, esquerda/direita continuam representando o lado para o qual o carro se desloca na tela: o adaptador de input compensa o sentido inverso antes de entregar o comando ao motor físico ou ao transporte online, sem alterar as equações nem o tuning do veículo.
+- A adaptação de ré ignora velocidades longitudinais de repouso de até `0,1 m/s` (0,36 km/h), para não inverter esquerda/direita por pequenas oscilações numéricas. Essa tolerância é somente do teclado, não modifica o motor físico.
 - Todos usam exatamente o mesmo desempenho. A dificuldade dos bots altera decisões e execução, nunca potência, aderência, freio ou tolerância de colisão.
 - O collider do carro é composto por polígonos convexos métricos que acompanham asa, bico, rodas, chassi e traseira, com tolerância visual máxima de `2–5 cm`.
 - A face física de cada barreira é a mesma polilinha desenhada na pista. Não existe margem invisível entre asfalto e muro.

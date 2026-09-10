@@ -1,5 +1,10 @@
 # M2/M3 — desempenho local com 22 carros (08/09/2026)
 
+> Complemento de 10/09/2026: a investigação posterior de teclas perdidas e
+> microtravadas está em `race-input-cadence-2026-09-10.md`. Ela substitui a cadência
+> de transporte e a calibração de buffer descritas historicamente abaixo, sem
+> mudar física, pistas ou o design aprovado.
+
 ## Escopo aprovado e estado
 
 O autor autorizou otimizar solo **1 jogador + 21 bots** e local **2 jogadores +

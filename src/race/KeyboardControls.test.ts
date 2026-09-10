@@ -28,6 +28,14 @@ function key(type: 'keydown' | 'keyup', code: string) {
 }
 
 describe('KeyboardControls', () => {
+  it('does not treat tiny resting velocity oscillations as reverse', () => {
+    controls = new KeyboardControls()
+    key('keydown', 'ArrowLeft')
+    for (const speed of [0, -0.03, 0.02, -0.09, 0.001]) {
+      expect(controls.getInput('arrows', { angle: 0, velocity: { x: speed, y: 0 } }).steer).toBe(1)
+    }
+    expect(controls.getInput('arrows', { angle: 0, velocity: { x: -0.2, y: 0 } }).steer).toBe(-1)
+  })
   it.each([
     ['wasd', 'KeyD', -1],
     ['wasd', 'KeyA', 1],

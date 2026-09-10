@@ -185,12 +185,20 @@ export function RaceCanvas({
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const controls = new KeyboardControls()
     const humanIds = mode === 'local' ? ['player-1', 'player-2'] : ['player-1']
     const runtime = new LocalRaceRuntime(engine, humanIds,
       typeof Worker === 'undefined' ? undefined : () =>
         new Worker(new URL('../../race/local-race.worker.ts', import.meta.url), { type: 'module' }),
     )
+    const controls = new KeyboardControls(window, () => runtime.setInputs(readInputs()))
+    function readInputs() {
+      return {
+        'player-1': controls.getInput(controlSchemes.playerOne, runtime.getVehicleState('player-1')),
+        ...(mode === 'local' ? {
+          'player-2': controls.getInput(controlSchemes.playerTwo ?? 'arrows', runtime.getVehicleState('player-2')),
+        } : {}),
+      }
+    }
     const handleVisibility = () => {
       previousTimestamp = null
       runtime.setPaused(document.hidden)
@@ -213,21 +221,9 @@ export function RaceCanvas({
         previousTimestamp === null ? 0 : (timestamp - previousTimestamp) / 1000
       previousTimestamp = timestamp
 
-      const frameInputs = {
-        'player-1': controls.getInput(
-          controlSchemes.playerOne,
-          runtime.getVehicleState('player-1'),
-        ),
-        ...(mode === 'local'
-          ? {
-              'player-2': controls.getInput(
-                controlSchemes.playerTwo ?? 'arrows',
-                runtime.getVehicleState('player-2'),
-              ),
-            }
-          : {}),
-      }
-      runtime.advanceFrame(deltaSeconds, frameInputs)
+      // Poll as well for direction changes while reversing with a key held;
+      // physical key edges are already sent immediately by KeyboardControls.
+      runtime.advanceFrame(deltaSeconds, readInputs(), performance.timeOrigin + timestamp)
       const failure = runtime.getFailure()
       if (failure) {
         setRaceError({ engine, message: failure })

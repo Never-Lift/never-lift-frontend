@@ -200,7 +200,8 @@ describe('RaceCanvas layout', () => {
     fireEvent.keyDown(window, { code: 'ArrowRight' })
     fireEvent.keyDown(window, { code: 'KeyL' })
     act(() => frame(0))
-    expect(inputSpy).toHaveBeenCalledWith(0, {
+    act(() => frame(1000 / 120))
+    expect(inputSpy).toHaveBeenCalledWith(1 / 120, {
       'player-1': { throttle: 0, brake: 0, steer: 1 },
       'player-2': { throttle: 0, brake: 0, steer: -1 },
     })
