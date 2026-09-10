@@ -11,24 +11,24 @@ import { build } from 'vite'
 const root = process.cwd()
 const baseline = process.argv.includes('--baseline')
 const workerMode = process.argv.includes('--worker')
-if (workerMode && (baseline || !process.argv.includes('--browser') || !process.argv.includes('--fixed-driving'))) {
-  throw new Error('--worker requires --browser --fixed-driving and cannot use --baseline')
+if (workerMode && (!process.argv.includes('--browser') || !process.argv.includes('--fixed-driving'))) {
+  throw new Error('--worker requires --browser --fixed-driving')
 }
 const baselineRef = process.env.PERF_BASE_REF ?? 'HEAD'
+const baselinePlugins = baseline ? [{
+  name: 'committed-race-baseline', enforce: 'pre',
+  load(id) {
+    const prefix = root.replaceAll('\\', '/') + '/src/race/'
+    if (!id.replaceAll('\\', '/').startsWith(prefix) || !id.endsWith('.ts')) return
+    return execFileSync('git', ['show', baselineRef + ':src/race/' + id.slice(prefix.length)], { cwd: root, encoding: 'utf8' })
+  },
+}] : []
 const bundle = await build({
   configFile: false,
   resolve: { alias: { '@': resolve(root, 'src') } },
   logLevel: 'error',
   build: { ssr: true, write: false, minify: false, rolldownOptions: { input: resolve(root, workerMode ? 'tools/race-worker-performance-entry.ts' : 'tools/race-performance-entry.ts') } },
-  plugins: baseline ? [{
-    name: 'committed-race-baseline',
-    enforce: 'pre',
-    load(id) {
-      const prefix = root.replaceAll('\\', '/') + '/src/race/'
-      if (!id.replaceAll('\\', '/').startsWith(prefix) || !id.endsWith('.ts')) return
-      return execFileSync('git', ['show', baselineRef + ':src/race/' + id.slice(prefix.length)], { cwd: root, encoding: 'utf8' })
-    },
-  }] : [],
+  plugins: baselinePlugins,
 })
 {
   const code = bundle.output.find(item => item.type === 'chunk' && item.isEntry).code
@@ -83,9 +83,34 @@ const bundle = await build({
     process.exit(0)
   }
   const track = JSON.parse(await readFile(resolve(catalogRoot, `${trackId}.json`), 'utf8'))
+  if (process.argv.includes('--motion-oracle')) {
+    const mode = process.env.PERF_MODES ?? 'solo'
+    const engine = new RaceEngine({ track, mode, racers: performanceRacers(mode, Number(process.env.PERF_CARS ?? 22)) })
+    const humans = engine.getInterpolatedVehicles().filter(vehicle => vehicle.kind === 'human')
+    const errors = []
+    const largest = []
+    for (let tick = 0; tick < 3600; tick++) {
+      const before = engine.getVehicleState('player-1')
+      for (const human of humans) engine.setInput(human.id, engine.createBotInput(engine.getVehicleState(human.id)))
+      engine.stepFixed()
+      const after = engine.getVehicleState('player-1')
+      const speed = Math.hypot(after.velocity.x, after.velocity.y), previousSpeed = Math.hypot(before.velocity.x, before.velocity.y)
+      if (speed < 10 || previousSpeed < 10 || Math.abs(speed - previousSpeed) > 2) continue
+      const error = Math.abs(Math.hypot(after.position.x - before.position.x, after.position.y - before.position.y) / ((speed + previousSpeed) / 240) - 1)
+      errors.push(error)
+      if (error > 0.2) {
+        largest.push({ tick, seconds: (tick + 1) / 120, error, speed, impacts: after.damage.impactCount })
+        largest.sort((a,b) => b.error-a.error); largest.length = Math.min(10, largest.length)
+      }
+    }
+    errors.sort((a,b) => a-b)
+    console.log(JSON.stringify({ oracle: 'unrendered unchanged physical engine', track: trackId, mode, samples: errors.length,
+      mean: errors.reduce((a,b)=>a+b,0)/errors.length, p95: errors[Math.floor(errors.length*.95)], max: Math.max(...errors), largest }))
+    process.exit(0)
+  }
   let workerCode = null
   if (workerMode) {
-    const workerBundle = await build({ configFile: false, logLevel: 'error', resolve: { alias: { '@': resolve(root, 'src') } },
+    const workerBundle = await build({ configFile: false, logLevel: 'error', plugins: baselinePlugins, resolve: { alias: { '@': resolve(root, 'src') } },
       build: { ssr: true, write: false, minify: false, rolldownOptions: { input: resolve(root, 'tools/race-worker-benchmark.ts') } } })
     workerCode = workerBundle.output.find(item => item.type === 'chunk' && item.isEntry).code
   }
@@ -139,6 +164,14 @@ const bundle = await build({
           if (diagnosticNoShadowBlur) Object.defineProperty(document.querySelector('canvas').getContext('2d'), 'shadowBlur', { get: () => 0, set: () => {} })
           const renderer = new RaceRenderer(document.querySelector('canvas'), track, { ...(raceGraphicsSettings?.(mode, count) ?? {}), timeOfDay, vehicleSpriteCache: !disableVehicleSprites })
           const physicsMs = [], renderMs = [], frameMs = [], workerPhysicsMs = [], snapshotAgeMs = []
+          const motionError = []
+          let previousPose = null, heldMovingFrames = 0
+          const largestMotionErrors = []
+          let displayedVehicles = []
+          const renderView = { mode, getInterpolatedVehicles() {
+            displayedVehicles = view.getInterpolatedVehicles()
+            return displayedVehicles
+          } }
           let lastSnapshot = 0
           const simulationStart = view.getSimulationTimeSeconds()
           for (let frame = 0; frame < frames; frame++) {
@@ -147,10 +180,28 @@ const bundle = await build({
             frameMs.push(timestamp)
             const start = performance.now()
             if (driving && !fixedDriving) driveHumans()
-            if (runtime) runtime.advanceFrame(deltaSeconds, {})
+            if (runtime) runtime.advanceFrame(deltaSeconds, {}, performance.timeOrigin + timestamp)
             else engine.advanceFrame(deltaSeconds)
             const physicsEnd = performance.now()
-            renderer.render(view, deltaSeconds)
+            renderer.render(renderView, deltaSeconds)
+            // Observe exactly the pose submitted to the renderer, not a second
+            // sample after rendering (which biases the old wall-clock runtime).
+            const pose = displayedVehicles[0]
+            const speed = Math.hypot(pose.velocity.x, pose.velocity.y)
+            if (previousPose && speed > 10 && previousPose.speed > 10 && deltaSeconds > 0 && Math.abs(speed - previousPose.speed) < 2) {
+              const traveled = Math.hypot(pose.renderPosition.x - previousPose.position.x, pose.renderPosition.y - previousPose.position.y)
+              const ratio = traveled / (deltaSeconds * (speed + previousPose.speed) / 2)
+              motionError.push(Math.abs(ratio - 1))
+              if (traveled < 0.001) heldMovingFrames++
+              if (Math.abs(ratio - 1) > 0.2) {
+                largestMotionErrors.push({ error: Math.abs(ratio - 1), frame, speed, previousSpeed: previousPose.speed,
+                  traveled, deltaSeconds, snapshotAgeMs: runtime?.getDiagnostics().snapshotAgeMs,
+                  impacts: pose.damage.impactCount, previousImpacts: previousPose.impacts })
+                largestMotionErrors.sort((a, b) => b.error - a.error)
+                largestMotionErrors.length = Math.min(10, largestMotionErrors.length)
+              }
+            }
+            previousPose = { position: pose.renderPosition, speed, impacts: pose.damage.impactCount }
             if (runtime) {
               if (runtime.getFailure()) throw new Error(runtime.getFailure())
               const diagnostics = runtime.getDiagnostics()
@@ -168,6 +219,11 @@ const bundle = await build({
           const simulatedSeconds = view.getSimulationTimeSeconds() - simulationStart
           const workerDiagnostics = runtime?.getDiagnostics()
           const result = { mode, cars: count, humans: racers.filter(r => r.kind === 'human').length, bots: racers.filter(r => r.kind === 'bot').length, timeOfDay, raceStatus: view.getStatus(), movingCars: view.getInterpolatedVehicles().filter(v => Math.hypot(v.velocity.x,v.velocity.y)>1).length, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds, simulationToWallRatio: simulatedSeconds / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), worker: runtime ? { responses: workerPhysicsMs.length, physics: stats(workerPhysicsMs), snapshotAgeMs: stats(snapshotAgeMs), interpolationSamples: workerDiagnostics.interpolationSamples, interpolationUnderruns: workerDiagnostics.interpolationUnderruns } : null, renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
+          result.motion = { samples: motionError.length, relativeStepError: stats(motionError), heldMovingFrames, largestMotionErrors }
+          if (result.worker) Object.assign(result.worker, {
+            movingInterpolationUnderruns: workerDiagnostics.movingInterpolationUnderruns,
+            maximumInterpolationUnderrunMs: workerDiagnostics.maximumInterpolationUnderrunMs,
+          })
           runtime?.dispose()
           if (workerUrl) URL.revokeObjectURL(workerUrl)
           return result

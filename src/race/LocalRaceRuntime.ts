@@ -3,12 +3,13 @@ import { lerp, lerpAngle } from './math'
 import type { RaceEngine } from './RaceEngine'
 import type { LocalWorkerSnapshot, RaceWorkerPort } from './local-worker-protocol'
 import type { DriverInput } from './types'
+import { LocalInputBuffer, sameInput } from './LocalInputBuffer'
 
 const clock = () => performance.timeOrigin + performance.now()
-// Keep three 60 Hz visual frames buffered. A single-frame buffer sits exactly on
-// the worker/RAF boundary: one late message makes the camera hold the newest
-// pose for a frame and then jump, which is especially visible while turning.
-const INTERPOLATION_DELAY_MS = 1000 / 20
+// Continuous bounded snapshot pulls no longer wait for the next RAF round trip.
+// Four physics ticks cover measured split-screen delivery jitter without the
+// old 50ms visual delay. Do not reduce this from FPS averages alone.
+export const LOCAL_INTERPOLATION_DELAY_MS = 1000 / 30
 
 /** One local simulation owner, bounded messages, no React position updates. */
 export class LocalRaceRuntime {
@@ -24,9 +25,14 @@ export class LocalRaceRuntime {
   private diagnosticError: string | null = null
   private interpolationSamples = 0
   private interpolationUnderruns = 0
+  private movingInterpolationUnderruns = 0
+  private maximumInterpolationUnderrunMs = 0
   private readonly started: number
   private lastResponseAt: number
   private readonly now: () => number
+  private presentationTimestamp: number | undefined
+  private lastInputs: Record<string, DriverInput> = {}
+  private readonly fallbackInputs = new LocalInputBuffer()
 
   constructor(engine: RaceEngine, humanIds: string[], createWorker?: () => RaceWorkerPort, now = clock) {
     this.engine = engine
@@ -43,9 +49,10 @@ export class LocalRaceRuntime {
         if (this.disposed) return
         if (data.type === 'failure') { this.handleFailure(data.message); return }
         this.snapshots.push(data)
-        if (this.snapshots.length > 6) this.snapshots.shift()
+        if (this.snapshots.length > 8) this.snapshots.shift()
         this.inFlight = false
         this.lastResponseAt = this.now()
+        this.requestSnapshot()
       }
       this.worker.onerror = (event) => this.handleFailure(event.message)
       this.worker.onmessageerror = () => this.handleFailure('Worker message could not be decoded')
@@ -62,32 +69,65 @@ export class LocalRaceRuntime {
     if (this.disposed) return
     this.diagnosticError = message
     this.stopWorker()
+    // The worker may fail after receiving a key but before its first snapshot.
+    // Re-send the held state to the fallback instead of suppressing it as a duplicate.
+    this.lastInputs = {}
     // Safe fallback ONLY before any worker state has been displayed.
     // After start, fail visibly instead of resetting/losing the active race.
     if (this.snapshots.length > 0) this.failure = 'A simulação foi interrompida. Pressione R para reiniciar a corrida.'
   }
 
-  advanceFrame(deltaSeconds: number, inputs: Record<string, DriverInput>) {
+  private requestSnapshot() {
+    if (!this.worker || this.inFlight || this.paused || this.disposed || this.failure) return
+    this.inFlight = true
+    try { this.worker.postMessage({ type: 'frame' }) }
+    catch (error) { this.handleFailure(String(error)) }
+  }
+
+  /** Input changes do not wait for a visual frame or a snapshot acknowledgement. */
+  setInputs(inputs: Record<string, DriverInput>) {
     if (this.disposed || this.failure || this.paused) return
+    const changes: Record<string, DriverInput> = {}
+    for (const [id, input] of Object.entries(inputs)) {
+      if (sameInput(this.lastInputs[id], input)) continue
+      changes[id] = { ...input }
+      this.lastInputs[id] = { ...input }
+    }
+    if (!Object.keys(changes).length) return
+    try {
+      if (this.worker) this.worker.postMessage({ type: 'input', inputs: changes })
+      else this.fallbackInputs.enqueue(changes)
+    } catch (error) { this.handleFailure(String(error)) }
+  }
+
+  advanceFrame(deltaSeconds: number, inputs: Record<string, DriverInput>, presentationTimestamp = this.now()) {
+    if (this.disposed || this.failure || this.paused) return
+    // RAF's display clock is stable; performance.now() varies with task/GC cost
+    // ahead of this callback. All viewports sample the same display instant.
+    this.presentationTimestamp = presentationTimestamp
     if (this.worker && this.snapshots.length === 0 && this.now() - this.started > 8000) this.handleFailure()
     if (this.worker && this.snapshots.length > 0 && this.now() - this.lastResponseAt > 5000) {
       this.handleFailure('Worker stopped responding')
       return
     }
-    if (!this.worker) { this.session.advanceFrame(deltaSeconds, inputs); return }
-    if (!this.inFlight) {
-      this.inFlight = true
-      try { this.worker.postMessage({ type: 'frame', inputs }) }
-      catch (error) { this.handleFailure(String(error)) }
+    this.setInputs(inputs)
+    if (!this.worker) {
+      this.fallbackInputs.advance(deltaSeconds, (seconds, held) => this.session.advanceFrame(seconds, held))
+      return
     }
+    this.requestSnapshot()
   }
 
   setPaused(paused: boolean) {
     this.paused = paused
     this.lastResponseAt = this.now()
+    this.lastInputs = {}
+    this.fallbackInputs.clear()
+    this.presentationTimestamp = undefined
     try { this.worker?.postMessage({ type: 'visibility', paused }) }
     catch (error) { this.handleFailure(String(error)) }
     if (paused) this.snapshots = this.snapshots.slice(-1)
+    else this.requestSnapshot()
   }
 
   private latest() { return this.snapshots.at(-1) }
@@ -95,9 +135,15 @@ export class LocalRaceRuntime {
   getInterpolatedVehicles() {
     const latest = this.latest()
     if (!latest) return this.engine.getInterpolatedVehicles()
-    const target = this.now() - INTERPOLATION_DELAY_MS
+    const target = (this.presentationTimestamp ?? this.now()) - LOCAL_INTERPOLATION_DELAY_MS
     this.interpolationSamples += 1
-    if (target - latest.timestamp > 0.5) this.interpolationUnderruns += 1
+    if (target - latest.timestamp > 0.5) {
+      this.interpolationUnderruns += 1
+      if (latest.vehicles.some(vehicle => Math.hypot(vehicle.velocity.x, vehicle.velocity.y) > 1)) {
+        this.movingInterpolationUnderruns += 1
+        this.maximumInterpolationUnderrunMs = Math.max(this.maximumInterpolationUnderrunMs, target - latest.timestamp)
+      }
+    }
     let before = this.snapshots[0]
     let after = before
     for (const snapshot of this.snapshots) {
@@ -137,7 +183,9 @@ export class LocalRaceRuntime {
       snapshotAgeMs: snapshot ? Math.max(0, this.now() - snapshot.timestamp) : 0,
       physicsMilliseconds: snapshot?.physicsMilliseconds ?? 0,
       interpolationSamples: this.interpolationSamples,
-      interpolationUnderruns: this.interpolationUnderruns }
+      interpolationUnderruns: this.interpolationUnderruns,
+      movingInterpolationUnderruns: this.movingInterpolationUnderruns,
+      maximumInterpolationUnderrunMs: this.maximumInterpolationUnderrunMs }
   }
   getOverlayState(showDriverNames = false) {
     return { ...(this.latest()?.overlay ?? this.session.getOverlayState()), showDriverNames }

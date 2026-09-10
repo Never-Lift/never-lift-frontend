@@ -10,6 +10,7 @@ let simulation: LocalWorkerSimulation | undefined
 let pendingSnapshot = false
 let timer: ReturnType<typeof setTimeout> | undefined
 let physicsMilliseconds = 0
+let lastSnapshotAt = 0
 const now = () => performance.timeOrigin + performance.now()
 // MessageChannel yields to input/snapshot messages without the 4ms minimum
 // delay imposed on nested setTimeout(0). Never busy-spin or lower physics Hz.
@@ -24,11 +25,12 @@ function sendSnapshot() {
   // already reached `timestamp`; otherwise the following pose appears to jump.
   scope.postMessage(
     simulation.snapshot(
-      simulation.getSnapshotTimestamp(timestamp),
+      simulation.getSnapshotTimestamp(),
       physicsMilliseconds,
     ),
   )
   physicsMilliseconds = 0
+  lastSnapshotAt = timestamp
   pendingSnapshot = false
 }
 
@@ -44,7 +46,7 @@ function tick() {
   try {
     simulation.tick(now(), PHYSICS_STEP_SECONDS)
     physicsMilliseconds += performance.now() - started
-    if (pendingSnapshot) sendSnapshot()
+    if (pendingSnapshot && now() - lastSnapshotAt >= 1000 / 120) sendSnapshot()
     // 120 Hz remains in RaceEngine's accumulator, not in timer accuracy.
     // A delayed wake-up advances every due tick using the existing catch-up rule.
     const delay = 1000 / 120 - (performance.now() - started)
@@ -63,8 +65,9 @@ scope.onmessage = ({ data }) => {
       sendSnapshot()
       timer = setTimeout(tick, 0)
     } else if (data.type === 'frame' && simulation) {
-      simulation.setInputs(data.inputs)
       pendingSnapshot = true
+    } else if (data.type === 'input' && simulation) {
+      simulation.enqueueInputs(data.inputs)
     } else if (data.type === 'visibility' && simulation) {
       simulation.setPaused(data.paused, now())
     }

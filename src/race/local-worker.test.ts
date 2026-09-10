@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { LocalRaceRuntime } from './LocalRaceRuntime'
+import { LocalRaceRuntime, LOCAL_INTERPOLATION_DELAY_MS } from './LocalRaceRuntime'
 import { LocalWorkerSimulation } from './LocalWorkerSimulation'
 import { LocalRaceSession } from './LocalRaceSession'
 import { RaceEngine } from './RaceEngine'
@@ -50,15 +50,16 @@ describe('local worker simulation', () => {
     const worker = new LocalWorkerSimulation(options, ids, 0)
     worker.tick(20, 1 / 120)
 
-    expect(worker.getSnapshotTimestamp(20)).toBeCloseTo(1000 / 120, 8)
+    expect(worker.getSnapshotTimestamp()).toBeCloseTo(1000 / 120, 8)
 
     worker.tick(20, 1 / 120)
-    expect(worker.getSnapshotTimestamp(20)).toBeCloseTo(2000 / 120, 8)
+    expect(worker.getSnapshotTimestamp()).toBeCloseTo(2000 / 120, 8)
   })
   it.each([30, 60, 120])('matches the same engine and start procedure exactly at %i Hz', (fps) => {
     const engine = new RaceEngine(options)
     const session = new LocalRaceSession(engine, ids)
     const worker = new LocalWorkerSimulation(options, ids, 0)
+    const buffered = new LocalWorkerSimulation(options, ids, 0)
     let previous = 0
     for (let frame = 1; frame <= fps * 8; frame++) {
       const now = frame * 1000 / fps
@@ -70,12 +71,16 @@ describe('local worker simulation', () => {
       session.advanceFrame((now - previous) / 1000, inputs)
       worker.setInputs(inputs)
       worker.tick(now)
+      buffered.enqueueInputs(inputs)
+      buffered.tick(now)
       previous = now
     }
     expect(worker.engine.getSimulationTimeSeconds()).toBeGreaterThan(0)
     expect(worker.engine.getInterpolatedVehicles()).toEqual(engine.getInterpolatedVehicles())
     expect(worker.session.getOverlayState()).toEqual(session.getOverlayState())
     expect(worker.engine.getResults()).toEqual(engine.getResults())
+    expect(buffered.engine.getInterpolatedVehicles()).toEqual(engine.getInterpolatedVehicles())
+    expect(buffered.session.getOverlayState()).toEqual(session.getOverlayState())
   })
 
   it('pauses hidden tabs without accumulating catch-up or retaining pressed inputs', () => {
@@ -93,21 +98,51 @@ describe('local worker simulation', () => {
 })
 
 describe('local worker lifecycle and render view', () => {
+  it('sends press/release while a snapshot is in flight and preserves changes before the first snapshot', () => {
+    const { runtime, worker } = fixture()
+    const press = { 'player-1': { throttle: 0, brake: 0, steer: 1 } }
+    const release = { 'player-1': { throttle: 0, brake: 0, steer: 0 } }
+    runtime.setInputs(press)
+    runtime.setInputs(release)
+    runtime.setInputs(release)
+    expect(worker.postMessage.mock.calls.map(([request]) => request)).toEqual([
+      expect.objectContaining({ type: 'init' }),
+      { type: 'input', inputs: press },
+      { type: 'input', inputs: release },
+    ])
+    runtime.dispose()
+  })
+
+  it('re-sends held keys to the fallback after a worker startup failure', () => {
+    const { runtime, worker, engine } = fixture()
+    const inputs = { 'player-1': { throttle: 1, brake: 0, steer: 1 } }
+    runtime.setInputs(inputs)
+    worker.receive({ type: 'failure', message: 'startup failed' })
+    const advance = vi.spyOn(LocalRaceSession.prototype, 'advanceFrame')
+    runtime.advanceFrame(1 / 120, inputs)
+    expect(advance).toHaveBeenCalledWith(1 / 120, inputs)
+    expect(runtime.getFailure()).toBeNull()
+    expect(engine.getSimulationTimeSeconds()).toBe(0)
+    advance.mockRestore()
+    runtime.dispose()
+  })
+
   it('posts complete setup once and never queues unbounded frame/input messages', () => {
     const { worker, engine, runtime, simulation } = fixture()
     expect(worker.postMessage.mock.calls[0][0]).toMatchObject({ type: 'init', options, humanIds: ids })
     for (let frame = 0; frame < 100; frame++) runtime.advanceFrame(1 / 60, {})
     expect(worker.postMessage).toHaveBeenCalledTimes(1)
     worker.receive(simulation.snapshot(1000, 0))
-    runtime.advanceFrame(1 / 60, { 'player-1': { throttle: 1, brake: 0, steer: 0 } })
-    for (let frame = 0; frame < 100; frame++) runtime.advanceFrame(1 / 60, {})
-    expect(worker.postMessage).toHaveBeenCalledTimes(2)
+    const input = { 'player-1': { throttle: 1, brake: 0, steer: 0 } }
+    runtime.advanceFrame(1 / 60, input)
+    for (let frame = 0; frame < 100; frame++) runtime.advanceFrame(1 / 60, input)
+    expect(worker.postMessage).toHaveBeenCalledTimes(3) // init, one pull, one input change
     expect(engine.getSimulationTimeSeconds()).toBe(0)
     runtime.dispose()
     expect(worker.terminate).toHaveBeenCalledTimes(1)
     expect(worker.onmessage).toBeNull()
     runtime.advanceFrame(10, {})
-    expect(worker.postMessage).toHaveBeenCalledTimes(2)
+    expect(worker.postMessage).toHaveBeenCalledTimes(3)
   })
 
   it('interpolates render poses only, keeps physics untouched and never extrapolates', () => {
@@ -121,7 +156,7 @@ describe('local worker lifecycle and render view', () => {
     second.vehicles[0].renderAngle = -Math.PI + 0.1
     worker.receive(first)
     worker.receive(second)
-    time(1010 + 1000 / 20)
+    time(1010 + LOCAL_INTERPOLATION_DELAY_MS)
     const displayed = runtime.getInterpolatedVehicles()[0]
     expect(displayed.renderPosition.x).toBeCloseTo(5)
     expect(displayed.renderPosition.y).toBeCloseTo(10)
@@ -132,7 +167,7 @@ describe('local worker lifecycle and render view', () => {
     expect(first.vehicles[0].renderPosition).toEqual({ x: 0, y: 0 })
   })
 
-  it('keeps camera poses advancing when 30 Hz snapshots arrive one visual frame late', () => {
+  it('keeps camera poses advancing with jittered 120 Hz pulls independent of RAF', () => {
     const { worker, runtime, simulation, time } = fixture()
     const snapshotAt = (timestamp: number, x: number) => {
       const snapshot = simulation.snapshot(timestamp, 0)
@@ -141,25 +176,18 @@ describe('local worker lifecycle and render view', () => {
       return snapshot
     }
 
-    worker.receive(snapshotAt(1000, 0))
-    worker.receive(snapshotAt(1000 + 1000 / 30, 10))
-
-    // The next worker result is delayed past one RAF. A one-frame jitter buffer
-    // used to reach the latest pose here, hold the camera, then jump on receipt.
-    time(1000 + 1000 / 15)
-    const first = runtime.getInterpolatedVehicles()[0]
-    time(1000 + 1000 / 12)
-    const second = runtime.getInterpolatedVehicles()[0]
-
-    worker.receive(snapshotAt(1000 + 1000 / 15, 20))
-    time(1100)
-    const third = runtime.getInterpolatedVehicles()[0]
-
-    expect(first.renderPosition.x).toBeGreaterThan(0)
-    expect(second.renderPosition.x).toBeGreaterThan(first.renderPosition.x)
-    expect(third.renderPosition.x).toBeGreaterThan(second.renderPosition.x)
-    expect(second.velocity.y).toBeGreaterThan(first.velocity.y)
-    expect(third.velocity.y).toBeGreaterThan(second.velocity.y)
+    let published = 1000
+    for (let frame = 3; frame < 90; frame++) {
+      const displayTime = 1000 + frame * 1000 / 60
+      while (published < displayTime - 9) {
+        worker.receive(snapshotAt(published, (published - 1000) / 10))
+        published += 1000 / 120
+      }
+      // Variable work BEFORE the RAF callback must not change its display pose.
+      time(displayTime + (frame % 3) * 4)
+      runtime.advanceFrame(1 / 60, {}, displayTime)
+      expect(runtime.getInterpolatedVehicles()[0].renderPosition.x).toBeCloseTo((displayTime - LOCAL_INTERPOLATION_DELAY_MS - 1000) / 10, 6)
+    }
     expect(runtime.getDiagnostics().interpolationUnderruns).toBe(0)
   })
 
@@ -172,7 +200,7 @@ describe('local worker lifecycle and render view', () => {
       expect(Boolean(runtime.getFailure())).toBe(started)
       time(2000)
       runtime.advanceFrame(1 / 60, {})
-      expect(worker.postMessage).toHaveBeenCalledTimes(1)
+      expect(worker.postMessage).toHaveBeenCalledTimes(started ? 2 : 1)
     }
     const { worker, runtime, time } = fixture()
     time(10000)

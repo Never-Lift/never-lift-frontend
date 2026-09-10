@@ -4,7 +4,8 @@ import type { DriverInput, InterpolatedVehicleState, RaceEngineOptions, RaceResu
 // Browser-local transport only. This is NOT an online authority/protocol.
 export type LocalWorkerRequest =
   | { type: 'init'; options: RaceEngineOptions; humanIds: string[] }
-  | { type: 'frame'; inputs: Record<string, DriverInput> }
+  | { type: 'frame' }
+  | { type: 'input'; inputs: Record<string, DriverInput> }
   | { type: 'visibility'; paused: boolean }
 
 export type LocalWorkerSnapshot = {
