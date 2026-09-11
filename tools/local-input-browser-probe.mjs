@@ -13,7 +13,7 @@ const track = JSON.parse(await readFile('../never-lift-backend/contracts/module-
 const server = await createServer({ server: { host: '127.0.0.1', port: 0, hmr: false, ws: false } })
 await server.listen()
 const origin = server.resolvedUrls.local[0]
-const browser = await chromium.launch({ channel: 'msedge', headless: true })
+const browser = await chromium.launch({ channel: process.env.PROBE_BROWSER ?? 'msedge', headless: true })
 const results = []
 try {
   for (const [mode, cars] of [['solo', 1], ['local', 2], ['solo', 22], ['local', 22]]) {

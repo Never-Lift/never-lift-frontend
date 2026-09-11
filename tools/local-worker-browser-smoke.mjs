@@ -1,4 +1,4 @@
-// Real Vite + React + module Worker lifecycle smoke, no external API/deploy.
+// Real Vite + React local lifecycle smoke, no external API/deploy.
 import { createServer } from 'vite'
 import { mkdir, readFile, readdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -30,14 +30,15 @@ try {
   await mkdir('output/performance', { recursive: true })
   await page.screenshot({ path: 'output/performance/worker-react-local.png' })
   await page.keyboard.press('r')
-  await page.waitForFunction(() => window.smoke.started >= 3 && window.smoke.last.simulationTimeSeconds === 0)
+  await page.waitForFunction(() => window.smoke.started >= 2 && window.smoke.last.simulationTimeSeconds === 0)
   await page.keyboard.press('Escape')
   await page.waitForFunction(() => window.smoke.aborted === 1 && window.smoke.stopped === window.smoke.started)
   await page.evaluate(() => window.smokeFinish())
   await page.waitForFunction(() => window.smoke.finished === 1 && window.smoke.stopped === window.smoke.started, null, { timeout: 20000 })
   const lifecycle = await page.evaluate(() => ({ ...window.smoke, last: undefined }))
   assert.equal(errors.length, 0, errors.join('\n'))
-  // Also execute the actual production worker asset, not just Vite's dev worker.
+  // Also smoke the worker used by dense grids, separately from the direct
+  // two-human path exercised by the React lifecycle above.
   const assets = await readdir('dist/assets')
   const workerAsset = assets.find(name => /^local-race\.worker-.*\.js$/.test(name))
   assert.ok(workerAsset, 'Run npm run build before this smoke')

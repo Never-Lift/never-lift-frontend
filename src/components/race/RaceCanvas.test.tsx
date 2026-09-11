@@ -98,6 +98,32 @@ describe('DriverTelemetryCard', () => {
 })
 
 describe('RaceCanvas layout', () => {
+  it.each(['solo', 'local'] as const)('keeps %s physics and presentation moving even when worker messages cannot be delivered', (mode) => {
+    let frame: FrameRequestCallback = () => {}
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback) => { frame = callback; return 1 }))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    // Reproduce a browser that accepts a worker but delays all of its events.
+    vi.stubGlobal('Worker', class {
+      onmessage = null
+      postMessage() {}
+      terminate() {}
+    })
+    const racers = [
+      { id: 'player-1', name: 'P1', kind: 'human' as const, color: '#2d7dff' },
+      ...(mode === 'local' ? [{ id: 'player-2', name: 'P2', kind: 'human' as const, color: '#ff0000' }] : []),
+    ]
+    const engine = new RaceEngine({ track: SHORT_TRACK, mode, racers })
+    render(<RaceCanvas engine={engine} mode={mode} timeOfDay="day" onAbort={vi.fn()} onRestart={vi.fn()} onFinished={vi.fn()} />)
+    for (let index = 0; index <= 390; index++) act(() => frame(index * 1000 / 60))
+    const before = engine.getVehicleState('player-1')!.position
+    fireEvent.keyDown(window, { code: 'KeyW' })
+    if (mode === 'local') fireEvent.keyDown(window, { code: 'ArrowUp' })
+    for (let index = 391; index <= 450; index++) act(() => frame(index * 1000 / 60))
+    expect(engine.getSimulationTimeSeconds()).toBeGreaterThan(1)
+    expect(engine.getVehicleState('player-1')!.position).not.toEqual(before)
+    for (const racer of racers) expect(Math.hypot(...Object.values(engine.getVehicleState(racer.id)!.velocity))).toBeGreaterThan(1)
+  })
+
   it('dismisses runtime failure after five seconds and does not carry it into a restarted race', () => {
     vi.useFakeTimers()
     let frame: FrameRequestCallback = () => {}
