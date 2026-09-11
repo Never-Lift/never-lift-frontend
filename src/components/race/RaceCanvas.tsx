@@ -186,9 +186,13 @@ export function RaceCanvas({
     if (!canvas) return
 
     const humanIds = mode === 'local' ? ['player-1', 'player-2'] : ['player-1']
+    // With one/two cars, keep physics and presentation on the same RAF clock:
+    // no snapshot buffer can freeze the world while the camera keeps turning.
+    // Dense grids retain the worker to avoid long collision work blocking input.
+    const participantCount = engine.getInterpolatedVehicles().length
     const runtime = new LocalRaceRuntime(engine, humanIds,
-      typeof Worker === 'undefined' ? undefined : () =>
-        new Worker(new URL('../../race/local-race.worker.ts', import.meta.url), { type: 'module' }),
+      participantCount > 2 && typeof Worker !== 'undefined' ? () =>
+        new Worker(new URL('../../race/local-race.worker.ts', import.meta.url), { type: 'module' }) : undefined,
     )
     const controls = new KeyboardControls(window, () => runtime.setInputs(readInputs()))
     function readInputs() {
@@ -206,7 +210,7 @@ export function RaceCanvas({
     document.addEventListener('visibilitychange', handleVisibility)
     const renderer = new RaceRenderer(canvas, engine.track, {
       timeOfDay,
-      ...raceGraphicsSettings(mode, engine.getInterpolatedVehicles().length),
+      ...raceGraphicsSettings(mode, participantCount),
       splitScreenAspectRatio: () => window.innerWidth / window.innerHeight,
     })
     let animationFrame = 0

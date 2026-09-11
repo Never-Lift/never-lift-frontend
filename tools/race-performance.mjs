@@ -134,7 +134,7 @@ const bundle = await build({
         await page.setContent('<style>html,body{margin:0}canvas{display:block;width:100vw;height:100vh}</style><canvas></canvas>')
         const profiler = process.argv.includes('--profile') ? await page.context().newCDPSession(page) : null
         if (profiler) { await profiler.send('Profiler.enable'); await profiler.send('Profiler.start') }
-        const result = await page.evaluate(async ({ moduleUrl, workerCode, track, mode, driving, fixedDriving, frames, maximumSeconds, cars, timeOfDay, opaqueCanvas, desynchronized, diagnosticNoShadowBlur, disableVehicleSprites }) => {
+        const result = await page.evaluate(async ({ moduleUrl, workerCode, track, mode, driving, fixedDriving, frames, maximumSeconds, cars, timeOfDay, opaqueCanvas, desynchronized, diagnosticNoShadowBlur, disableVehicleSprites, captureTimeline }) => {
           const { RaceEngine, RaceRenderer, LocalRaceRuntime, raceGraphicsSettings, performanceRacers } = await import(moduleUrl)
           const count = cars ?? (mode === 'solo' ? 22 : 2)
           const racers = performanceRacers(mode, count)
@@ -167,6 +167,7 @@ const bundle = await build({
           const motionError = []
           let previousPose = null, heldMovingFrames = 0
           const largestMotionErrors = []
+          const timeline = []
           let displayedVehicles = []
           const renderView = { mode, getInterpolatedVehicles() {
             displayedVehicles = view.getInterpolatedVehicles()
@@ -184,6 +185,7 @@ const bundle = await build({
             else engine.advanceFrame(deltaSeconds)
             const physicsEnd = performance.now()
             renderer.render(renderView, deltaSeconds)
+            const renderEnd = performance.now()
             // Observe exactly the pose submitted to the renderer, not a second
             // sample after rendering (which biases the old wall-clock runtime).
             const pose = displayedVehicles[0]
@@ -202,6 +204,12 @@ const bundle = await build({
               }
             }
             previousPose = { position: pose.renderPosition, speed, impacts: pose.damage.impactCount }
+            if (captureTimeline) timeline.push({ frame, elapsed: (timestamp - frameMs[0]) / 1000,
+              deltaMs: deltaSeconds * 1000, renderMs: renderEnd - physicsEnd,
+              position: pose.renderPosition, velocity: pose.velocity, speed,
+              angle: pose.renderAngle, distance: pose.trackDistanceMeters,
+              camera: renderer.cameras.get('player-1').getState(),
+              diagnostics: runtime?.getDiagnostics() })
             if (runtime) {
               if (runtime.getFailure()) throw new Error(runtime.getFailure())
               const diagnostics = runtime.getDiagnostics()
@@ -220,6 +228,7 @@ const bundle = await build({
           const workerDiagnostics = runtime?.getDiagnostics()
           const result = { mode, cars: count, humans: racers.filter(r => r.kind === 'human').length, bots: racers.filter(r => r.kind === 'bot').length, timeOfDay, raceStatus: view.getStatus(), movingCars: view.getInterpolatedVehicles().filter(v => Math.hypot(v.velocity.x,v.velocity.y)>1).length, measuredFrames: physicsMs.length, wallSeconds, simulatedSeconds, simulationToWallRatio: simulatedSeconds / wallSeconds, physics: stats(physicsMs), renderer: stats(renderMs), frameInterval: stats(frameMs.slice(6).map((v,i) => v-frameMs[i+5])), worker: runtime ? { responses: workerPhysicsMs.length, physics: stats(workerPhysicsMs), snapshotAgeMs: stats(snapshotAgeMs), interpolationSamples: workerDiagnostics.interpolationSamples, interpolationUnderruns: workerDiagnostics.interpolationUnderruns } : null, renderStats: renderer.getRenderStats(), canvas: { width: document.querySelector('canvas').width, height: document.querySelector('canvas').height } }
           result.motion = { samples: motionError.length, relativeStepError: stats(motionError), heldMovingFrames, largestMotionErrors }
+          result.timeline = timeline
           if (result.worker) Object.assign(result.worker, {
             movingInterpolationUnderruns: workerDiagnostics.movingInterpolationUnderruns,
             maximumInterpolationUnderrunMs: workerDiagnostics.maximumInterpolationUnderrunMs,
@@ -227,10 +236,16 @@ const bundle = await build({
           runtime?.dispose()
           if (workerUrl) URL.revokeObjectURL(workerUrl)
           return result
-        }, { moduleUrl, workerCode, track, mode, driving: process.argv.includes('--driving'), fixedDriving: process.argv.includes('--fixed-driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15), cars: process.env.PERF_CARS ? Number(process.env.PERF_CARS) : null, timeOfDay: process.env.PERF_TIME_OF_DAY ?? 'day', opaqueCanvas: process.env.PERF_OPAQUE === '1', desynchronized: process.env.PERF_DESYNCHRONIZED === '1', diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1', disableVehicleSprites: process.env.PERF_DISABLE_VEHICLE_SPRITES === '1' })
+        }, { moduleUrl, workerCode, track, mode, driving: process.argv.includes('--driving'), fixedDriving: process.argv.includes('--fixed-driving'), frames: Number(process.env.PERF_FRAMES ?? 600), maximumSeconds: Number(process.env.PERF_MAX_SECONDS ?? 15), cars: process.env.PERF_CARS ? Number(process.env.PERF_CARS) : null, timeOfDay: process.env.PERF_TIME_OF_DAY ?? 'day', opaqueCanvas: process.env.PERF_OPAQUE === '1', desynchronized: process.env.PERF_DESYNCHRONIZED === '1', diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1', disableVehicleSprites: process.env.PERF_DISABLE_VEHICLE_SPRITES === '1', captureTimeline: Boolean(process.env.PERF_TIMELINE) })
         const contextAttributes = await page.evaluate(() => document.querySelector('canvas').getContext('2d').getContextAttributes())
         const record = { baseline, browser: await browser.version(), track: trackId, contextAttributes,
           diagnosticNoShadowBlur: process.env.PERF_DIAGNOSTIC_NO_BLUR === '1', ...result }
+        const timeline = record.timeline
+        delete record.timeline
+        if (process.env.PERF_TIMELINE) {
+          await mkdir(dirname(resolve(process.env.PERF_TIMELINE)), { recursive: true })
+          await import('node:fs/promises').then(fs => fs.writeFile(resolve(process.env.PERF_TIMELINE), JSON.stringify(timeline)))
+        }
         console.log(JSON.stringify(record))
         if (process.env.PERF_REPORT) {
           const report = resolve(process.env.PERF_REPORT)

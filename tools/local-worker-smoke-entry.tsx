@@ -2,20 +2,33 @@ import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RaceCanvas } from '../src/components/race/RaceCanvas'
 import { RaceEngine } from '../src/race/RaceEngine'
+import { LocalRaceRuntime } from '../src/race/LocalRaceRuntime'
 import { SHORT_TRACK } from '../src/test/track-fixtures'
 import '../src/index.css'
 
-const state = { started: 0, stopped: 0, messages: 0, finished: 0, aborted: 0, last: null }
+type SmokeFrame = { simulationTimeSeconds: number; vehicles: ReturnType<LocalRaceRuntime['getInterpolatedVehicles']> }
+const state = { started: 0, stopped: 0, messages: 0, finished: 0, aborted: 0, last: null as SmokeFrame | null }
 const testingWindow = window as unknown as { smoke: typeof state; smokeFinish: () => void }
 testingWindow.smoke = state
 const NativeWorker = window.Worker
+const active = new WeakSet<LocalRaceRuntime>()
+const advance = LocalRaceRuntime.prototype.advanceFrame
+LocalRaceRuntime.prototype.advanceFrame = function(...args) {
+  if (!active.has(this)) { active.add(this); state.started++ }
+  advance.apply(this, args)
+  state.messages++
+  state.last = { simulationTimeSeconds: this.getSimulationTimeSeconds(), vehicles: this.getInterpolatedVehicles() }
+}
+const dispose = LocalRaceRuntime.prototype.dispose
+LocalRaceRuntime.prototype.dispose = function() {
+  if (active.has(this)) { active.delete(this); state.stopped++ }
+  dispose.call(this)
+}
 window.Worker = class extends NativeWorker {
   constructor(url: string | URL, options?: WorkerOptions) {
     super(url, options)
-    state.started++
-    this.addEventListener('message', event => { state.messages++; state.last = event.data })
+    this.addEventListener('message', event => { state.last = event.data })
   }
-  terminate() { state.stopped++; super.terminate() }
 }
 const options = { track: SHORT_TRACK, mode: 'local' as const, maximumRaceSeconds: 60, racers: [
   { id: 'player-1', name: 'P1', kind: 'human' as const, color: '#2d7dff' },

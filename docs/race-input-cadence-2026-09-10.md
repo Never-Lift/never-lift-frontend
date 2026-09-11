@@ -1,5 +1,11 @@
 # M2 — cadência visual e comandos locais (10/09/2026)
 
+> Atualização de 11/09: novo relato manual mostrou travadas sem bots na preview
+> com esta correção. A revisão em `race-corner-stutter-2026-09-11.md` substitui
+> o uso de worker para até dois carros por execução direta; mantém os ajustes
+> de input e o worker para grids maiores. Este relatório conserva as evidências
+> históricas, não representa aprovação manual da fluidez.
+
 ## Motivo e escopo
 
 O autor relatou saltos do cenário nas curvas, inclusive sem bots, atraso crescente

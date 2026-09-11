@@ -1,6 +1,8 @@
 import { createRoot } from 'react-dom/client'
 import { RaceCanvas } from '../src/components/race/RaceCanvas'
 import { RaceEngine } from '../src/race/RaceEngine'
+import { LocalRaceRuntime } from '../src/race/LocalRaceRuntime'
+import type { DriverInput } from '../src/race/types'
 import { performanceRacers } from './race-performance-entry'
 import type { TrackDefinition } from '../src/lib/api'
 import '../src/index.css'
@@ -27,6 +29,43 @@ window.Worker = class extends NativeWorker {
       }
     })
   }
+}
+// Observe the active direct path at the same fixed-step boundary as the
+// experimental worker probe. These hooks are never imported by production.
+const fixedStep = RaceEngine.prototype.stepFixed
+const previousInputs = new WeakMap<RaceEngine, Map<string, string>>()
+RaceEngine.prototype.stepFixed = function() {
+  const inputs = (this as unknown as { inputs: Map<string, DriverInput> }).inputs
+  const previous = previousInputs.get(this) ?? new Map<string, string>()
+  previousInputs.set(this, previous)
+  for (const [id, input] of inputs) {
+    if (!id.startsWith('player-')) continue
+    const value = JSON.stringify(input)
+    if (previous.get(id) === value) continue
+    previous.set(id, value)
+    state.observed.push({ id, input: { ...input }, timestamp: performance.timeOrigin + performance.now() })
+  }
+  return fixedStep.call(this)
+}
+const advanceFrame = LocalRaceRuntime.prototype.advanceFrame
+LocalRaceRuntime.prototype.advanceFrame = function(...args) {
+  advanceFrame.apply(this, args)
+  state.simulationTime = this.getSimulationTimeSeconds()
+}
+const setInputs = LocalRaceRuntime.prototype.setInputs
+const previousSent = new Map<string, string>()
+LocalRaceRuntime.prototype.setInputs = function(inputs) {
+  if (!this.getDiagnostics().worker) {
+    const changed: Record<string, DriverInput> = {}
+    for (const [id, input] of Object.entries(inputs)) {
+      const value = JSON.stringify(input)
+      if (previousSent.get(id) === value) continue
+      previousSent.set(id, value)
+      changed[id] = { ...input }
+    }
+    if (Object.keys(changed).length) state.sent.push({ inputs: changed, timestamp: performance.timeOrigin + performance.now() })
+  }
+  setInputs.call(this, inputs)
 }
 for (const type of ['keydown', 'keyup']) window.addEventListener(type, event => {
   state.keys.push({ type, code: (event as KeyboardEvent).code,
