@@ -137,7 +137,15 @@ automaticamente a estratégia de `RaceCanvas`. Artefatos locais desta rodada:
 `corners-input-sep11.json`, todos em `output/performance/` (ignorado no Git).
 Nenhum desses testes consultou Render/Neon ou exigiu deploy do backend.
 
-## Validação manual pendente e limites
+## Validação manual e limites
+
+**Atualização de 14/09/2026:** o autor confirmou funcionamento total em **Spa
+solo sem bots e local com dois pilotos sem bots**. Solo 1+21 e local 2+20
+continuam com pausas em curvas/congestionamentos. A aprovação é limitada aos
+casos sem bots em Spa; não cobre todas as pistas. A investigação subsequente
+está em `race-dense-collisions-2026-09-14.md`.
+
+Roteiro original da PR #138, mantido como referência para outras pistas:
 
 Na nova preview, repetir primeiro **Spa solo sem bots**, incluindo as duas curvas
 finais mostradas no vídeo. Depois repetir **local com dois pilotos sem bots**.
@@ -151,5 +159,6 @@ fluidez de todas as configurações resolvido, nem garantir 40 FPS mínimos.
 Persistindo o sintoma sem bots, coletar o perfil Performance do Chrome durante
 a reprodução para separar custo de composição/render de transporte/simulação.
 
-Módulos já concluídos mantêm seu status. Esta correção permanece com validação
-manual pendente, não inicia M3c e não promove `develop` para `main`.
+Módulos já concluídos mantêm seu status. Os casos sem bots em Spa foram aprovados
+conforme atualização acima; os demais limites continuam. Não inicia M3c e não
+promove `develop` para `main`.

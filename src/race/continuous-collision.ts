@@ -76,10 +76,6 @@ const SWEEP_EPSILON = physicsConstants.collision.geometryEpsilon
 const TIME_EPSILON_SECONDS = physicsConstants.collision.ccdTimeEpsilonSeconds
 const sweepScratch = new CollisionScratch()
 let activeScratch: CollisionScratch | undefined
-const STATIC_COLLIDER_BOUNDS = new WeakMap<
-  WorldConvexCollider,
-  ReturnType<typeof colliderBounds>
->()
 
 function isStaticPoseBody(body: SweptPoseColliderBody) {
   return (
@@ -87,14 +83,6 @@ function isStaticPoseBody(body: SweptPoseColliderBody) {
     body.velocity.y === 0 &&
     body.angularVelocity === 0
   )
-}
-
-function cachedStaticColliderBounds(collider: WorldConvexCollider) {
-  const cached = STATIC_COLLIDER_BOUNDS.get(collider)
-  if (cached) return cached
-  const bounds = colliderBounds(collider)
-  STATIC_COLLIDER_BOUNDS.set(collider, bounds)
-  return bounds
 }
 
 function axesOf(vertices: readonly Vector2[]) {
@@ -266,7 +254,9 @@ function colliderMotionBounds(
   maximumTimeSeconds: number,
 ) {
   if (isStaticPoseBody(body)) {
-    return cachedStaticColliderBounds(collider)
+    // A zero-velocity body can still reuse a different pose next query. The
+    // polygon cache is reset with its vertices; a collider-keyed cache is not.
+    return colliderBounds(collider)
   }
   const bounds = sweptBounds(collider, body.velocity, maximumTimeSeconds)
   const angularTravelRadians =
@@ -516,22 +506,21 @@ function sweepCachedPoseBodies(
     }
   }
 
+  // Existing overlaps are already the earliest possible angular contact.
+  // Their current AABBs are contained in every conservative motion envelope;
+  // query them before allocating/sorting swept pairs and sampling future poses.
+  // Both paths consolidate contacts in the same canonical collider-id order.
+  const initialManifolds = findCompoundCollisionManifolds(first.colliders, second.colliders)
+  if (initialManifolds.length > 0) {
+    return { timeSeconds: 0, manifolds: initialManifolds }
+  }
+
   const candidatePairs = candidateColliderPairs(
     first,
     second,
     maximumTimeSeconds,
   )
   if (candidatePairs.length === 0) return null
-
-  const initialManifolds = manifoldsForPairsAtPoseTime(
-    first,
-    second,
-    candidatePairs,
-    0,
-  )
-  if (initialManifolds.length > 0) {
-    return { timeSeconds: 0, manifolds: initialManifolds }
-  }
 
   const intervalCount = Math.max(
     1,

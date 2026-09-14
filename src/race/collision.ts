@@ -1,4 +1,5 @@
 import * as PortableMath from '@/race/portable-math'
+import { polygonGeometry } from '@/race/polygon-cache'
 
 import { sweepCompoundCollidersWithRotation } from '@/race/continuous-collision'
 import { PHYSICS_CONSTANTS } from '@/race/constants'
@@ -59,6 +60,10 @@ type CachedPose = {
 const previousPoseCache = new WeakMap<VehicleState, CachedPose>()
 const currentPoseCache = new WeakMap<VehicleState, CachedPose>()
 const bodyPoseCache = new WeakMap<RigidBody2D, CachedPose>()
+// Collision queries are synchronous. The two solver bodies own bounded pose
+// buffers reused by the next query; no body/manifold is published to callers.
+const solverBodies: RigidBody2D[] = []
+let collisionQueryDepth = 0
 
 function cachedVehiclePose(vehicle: VehicleState, previous = false) {
   const cache = previous ? previousPoseCache : currentPoseCache
@@ -78,15 +83,27 @@ function cachedVehiclePose(vehicle: VehicleState, previous = false) {
   return colliders
 }
 
-function vehicleBody(vehicle: VehicleState): RigidBody2D {
-  return {
-    position: vehicle.position,
-    velocity: vehicle.velocity,
-    angle: vehicle.angle,
-    angularVelocity: vehicle.physicsState.yawRate,
-    inverseMass: 1 / F1_VEHICLE_COLLIDER.massKg,
+function vehicleBody(vehicle: VehicleState, slot = 0): RigidBody2D {
+  // A provider may synchronously run another collision query. Nested queries
+  // allocate their own bodies so they cannot overwrite the outer solver.
+  const bodies = collisionQueryDepth === 1 ? solverBodies : []
+  const body = bodies[slot] ??= {
+    position: vehicle.position, velocity: vehicle.velocity, angle: 0,
+    angularVelocity: 0, inverseMass: 1 / F1_VEHICLE_COLLIDER.massKg,
     inverseInertia: 1 / F1_VEHICLE_COLLIDER.yawInertiaKgM2,
   }
+  body.position = vehicle.position
+  body.velocity = vehicle.velocity
+  body.angle = vehicle.angle
+  body.angularVelocity = vehicle.physicsState.yawRate
+  const previous = bodyPoseCache.get(body)
+  if (previous) {
+    // Radii retain floating-point details of their first pose within a query.
+    // A different query must recompute them just like a newly allocated body.
+    previous.x = Number.NaN
+    for (const collider of previous.colliders) polygonGeometry(collider.vertices).radius = undefined
+  }
+  return body
 }
 
 function staticBody(): RigidBody2D {
@@ -195,7 +212,7 @@ function solveVehiclePair(
   manifolds: readonly CollisionManifold[],
 ) {
   const firstBody = vehicleBody(first)
-  const secondBody = vehicleBody(second)
+  const secondBody = vehicleBody(second, 1)
   const resolution = resolveRigidBodyCollisions(
     firstBody,
     secondBody,
@@ -332,6 +349,16 @@ function collidersAtVehiclePose(vehicle: VehicleState) {
  * in the same tick without tunnelling through corners.
  */
 export function resolveVehicleAgainstStaticColliders(
+  vehicle: VehicleState,
+  deltaSeconds: number,
+  colliderProvider: StaticColliderProvider,
+) {
+  collisionQueryDepth++
+  try { return resolveStaticInScope(vehicle, deltaSeconds, colliderProvider) }
+  finally { collisionQueryDepth-- }
+}
+
+function resolveStaticInScope(
   vehicle: VehicleState,
   deltaSeconds: number,
   colliderProvider: StaticColliderProvider,
@@ -526,6 +553,16 @@ export function resolveVehicleCollision(
   second: VehicleState,
   deltaSeconds = 0,
 ) {
+  collisionQueryDepth++
+  try { return resolvePairInScope(first, second, deltaSeconds) }
+  finally { collisionQueryDepth-- }
+}
+
+function resolvePairInScope(
+  first: VehicleState,
+  second: VehicleState,
+  deltaSeconds: number,
+) {
   const firstEndBounds = sweptVehicleBounds(first.position, first.position)
   const secondEndBounds = sweptVehicleBounds(second.position, second.position)
   const firstSweptBounds = sweptVehicleBounds(
@@ -609,7 +646,7 @@ export function resolveVehicleCollision(
 
   const impactAlpha = impact.timeSeconds / deltaSeconds
   const firstBody = vehicleBody(first)
-  const secondBody = vehicleBody(second)
+  const secondBody = vehicleBody(second, 1)
   firstBody.position = {
     x: lerp(first.previousPosition.x, first.position.x, impactAlpha),
     y: lerp(first.previousPosition.y, first.position.y, impactAlpha),

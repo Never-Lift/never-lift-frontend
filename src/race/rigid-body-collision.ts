@@ -507,18 +507,25 @@ export function findCompoundCollisionManifolds(
     return []
   }
   const manifolds: CollisionManifold[] = []
+  // Reuse each part's bounds across all pairs in this synchronous query.
+  // Looking up the same polygon cache in the inner loop dominated dense CCD.
+  const candidates = secondParts.map(part => ({ part, bounds: colliderBounds(part) }))
+    .filter(candidate => colliderBoundsIntersect(firstBounds, candidate.bounds))
   for (const first of firstParts) {
     const firstPartBounds = colliderBounds(first)
-    for (const second of secondParts) {
+    // A nose-to-tail contact cannot involve pieces outside the other body's
+    // entire bounds. Keep the original order of every remaining candidate.
+    if (!colliderBoundsIntersect(firstPartBounds, secondBounds)) continue
+    for (const candidate of candidates) {
       if (
         !colliderBoundsIntersect(
           firstPartBounds,
-          colliderBounds(second),
+          candidate.bounds,
         )
       ) {
         continue
       }
-      const manifold = findCollisionManifold(first, second)
+      const manifold = findCollisionManifold(first, candidate.part)
       if (manifold) manifolds.push(manifold)
     }
   }

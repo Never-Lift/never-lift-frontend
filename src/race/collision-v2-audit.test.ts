@@ -11,6 +11,7 @@ import {
 import { PHYSICS_CONSTANTS, PHYSICS_STEP_SECONDS } from '@/race/constants'
 import {
   consolidateCollisionManifolds,
+  findCollisionManifold,
   findCompoundCollisionManifolds,
   type CollisionManifold,
 } from '@/race/rigid-body-collision'
@@ -18,6 +19,7 @@ import type { VehicleState } from '@/race/types'
 import { createInitialVehiclePhysicsState } from '@/race/vehicle-physics'
 import {
   createVehicleWorldCollider,
+  updateVehicleWorldCollider,
   type WorldConvexCollider,
 } from '@/race/vehicle-geometry'
 
@@ -138,6 +140,32 @@ function setIntegratedMotion(
 }
 
 describe('v2 compound-collider contact audit', () => {
+  it('matches exhaustive part-pair contacts through rotations and sparse overlaps', () => {
+    for (let index = 0; index < 64; index++) {
+      const first = vehicleColliders({ x: -14.5, y: 27.2, angle: index * 0.097 })
+      const second = vehicleColliders({ x: -14.5 + (index % 9) - 4,
+        y: 27.2 + (index % 7) - 3, angle: index * -0.151 })
+      if (index % 2) second.reverse()
+      const exhaustive: CollisionManifold[] = []
+      for (const a of first) for (const b of second) {
+        const contact = findCollisionManifold(a, b)
+        if (contact) exhaustive.push(contact)
+      }
+      expect(findCompoundCollisionManifolds(first, second)).toEqual(consolidateCollisionManifolds(exhaustive))
+    }
+  })
+
+  it('returns all current angular contacts at time zero regardless of future separation', () => {
+    const first = { colliders: vehicleColliders(), position: { x: 0, y: 0 },
+      velocity: { x: -40, y: 0 }, angularVelocity: 3 }
+    const second = { colliders: vehicleColliders({ x: 5.35 }), position: { x: 5.35, y: 0 },
+      velocity: { x: 40, y: 0 }, angularVelocity: -2 }
+    const expected = findCompoundCollisionManifolds(first.colliders, second.colliders)
+    expect(expected.length).toBeGreaterThan(0)
+    expect(sweepCompoundCollidersWithRotation(first, second, PHYSICS_STEP_SECONDS))
+      .toEqual({ timeSeconds: 0, manifolds: expected })
+  })
+
   it('keeps separated same-normal contacts as distinct manifolds', () => {
     const contacts: CollisionManifold[] = [
       {
@@ -362,6 +390,41 @@ describe('v2 car-to-car collision audit', () => {
 })
 
 describe('v2 canonical-barrier collision audit', () => {
+  it('invalidates zero-velocity swept bounds when private collider buffers move', () => {
+    const first = { colliders: vehicleColliders({ angle: -0.08 }), position: { x: 0, y: 0 },
+      velocity: { x: 0, y: 0 }, angularVelocity: 0.16 / PHYSICS_STEP_SECONDS }
+    const second = { colliders: vehicleColliders({ x: 80 }), position: { x: 80, y: 0 },
+      velocity: { x: 0, y: 0 }, angularVelocity: 0 }
+    expect(sweepCompoundCollidersWithRotation(first, second, PHYSICS_STEP_SECONDS)).toBeNull()
+    second.position = { x: 4.8, y: -2 }
+    updateVehicleWorldCollider(second.colliders, { position: second.position, angle: 0 })
+    const expected = sweepCompoundCollidersWithRotation(structuredClone(first), structuredClone(second), PHYSICS_STEP_SECONDS)
+    expect(expected).not.toBeNull()
+    expect(sweepCompoundCollidersWithRotation(first, second, PHYSICS_STEP_SECONDS)).toEqual(expected)
+  })
+
+  it('isolates pooled solver bodies from nested provider queries and later races', () => {
+    const wall = concreteWall('nested-wall', 3.325, 0, 0.125, 10)
+    const initial = vehicle('outer', { x: 0.8, velocityX: 96 })
+    setIntegratedMotion(initial, { x: 0, y: 0 })
+    const expected = structuredClone(initial)
+    expect(resolveVehicleAgainstStaticColliders(expected, PHYSICS_STEP_SECONDS, () => [wall])).toBe(true)
+    const actual = structuredClone(initial)
+    let nestedQueries = 0
+    expect(resolveVehicleAgainstStaticColliders(actual, PHYSICS_STEP_SECONDS, () => {
+      nestedQueries++
+      resolveVehicleCollision(vehicle('nested-a', { velocityX: 30 }), vehicle('nested-b', { x: 5.3 }))
+      return [wall]
+    })).toBe(true)
+    expect(nestedQueries).toBeGreaterThan(1)
+    expect(actual).toEqual(expected)
+    expect(() => resolveVehicleAgainstStaticColliders(structuredClone(initial), PHYSICS_STEP_SECONDS,
+      () => { throw new Error('provider failure') })).toThrow('provider failure')
+    const next = structuredClone(initial)
+    resolveVehicleAgainstStaticColliders(next, PHYSICS_STEP_SECONDS, () => [wall])
+    expect(next).toEqual(expected)
+  })
+
   it('reuses angular geometry only for the same pivot and query inputs', () => {
     const first = {
       colliders: vehicleColliders({ angle: -0.08 }),
