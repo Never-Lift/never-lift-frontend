@@ -68,6 +68,19 @@ As Partes 2a, 2b, 2c e 2d e o catálogo `2026.12` foram validados manualmente de
 
 ## Roadmap
 
+### Parte 3c — corrida online em validação (15/09/2026)
+
+Predição do próprio carro pelo motor 2.0.3, reconciliação suave, interpolação dos
+remotos, duas voltas cronometradas de quali, confirmação do grid, semáforo,
+HUD autoritativo, ghost, pódio e reconexão estão implementados no frontend.
+O host configura as voltas da corrida (1–99, padrão 3); a quali continua com
+duas tentativas. Câmera, pistas, minimapa, split-screen e tuning foram preservados.
+
+O smoke com dois contextos Chrome, dois humanos e um bot passou até a quali e
+reconexão usando apenas H2 local. **Não equivale à aprovação de corrida completa
+ou validação manual**. Testes, decisões aprovadas pelo autor e pendências estão
+em [module-3c-client.md](docs/module-3c-client.md). Módulo 3 ainda não está pronto.
+
 Os Módulos 0–9 formam o MVP planejado. A expansão pós-MVP aprovada está registrada nos Módulos 10–16: progressão e cosméticos por conquista, contrarrelógio com fantasmas, controles personalizáveis, espectadores, equipes, torneios automáticos e conduta esportiva. O escopo, as dependências e os critérios de pronto ficam em [`docs/frontend-implementation-plan.md`](docs/frontend-implementation-plan.md); o estado corrente de cada módulo fica em [`AGENTS.md`](AGENTS.md).
 
 A direção visual aprovada, incluindo paleta, tipografia, câmera dinâmica, escala métrica, veículos, circuitos, HUD e composição das telas, está em [`docs/game-design-guide.md`](docs/game-design-guide.md). A documentação não antecipa funcionalidades: a fundação visual global já foi aplicada numa rodada isolada e cada decisão específica continua entrando somente no módulo responsável. Os fluxos e o status funcional do Módulo 1 foram preservados.

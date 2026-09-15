@@ -25,6 +25,7 @@ import { TrackCarousel } from '@/components/race/TrackCarousel'
 import { ControlSchemeSelector } from '@/components/race/ControlSchemeSelector'
 import { CountStepper } from '@/components/race/CountStepper'
 import { DifficultyButton } from '@/components/race/DifficultyButton'
+import { OnlineRacePanel } from '@/components/race/OnlineRacePanel'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -101,6 +102,9 @@ function trackNameFor(catalog: TrackCatalog | null, trackId: string) {
 
 function formatRoomState(state: RoomState) {
   if (state === 'qualifying') return 'Classificação'
+  if (state === 'qualifying_results') return 'Confirmação do grid'
+  if (state === 'countdown') return 'Largada'
+  if (state === 'results') return 'Resultado'
   if (state === 'race') return 'Em corrida'
   if (state === 'closed') return 'Fechada'
   return 'Lobby'
@@ -285,6 +289,7 @@ export function OnlineLobbyPage({
   const [joinCode, setJoinCode] = useState('')
   const [roomName, setRoomName] = useState('')
   const [gridSize, setGridSize] = useState('22')
+  const [laps, setLaps] = useState(3)
   const [selectedTrackId, setSelectedTrackId] = useState('')
   const [botsEnabled, setBotsEnabled] = useState(false)
   const [botDifficulty, setBotDifficulty] = useState<RoomBotDifficulty>('normal')
@@ -392,11 +397,13 @@ export function OnlineLobbyPage({
         if (!normalized) throw new Error('A resposta da sala é inválida.')
         setTrackCatalog(catalog)
         setGridSize(String(normalized.limit))
+        setLaps(normalized.settings?.laps ?? 3)
         setSelectedTrackId(normalized.trackId)
         setBotsEnabled(normalized.settings?.botsEnabled === true)
         setBotDifficulty(normalized.settings?.botDifficulty ?? 'normal')
         setVisibility(normalized.settings?.visibility ?? 'public')
         lastSentSettings.current = settingsSignature({
+          laps: normalized.settings?.laps ?? 3,
           trackId: normalized.trackId,
           gridSize: normalized.limit,
           botsEnabled: normalized.settings?.botsEnabled === true,
@@ -459,6 +466,7 @@ export function OnlineLobbyPage({
   useEffect(() => {
     if (!room || isHost) return
     setGridSize(String(room.limit))
+    setLaps(room.settings?.laps ?? 3)
     setSelectedTrackId(room.trackId)
     setBotsEnabled(room.settings?.botsEnabled === true)
     setBotDifficulty(room.settings?.botDifficulty ?? 'normal')
@@ -466,12 +474,13 @@ export function OnlineLobbyPage({
   }, [isHost, room])
 
   const draftSettings = useMemo<RoomSettingsUpdate>(() => ({
+    laps,
     trackId: selectedTrackId,
     gridSize: Number(gridSize),
     botsEnabled,
     botDifficulty,
     visibility,
-  }), [botDifficulty, botsEnabled, gridSize, selectedTrackId, visibility])
+  }), [botDifficulty, botsEnabled, gridSize, laps, selectedTrackId, visibility])
 
   const persistSettings = useCallback(async (force = false) => {
     if (!room || !session || !isHost || room.state !== 'lobby') return true
@@ -679,6 +688,12 @@ export function OnlineLobbyPage({
   }
 
   if (isLobby && room) {
+    if (currentPlayer && ['qualifying', 'qualifying_results', 'countdown', 'race', 'results'].includes(room.state)) {
+      return <><NotificationStack notifications={notifications} onDismiss={dismiss} /><OnlineRacePanel
+        room={room} player={currentPlayer} isHost={isHost} getTrack={getTrack}
+        onLeave={handleLeave} onCancelQualification={handleCancelQualification}
+      /></>
+    }
     const players = room.players ?? []
     const humanCount = players.filter((player) => !player.bot).length
     const actualBotCount = players.filter((player) => player.bot).length
@@ -817,6 +832,12 @@ export function OnlineLobbyPage({
                       </div>
                     </div>
                     <label className="flex items-center gap-3 text-sm font-semibold"><input checked={botsEnabled} disabled={settingsDisabled} onChange={(event) => setBotsEnabled(event.target.checked)} type="checkbox" /> Habilitar bots</label>
+                    <div><p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">Voltas da corrida</p>
+                      <CountStepper label="Voltas da corrida" value={laps} minimum={1} maximum={99} disabled={settingsDisabled}
+                        onDecrease={() => setLaps(Math.max(1, laps - 1))} onIncrease={() => setLaps(Math.min(99, laps + 1))}
+                        onValueChange={(value) => { const parsed = Number(value); if (Number.isFinite(parsed)) setLaps(Math.max(1, Math.min(99, Math.trunc(parsed)))) }} />
+                      <p className="mt-2 text-xs text-muted-foreground">Classificação: duas voltas cronometradas. Vale a melhor válida.</p>
+                    </div>
                     <div className="flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Visibilidade</span><VisibilityToggle disabled={settingsDisabled} onChange={setVisibility} value={visibility} /></div>
                     {settingsSaving && <p className="inline-flex items-center gap-2 text-xs font-semibold text-info"><LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> Sincronizando ajustes…</p>}
                     {settingsDisabled && <p className="rounded-xl border border-warning/30 bg-warning/8 p-3 text-xs leading-5 text-warning">Os ajustes ficam bloqueados durante a classificação. Cancele antes do primeiro carro andar para voltar ao lobby.</p>}
@@ -831,6 +852,7 @@ export function OnlineLobbyPage({
                   <dl className="space-y-3 text-sm">
                     <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Pista</dt><dd className="text-right font-bold">{trackNameFor(trackCatalog, room.trackId)}</dd></div>
                     <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Estado</dt><dd className="font-bold">{formatRoomState(room.state)}</dd></div>
+                    <div className="flex justify-between gap-4 border-b border-border/60 pb-3"><dt className="text-muted-foreground">Voltas da corrida</dt><dd className="font-bold">{room.settings?.laps ?? 3}</dd></div>
                     <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Bots</dt><dd className="text-right font-bold">{room.settings?.botsEnabled ? `Ativos · ${botCount} · ${formatDifficulty(room.settings.botDifficulty)}` : 'Inativos · 0'}</dd></div>
                   </dl>
                 </section>

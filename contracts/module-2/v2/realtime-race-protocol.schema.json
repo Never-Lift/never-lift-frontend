@@ -3,41 +3,84 @@
   "$id": "https://never-lift.local/contracts/module-2/v2/realtime-race-protocol.schema.json",
   "title": "Never Lift Realtime Race Protocol v2",
   "oneOf": [
-    { "$ref": "#/$defs/joinRoomEnvelope" },
-    { "$ref": "#/$defs/selectLoadoutEnvelope" },
-    { "$ref": "#/$defs/readyEnvelope" },
-    { "$ref": "#/$defs/inputEnvelope" },
-    { "$ref": "#/$defs/roomStateEnvelope" },
-    { "$ref": "#/$defs/countdownEnvelope" },
-    { "$ref": "#/$defs/stateSnapshotEnvelope" },
-    { "$ref": "#/$defs/raceEventEnvelope" },
-    { "$ref": "#/$defs/raceResultEnvelope" },
-    { "$ref": "#/$defs/errorEnvelope" }
+    {
+      "$ref": "#/$defs/joinRoomEnvelope"
+    },
+    {
+      "$ref": "#/$defs/selectLoadoutEnvelope"
+    },
+    {
+      "$ref": "#/$defs/readyEnvelope"
+    },
+    {
+      "$ref": "#/$defs/inputEnvelope"
+    },
+    {
+      "$ref": "#/$defs/roomStateEnvelope"
+    },
+    {
+      "$ref": "#/$defs/countdownEnvelope"
+    },
+    {
+      "$ref": "#/$defs/stateSnapshotEnvelope"
+    },
+    {
+      "$ref": "#/$defs/raceEventEnvelope"
+    },
+    {
+      "$ref": "#/$defs/raceResultEnvelope"
+    },
+    {
+      "$ref": "#/$defs/errorEnvelope"
+    }
   ],
   "$defs": {
     "vector": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y"],
+      "required": [
+        "x",
+        "y"
+      ],
       "properties": {
-        "x": { "type": "number" },
-        "y": { "type": "number" }
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
       }
     },
     "joinRoomEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "join_room" },
+        "type": {
+          "const": "join_room"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["roomCode", "trackCatalogVersion", "physicsContractVersion"],
+          "required": [
+            "roomCode",
+            "trackCatalogVersion",
+            "physicsContractVersion"
+          ],
           "properties": {
-            "roomCode": { "type": "string", "pattern": "^[0-9]{4}$" },
-            "trackCatalogVersion": { "const": "2026.12" },
-            "physicsContractVersion": { "const": "2.0.3" }
+            "roomCode": {
+              "type": "string",
+              "pattern": "^[0-9]{4}$"
+            },
+            "trackCatalogVersion": {
+              "const": "2026.12"
+            },
+            "physicsContractVersion": {
+              "const": "2.0.3"
+            }
           }
         }
       }
@@ -45,15 +88,28 @@
     "selectLoadoutEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "select_loadout" },
+        "type": {
+          "const": "select_loadout"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["color"],
+          "required": [
+            "color"
+          ],
           "properties": {
-            "color": { "enum": ["#a84448", "#365f82", "#3f704f"] }
+            "color": {
+              "enum": [
+                "#a84448",
+                "#365f82",
+                "#3f704f"
+              ]
+            }
           }
         }
       }
@@ -61,15 +117,24 @@
     "readyEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "ready" },
+        "type": {
+          "const": "ready"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["ready"],
+          "required": [
+            "ready"
+          ],
           "properties": {
-            "ready": { "type": "boolean" }
+            "ready": {
+              "type": "boolean"
+            }
           }
         }
       }
@@ -77,19 +142,48 @@
     "inputEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "input" },
+        "type": {
+          "const": "input"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["throttle", "brake", "steer", "clientSeq", "clientTimestamp"],
+          "required": [
+            "throttle",
+            "brake",
+            "steer",
+            "clientSeq",
+            "clientTimestamp"
+          ],
           "properties": {
-            "throttle": { "type": "number", "minimum": 0, "maximum": 1 },
-            "brake": { "type": "number", "minimum": 0, "maximum": 1 },
-            "steer": { "type": "number", "minimum": -1, "maximum": 1 },
-            "clientSeq": { "type": "integer", "minimum": 0 },
-            "clientTimestamp": { "type": "number", "minimum": 0 }
+            "throttle": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "brake": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "steer": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "clientSeq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "clientTimestamp": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         }
       }
@@ -97,58 +191,201 @@
     "player": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["playerId", "userId", "displayName", "color", "isBot", "connected", "joinedAt"],
+      "required": [
+        "playerId",
+        "userId",
+        "displayName",
+        "color",
+        "isBot",
+        "connected",
+        "joinedAt"
+      ],
       "properties": {
-        "playerId": { "type": "string", "minLength": 1 },
-        "userId": { "type": ["string", "null"], "minLength": 1 },
-        "displayName": { "type": "string", "minLength": 1 },
-        "color": { "enum": ["#a84448", "#365f82", "#3f704f"] },
-        "isBot": { "type": "boolean" },
-        "connected": { "type": "boolean" },
-        "joinedAt": { "type": "string", "format": "date-time" }
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "enum": [
+            "#a84448",
+            "#365f82",
+            "#3f704f"
+          ]
+        },
+        "isBot": {
+          "type": "boolean"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "roomSettings": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["trackId", "trackCatalogVersion", "physicsContractVersion", "gridSize", "botsEnabled", "botDifficulty", "visibility", "settingsLocked"],
+      "required": [
+        "trackId",
+        "trackCatalogVersion",
+        "physicsContractVersion",
+        "gridSize",
+        "botsEnabled",
+        "botDifficulty",
+        "visibility",
+        "settingsLocked"
+      ],
       "properties": {
-        "trackId": { "type": "string", "minLength": 1 },
-        "trackCatalogVersion": { "const": "2026.12" },
-        "physicsContractVersion": { "const": "2.0.3" },
-        "gridSize": { "type": "integer", "minimum": 2, "maximum": 22 },
-        "botsEnabled": { "type": "boolean" },
-        "botDifficulty": { "enum": ["easy", "normal", "hard"] },
-        "visibility": { "enum": ["public", "private"] },
-        "settingsLocked": { "type": "boolean" }
+        "trackId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trackCatalogVersion": {
+          "const": "2026.12"
+        },
+        "physicsContractVersion": {
+          "const": "2.0.3"
+        },
+        "gridSize": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 22
+        },
+        "botsEnabled": {
+          "type": "boolean"
+        },
+        "botDifficulty": {
+          "enum": [
+            "easy",
+            "normal",
+            "hard"
+          ]
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private"
+          ]
+        },
+        "settingsLocked": {
+          "type": "boolean"
+        },
+        "laps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99
+        },
+        "qualifyingLaps": {
+          "const": 2
+        }
       }
     },
     "roomStateEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "room_state" },
+        "type": {
+          "const": "room_state"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["code", "name", "players", "hostId", "hostName", "settings", "readyStates", "settingsLocked", "state", "participantCount", "limit"],
+          "required": [
+            "code",
+            "name",
+            "players",
+            "hostId",
+            "hostName",
+            "settings",
+            "readyStates",
+            "settingsLocked",
+            "state",
+            "participantCount",
+            "limit"
+          ],
           "properties": {
-            "code": { "type": "string", "pattern": "^[0-9]{4}$" },
-            "name": { "type": "string", "minLength": 1 },
-            "players": { "type": "array", "maxItems": 22, "items": { "$ref": "#/$defs/player" } },
-            "hostId": { "type": ["string", "null"], "minLength": 1 },
-            "hostName": { "type": ["string", "null"] },
-            "settings": { "$ref": "#/$defs/roomSettings" },
+            "code": {
+              "type": "string",
+              "pattern": "^[0-9]{4}$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "players": {
+              "type": "array",
+              "maxItems": 22,
+              "items": {
+                "$ref": "#/$defs/player"
+              }
+            },
+            "hostId": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "hostName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "settings": {
+              "$ref": "#/$defs/roomSettings"
+            },
             "readyStates": {
               "type": "object",
-              "propertyNames": { "type": "string", "minLength": 1 },
-              "additionalProperties": { "type": "boolean" }
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1
+              },
+              "additionalProperties": {
+                "type": "boolean"
+              }
             },
-            "settingsLocked": { "type": "boolean" },
-            "state": { "enum": ["lobby", "qualifying", "race", "closed"] },
-            "participantCount": { "type": "integer", "minimum": 0, "maximum": 22 },
-            "limit": { "type": "integer", "minimum": 2, "maximum": 22 }
+            "settingsLocked": {
+              "type": "boolean"
+            },
+            "state": {
+              "enum": [
+                "lobby",
+                "qualifying",
+                "qualifying_results",
+                "countdown",
+                "race",
+                "results",
+                "closed"
+              ]
+            },
+            "participantCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 22
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 22
+            }
           }
         }
       }
@@ -156,15 +393,29 @@
     "countdownEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "countdown" },
+        "type": {
+          "const": "countdown"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["startAtServerTime"],
+          "required": [
+            "startAtServerTime"
+          ],
           "properties": {
-            "startAtServerTime": { "type": "number", "minimum": 0 }
+            "startAtServerTime": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sessionId": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
       }
@@ -172,74 +423,285 @@
     "physicsState": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["yawRate", "steeringAngle", "appliedThrottle", "appliedBrake", "frontWheelAngularSpeed", "rearWheelAngularSpeed", "gear", "engineRpm", "gearShiftTimeRemaining", "longitudinalAcceleration"],
+      "required": [
+        "yawRate",
+        "steeringAngle",
+        "appliedThrottle",
+        "appliedBrake",
+        "frontWheelAngularSpeed",
+        "rearWheelAngularSpeed",
+        "gear",
+        "engineRpm",
+        "gearShiftTimeRemaining",
+        "longitudinalAcceleration"
+      ],
       "properties": {
-        "yawRate": { "type": "number" },
-        "steeringAngle": { "type": "number" },
-        "appliedThrottle": { "type": "number", "minimum": 0, "maximum": 1 },
-        "appliedBrake": { "type": "number", "minimum": 0, "maximum": 1 },
-        "frontWheelAngularSpeed": { "type": "number" },
-        "rearWheelAngularSpeed": { "type": "number" },
-        "gear": { "type": "integer", "minimum": -1, "maximum": 8 },
-        "engineRpm": { "type": "number", "minimum": 0 },
-        "gearShiftTimeRemaining": { "type": "number", "minimum": 0 },
-        "longitudinalAcceleration": { "type": "number" }
+        "yawRate": {
+          "type": "number"
+        },
+        "steeringAngle": {
+          "type": "number"
+        },
+        "appliedThrottle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "appliedBrake": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "frontWheelAngularSpeed": {
+          "type": "number"
+        },
+        "rearWheelAngularSpeed": {
+          "type": "number"
+        },
+        "gear": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 8
+        },
+        "engineRpm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "gearShiftTimeRemaining": {
+          "type": "number",
+          "minimum": 0
+        },
+        "longitudinalAcceleration": {
+          "type": "number"
+        }
       }
     },
     "damageState": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "health", "engineDamaged", "steeringDamaged", "steeringPull", "totalLoss", "impactCount", "lastImpactSpeed"],
+      "required": [
+        "kind",
+        "health",
+        "engineDamaged",
+        "steeringDamaged",
+        "steeringPull",
+        "totalLoss",
+        "impactCount",
+        "lastImpactSpeed"
+      ],
       "properties": {
-        "health": { "type": "number", "minimum": 0, "maximum": 100 },
-        "engineDamaged": { "type": "boolean" },
-        "steeringDamaged": { "type": "boolean" },
-        "steeringPull": { "type": "number", "minimum": -1, "maximum": 1 },
-        "totalLoss": { "type": "boolean" },
-        "kind": { "enum": ["none", "steering", "engine", "engine-and-steering", "total-loss"] },
-        "impactCount": { "type": "integer", "minimum": 0 },
-        "lastImpactSpeed": { "type": "number", "minimum": 0 }
+        "health": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "engineDamaged": {
+          "type": "boolean"
+        },
+        "steeringDamaged": {
+          "type": "boolean"
+        },
+        "steeringPull": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "totalLoss": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "none",
+            "steering",
+            "engine",
+            "engine-and-steering",
+            "total-loss"
+          ]
+        },
+        "impactCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lastImpactSpeed": {
+          "type": "number",
+          "minimum": 0
+        }
       }
     },
     "carSnapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["playerId", "x", "y", "velocityX", "velocityY", "angle", "speed", "physicsState", "damageState", "trackDistanceMeters", "trackLayer", "lastProcessedClientSeq"],
+      "required": [
+        "playerId",
+        "x",
+        "y",
+        "velocityX",
+        "velocityY",
+        "angle",
+        "speed",
+        "physicsState",
+        "damageState",
+        "trackDistanceMeters",
+        "trackLayer",
+        "lastProcessedClientSeq"
+      ],
       "properties": {
-        "playerId": { "type": "string", "minLength": 1 },
-        "x": { "type": "number" },
-        "y": { "type": "number" },
-        "velocityX": { "type": "number" },
-        "velocityY": { "type": "number" },
-        "angle": { "type": "number" },
-        "speed": { "type": "number", "minimum": 0 },
-        "physicsState": { "$ref": "#/$defs/physicsState" },
-        "damageState": { "$ref": "#/$defs/damageState" },
-        "trackDistanceMeters": { "type": "number", "minimum": 0 },
-        "trackLayer": { "type": "integer" },
-        "lastProcessedClientSeq": { "type": "integer", "minimum": -1 },
-        "lap": { "type": "integer", "minimum": 0 },
-        "isGhost": { "type": "boolean" },
-        "inPit": { "type": "boolean" }
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "velocityX": {
+          "type": "number"
+        },
+        "velocityY": {
+          "type": "number"
+        },
+        "angle": {
+          "type": "number"
+        },
+        "speed": {
+          "type": "number",
+          "minimum": 0
+        },
+        "physicsState": {
+          "$ref": "#/$defs/physicsState"
+        },
+        "damageState": {
+          "$ref": "#/$defs/damageState"
+        },
+        "trackDistanceMeters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trackLayer": {
+          "type": "integer"
+        },
+        "lastProcessedClientSeq": {
+          "type": "integer",
+          "minimum": -1
+        },
+        "lap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "isGhost": {
+          "type": "boolean"
+        },
+        "inPit": {
+          "type": "boolean"
+        },
+        "falseStart": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 22
+        },
+        "nextCheckpoint": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "qualifyingAttempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "currentLapTimeMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bestLapTimeMs": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "stateSnapshotEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "state_snapshot" },
+        "type": {
+          "const": "state_snapshot"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["tick", "serverTime", "trackId", "trackCatalogVersion", "physicsContractVersion", "cars"],
+          "required": [
+            "tick",
+            "serverTime",
+            "trackId",
+            "trackCatalogVersion",
+            "physicsContractVersion",
+            "cars"
+          ],
           "properties": {
-            "tick": { "type": "integer", "minimum": 0 },
-            "serverTime": { "type": "number", "minimum": 0 },
-            "trackId": { "type": "string", "minLength": 1 },
-            "trackCatalogVersion": { "const": "2026.12" },
-            "physicsContractVersion": { "const": "2.0.3" },
-            "cars": { "type": "array", "maxItems": 22, "items": { "$ref": "#/$defs/carSnapshot" } }
+            "tick": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "serverTime": {
+              "type": "number",
+              "minimum": 0
+            },
+            "trackId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "trackCatalogVersion": {
+              "const": "2026.12"
+            },
+            "physicsContractVersion": {
+              "const": "2.0.3"
+            },
+            "cars": {
+              "type": "array",
+              "maxItems": 22,
+              "items": {
+                "$ref": "#/$defs/carSnapshot"
+              }
+            },
+            "sessionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "substep": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "physicsSubstep": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "phase": {
+              "enum": [
+                "lobby",
+                "qualifying",
+                "qualifying_results",
+                "countdown",
+                "race",
+                "results"
+              ]
+            },
+            "totalLaps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 99
+            },
+            "raceTimeMs": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         }
       }
@@ -247,20 +709,58 @@
     "raceEventEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "race_event" },
+        "type": {
+          "const": "race_event"
+        },
         "payload": {
           "oneOf": [
-            { "$ref": "#/$defs/collisionEvent" },
-            { "$ref": "#/$defs/checkpointEvent" },
-            { "$ref": "#/$defs/lapCompleteEvent" },
-            { "$ref": "#/$defs/finishedEvent" },
-            { "$ref": "#/$defs/falseStartEvent" },
-            { "$ref": "#/$defs/pitEnterEvent" },
-            { "$ref": "#/$defs/pitExitEvent" },
-            { "$ref": "#/$defs/breakdownEvent" },
-            { "$ref": "#/$defs/versionMismatchEvent" }
+            {
+              "$ref": "#/$defs/collisionEvent"
+            },
+            {
+              "$ref": "#/$defs/checkpointEvent"
+            },
+            {
+              "$ref": "#/$defs/lapCompleteEvent"
+            },
+            {
+              "$ref": "#/$defs/finishedEvent"
+            },
+            {
+              "$ref": "#/$defs/falseStartEvent"
+            },
+            {
+              "$ref": "#/$defs/pitEnterEvent"
+            },
+            {
+              "$ref": "#/$defs/pitExitEvent"
+            },
+            {
+              "$ref": "#/$defs/breakdownEvent"
+            },
+            {
+              "$ref": "#/$defs/versionMismatchEvent"
+            },
+            {
+              "$ref": "#/$defs/startLightEvent"
+            },
+            {
+              "$ref": "#/$defs/lightsOutEvent"
+            },
+            {
+              "$ref": "#/$defs/qualifyingStartEvent"
+            },
+            {
+              "$ref": "#/$defs/sessionPhaseEvent"
+            },
+            {
+              "$ref": "#/$defs/qualifyingResultEvent"
+            }
           ]
         }
       }
@@ -268,132 +768,409 @@
     "versionMismatchEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "trackId", "trackCatalogVersion", "physicsContractVersion"],
+      "required": [
+        "type",
+        "trackId",
+        "trackCatalogVersion",
+        "physicsContractVersion"
+      ],
       "properties": {
-        "type": { "const": "version_mismatch" },
-        "trackId": { "type": "string", "minLength": 1 },
-        "trackCatalogVersion": { "const": "2026.12" },
-        "physicsContractVersion": { "const": "2.0.3" }
+        "type": {
+          "const": "version_mismatch"
+        },
+        "trackId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trackCatalogVersion": {
+          "const": "2026.12"
+        },
+        "physicsContractVersion": {
+          "const": "2.0.3"
+        }
       }
     },
     "collisionEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId", "deltaVMetersPerSecond"],
+      "required": [
+        "type",
+        "tick",
+        "playerId",
+        "deltaVMetersPerSecond"
+      ],
       "properties": {
-        "type": { "const": "collision" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 },
-        "otherPlayerId": { "type": "string", "minLength": 1 },
-        "barrierMaterial": { "enum": ["concrete-wall", "guardrail", "tecpro", "tyre-barrier"] },
-        "deltaVMetersPerSecond": { "type": "number", "minimum": 0 }
+        "type": {
+          "const": "collision"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "otherPlayerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "barrierMaterial": {
+          "enum": [
+            "concrete-wall",
+            "guardrail",
+            "tecpro",
+            "tyre-barrier"
+          ]
+        },
+        "deltaVMetersPerSecond": {
+          "type": "number",
+          "minimum": 0
+        }
       },
       "oneOf": [
-        { "required": ["otherPlayerId"] },
-        { "required": ["barrierMaterial"] }
+        {
+          "required": [
+            "otherPlayerId"
+          ]
+        },
+        {
+          "required": [
+            "barrierMaterial"
+          ]
+        }
       ]
     },
     "checkpointEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId", "checkpointIndex", "lap"],
+      "required": [
+        "type",
+        "tick",
+        "playerId",
+        "checkpointIndex",
+        "lap"
+      ],
       "properties": {
-        "type": { "const": "checkpoint" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 },
-        "checkpointIndex": { "type": "integer", "minimum": 0 },
-        "lap": { "type": "integer", "minimum": 0 }
+        "type": {
+          "const": "checkpoint"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checkpointIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "lapCompleteEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId", "lap", "lapTimeMs"],
+      "required": [
+        "type",
+        "tick",
+        "playerId",
+        "lap",
+        "lapTimeMs"
+      ],
       "properties": {
-        "type": { "const": "lap_complete" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 },
-        "lap": { "type": "integer", "minimum": 1 },
-        "lapTimeMs": { "type": "integer", "minimum": 0 }
+        "type": {
+          "const": "lap_complete"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lap": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lapTimeMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "finishedEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId", "position", "totalTimeMs"],
+      "required": [
+        "type",
+        "tick",
+        "playerId",
+        "position",
+        "totalTimeMs"
+      ],
       "properties": {
-        "type": { "const": "finished" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 },
-        "position": { "type": "integer", "minimum": 1, "maximum": 22 },
-        "totalTimeMs": { "type": "integer", "minimum": 0 }
+        "type": {
+          "const": "finished"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 22
+        },
+        "totalTimeMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "falseStartEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId", "penaltySeconds"],
+      "required": [
+        "type",
+        "tick",
+        "playerId",
+        "penaltySeconds"
+      ],
       "properties": {
-        "type": { "const": "false_start" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 },
-        "penaltySeconds": { "type": "number", "minimum": 0 }
+        "type": {
+          "const": "false_start"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "penaltySeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedSubsteps": {
+          "const": 600
+        }
       }
     },
     "pitEnterEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId"],
+      "required": [
+        "type",
+        "tick",
+        "playerId"
+      ],
       "properties": {
-        "type": { "const": "pit_enter" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 }
+        "type": {
+          "const": "pit_enter"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "pitExitEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId"],
+      "required": [
+        "type",
+        "tick",
+        "playerId"
+      ],
       "properties": {
-        "type": { "const": "pit_exit" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 }
+        "type": {
+          "const": "pit_exit"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "breakdownEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tick", "playerId"],
+      "required": [
+        "type",
+        "tick",
+        "playerId"
+      ],
       "properties": {
-        "type": { "const": "breakdown" },
-        "tick": { "type": "integer", "minimum": 0 },
-        "playerId": { "type": "string", "minLength": 1 }
+        "type": {
+          "const": "breakdown"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "standing": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["playerId", "position", "totalTimeMs", "bestLapTimeMs", "finished"],
+      "required": [
+        "playerId",
+        "position",
+        "totalTimeMs",
+        "bestLapTimeMs",
+        "finished"
+      ],
       "properties": {
-        "playerId": { "type": "string", "minLength": 1 },
-        "position": { "type": "integer", "minimum": 1, "maximum": 22 },
-        "totalTimeMs": { "type": "integer", "minimum": 0 },
-        "bestLapTimeMs": { "type": "integer", "minimum": 0 },
-        "finished": { "type": "boolean" }
+        "playerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 22
+        },
+        "totalTimeMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bestLapTimeMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "finished": {
+          "type": "boolean"
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "laps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "progressMeters": {
+          "type": "number",
+          "minimum": 0
+        }
       }
     },
     "raceResultEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "race_result" },
+        "type": {
+          "const": "race_result"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["standings"],
+          "required": [
+            "standings"
+          ],
           "properties": {
-            "standings": { "type": "array", "minItems": 1, "maxItems": 22, "items": { "$ref": "#/$defs/standing" } }
+            "standings": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 22,
+              "items": {
+                "$ref": "#/$defs/standing"
+              }
+            },
+            "sessionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "trackId": {
+              "type": "string"
+            },
+            "trackCatalogVersion": {
+              "const": "2026.12"
+            },
+            "physicsContractVersion": {
+              "const": "2.0.3"
+            }
           }
         }
       }
@@ -401,16 +1178,250 @@
     "errorEnvelope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "payload"],
+      "required": [
+        "type",
+        "payload"
+      ],
       "properties": {
-        "type": { "const": "error" },
+        "type": {
+          "const": "error"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["code", "message"],
+          "required": [
+            "code",
+            "message"
+          ],
           "properties": {
-            "code": { "type": "string" },
-            "message": { "type": "string" }
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "startLightEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sessionId",
+        "tick",
+        "substep",
+        "serverTime",
+        "stage"
+      ],
+      "properties": {
+        "type": {
+          "const": "start_light"
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        }
+      }
+    },
+    "lightsOutEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sessionId",
+        "tick",
+        "substep",
+        "serverTime",
+        "stage"
+      ],
+      "properties": {
+        "type": {
+          "const": "lights_out"
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stage": {
+          "const": 0
+        }
+      }
+    },
+    "qualifyingStartEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sessionId",
+        "tick",
+        "substep",
+        "serverTime",
+        "laps",
+        "countdownSeconds"
+      ],
+      "properties": {
+        "type": {
+          "const": "qualifying_start"
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "laps": {
+          "const": 2
+        },
+        "countdownSeconds": {
+          "const": 3
+        }
+      }
+    },
+    "sessionPhaseEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sessionId",
+        "tick",
+        "substep",
+        "serverTime",
+        "phase"
+      ],
+      "properties": {
+        "type": {
+          "const": "session_phase"
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "phase": {
+          "enum": [
+            "lobby",
+            "qualifying",
+            "qualifying_results",
+            "countdown",
+            "race",
+            "results"
+          ]
+        }
+      }
+    },
+    "qualifyingResultEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sessionId",
+        "tick",
+        "substep",
+        "serverTime",
+        "grid"
+      ],
+      "properties": {
+        "type": {
+          "const": "qualifying_result"
+        },
+        "sessionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "substep": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "serverTime": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "grid": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 22,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "playerId",
+              "position",
+              "bestLapTimeMs",
+              "valid"
+            ],
+            "properties": {
+              "playerId": {
+                "type": "string"
+              },
+              "position": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 22
+              },
+              "bestLapTimeMs": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "valid": {
+                "type": "boolean"
+              }
+            }
           }
         }
       }

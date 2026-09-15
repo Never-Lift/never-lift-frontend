@@ -8,6 +8,9 @@ import type { RoomSummary, TrackCatalog, TrackDefinition } from '@/lib/api'
 import type { OnlineEnvelope, OnlineRoomClient } from '@/online/OnlineRoomClient'
 import { onlineRoomSession } from '@/online/OnlineRoomSession'
 import { OnlineLobbyPage } from '@/pages/OnlineLobbyPage'
+import { SHORT_TRACK } from '@/test/track-fixtures'
+
+vi.mock('@/race/RaceRenderer', () => ({ RaceRenderer: class { render() {} } }))
 
 const tracks = ['albert-park', 'shanghai', 'suzuka', 'bahrain'].map((id, index) => ({
   round: index + 1,
@@ -30,10 +33,9 @@ const catalog: TrackCatalog = {
 }
 
 const trackDefinition = (id: string): TrackDefinition => ({
+  ...SHORT_TRACK,
   id,
   name: id,
-  bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
-  centerline: [{ x: 0, y: 0 }, { x: 100, y: 100 }],
 } as TrackDefinition)
 
 const room = (overrides: Partial<RoomSummary> = {}): RoomSummary => ({
@@ -119,6 +121,7 @@ function renderLobby({
     disconnect: vi.fn(),
     setReady: vi.fn(),
     startRace: vi.fn(),
+    sendInput: vi.fn().mockReturnValue(true),
   } as unknown as OnlineRoomClient
 
   render(
@@ -300,13 +303,12 @@ describe('OnlineLobbyPage', () => {
     await waitFor(() => expect(api.updateRoom).toHaveBeenLastCalledWith('1234', expect.objectContaining({ gridSize: 2 }), 'jwt'))
   })
 
-  it('disables both shared controls when qualification locks the settings', async () => {
+  it('replaces settings with the race presentation when qualification begins', async () => {
     const api = { getRoom: vi.fn().mockResolvedValue(room({ state: 'qualifying', settingsLocked: true })), getConnectionTicket: vi.fn() }
     renderLobby({ api })
-    expect(await screen.findByLabelText('Limite de carros')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Aumentar limite de carros' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Diminuir limite de carros' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Dificuldade dos bots/ })).toBeDisabled()
+    expect(await screen.findByLabelText('Corrida online')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Limite de carros')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Dificuldade dos bots/ })).not.toBeInTheDocument()
   })
 
   it('shows the regular-player summary, syncs host changes and keeps ready reversible', async () => {

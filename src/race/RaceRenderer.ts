@@ -3353,6 +3353,8 @@ export class RaceRenderer {
     useSpriteCache = false,
   ) {
     const context = this.context
+    context.save()
+    context.globalAlpha *= vehicle.renderOpacity ?? 1
     const profile = PHYSICS_CONSTANTS.vehicleVisual
     const point = worldToCamera(vehicle.renderPosition, transform)
     const length = profile.lengthMeters * transform.pixelsPerMeter
@@ -3402,6 +3404,7 @@ export class RaceRenderer {
       context.textAlign = 'center'
       context.fillText(vehicle.name, point.x, point.y - width * 1.2)
     }
+    context.restore()
   }
 
   private drawMinimap(

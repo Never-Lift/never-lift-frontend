@@ -125,6 +125,7 @@ export class RaceEngine {
   private readonly postIntegrationProjections: TrackProjection[] = []
   private readonly inputs = new Map<string, DriverInput>()
   private readonly broadphase = new VehicleBroadphase()
+  private readonly prediction: boolean
 
   constructor(options: RaceEngineOptions) {
     if (
@@ -137,6 +138,10 @@ export class RaceEngine {
     }
 
     this.track = options.track
+    this.prediction = options.prediction === true
+    if (this.prediction && (options.racers.length !== 1 || options.racers[0].kind !== 'human')) {
+      throw new Error('A predição local exige exatamente um piloto humano.')
+    }
     this.geometry = new TrackGeometry(options.track)
     this.mode = options.mode
     this.lapCount = options.lapCount ?? 1
@@ -165,6 +170,28 @@ export class RaceEngine {
       brake: clamp(input.brake, 0, 1),
       steer: clamp(input.steer, -1, 1),
     })
+  }
+
+  /** Restore all persistent physical state before replaying unacknowledged input.
+   * Only available to prediction instances; local races retain their lifecycle.
+   */
+  restorePrediction(state: VehicleState, simulationTimeSeconds: number) {
+    if (!this.prediction || state.id !== this.vehicles[0].id) {
+      throw new Error('Restauração disponível somente para o piloto previsto.')
+    }
+    if (!Number.isFinite(simulationTimeSeconds) || simulationTimeSeconds < 0) {
+      throw new Error('Relógio de predição inválido.')
+    }
+    const restored = cloneVehicle(state)
+    restored.previousPosition = { ...restored.position }
+    restored.previousAngle = restored.angle
+    // A finished ghost still drives. Race progress is never predicted here.
+    restored.finished = false
+    Object.assign(this.vehicles[0], restored)
+    this.simulationTimeSeconds = simulationTimeSeconds
+    this.accumulatorSeconds = 0
+    this.status = 'running'
+    this.inputs.set(state.id, { ...NEUTRAL_INPUT })
   }
 
   advanceFrame(frameDeltaSeconds: number) {
@@ -277,6 +304,7 @@ export class RaceEngine {
     }
 
     this.simulationTimeSeconds += PHYSICS_STEP_SECONDS
+    if (this.prediction) return
     for (let index = 0; index < this.vehicles.length; index += 1) {
       this.updateProgress(
         this.vehicles[index],

@@ -46,6 +46,15 @@ Envelope: `{ "type": "...", "payload": {...} }`.
 Nos snapshots, `x` e `y` são metros num plano cartesiano com `+X` para a direita e `+Y` para cima; `velocityX`/`velocityY` e `speed` usam metros por segundo; `angle` usa radianos no sentido anti-horário a partir de `+X`. Dentro de `physicsState`, `yawRate` usa radianos por segundo, `steeringAngle` é o ângulo físico das rodas dianteiras e as velocidades angulares usam radianos por segundo. Controles aplicados, rodas, marcha, RPM e transição de troca são estado autoritativo necessário à reconciliação. O frontend não converte esses valores em pixels até o estágio de câmera/renderização.
 
 ### Como o cliente usa `state_snapshot`
+
+**Adendo 3c aprovado em 15/09/2026:** o contrato completo está em
+[module-3c-race-flow.md](module-3c-race-flow.md). Snapshots incluem `sessionId`,
+`phase`, `substep`, `physicsSubstep`, `totalLaps`, `raceTimeMs`, progresso,
+tempos e flags por carro. O ACK canônico é `lastProcessedClientSeq`.
+`physicsSubstep` reinicia no grid; o relógio global e o UUID da sessão continuam.
+O cliente envia throttle bruto no semáforo para permitir a detecção de queima,
+mas não move o carro previsto antes da liberação. Penalidade: 600 subpassos.
+Resultados só chegam após persistência atômica no servidor.
 - **Carro do próprio jogador:** já foi desenhado localmente no instante do input (predição). Quando chega o snapshot, comparar posição prevista com a posição real; se divergir, corrigir suavemente (não teleportar) ao longo de alguns frames.
 - **Carros dos outros:** nunca desenhar direto na posição recebida. Manter um pequeno buffer dos últimos 2 snapshots e interpolar entre eles, renderizando ~100ms no passado — é o que substitui o `interpolateRemote()` ingênuo do protótipo.
 
@@ -134,6 +143,15 @@ Mesma numeração e dependências do plano de backend.
 **Critério de pronto:** correr sozinho contra bots ou em split-screen local do início ao fim em circuito de baixa e alta velocidade e em uma pista urbana; acelerar continuamente não produz volta competitiva; frenagem, tangência e retomada são necessárias; perdas dianteira/traseira e contatos têm causa física legível; não há sobreposição, colisão invisível, enrosco ou tunneling; câmera/minimap/culling permanecem estáveis; `Shift` não envia nem executa ação.
 
 ### Módulo 3 — Motor autoritativo online (núcleo)
+
+**Parte 3c — implementação de 15/09/2026:** predição focal com o motor existente,
+restauração/replay por ACK, correção visual acima de 0,10 m em 100 ms, histórico
+remoto limitado com interpolação a 100 ms, HUD autoritativo, quali isolada,
+confirmação do grid por todos (inclusive host), semáforo, ghost, pódio e
+reconexão. A corrida aparece na própria rota da sala; sessão fora do React.
+Câmera, minimapa, split-screen, catálogo e tuning físico continuam inalterados.
+Ainda aguardam corrida completa integrada/manual e revalidação final backend.
+Detalhes e evidências: [module-3c-client.md](module-3c-client.md).
 **Depende de:** Módulo 1, Módulo 2, Módulo 3 do backend.
 **Cobre features:** 4 (lobby online), 8.
 **Decisões aprovadas:** o registro completo das 80 decisões desta rodada está em
@@ -150,16 +168,16 @@ pelo comando explícito com confirmação. O cliente obtém `POST /api/rooms/{co
 antes do handshake, usa apenas o ticket temporário na URL, reconecta dentro da
 janela de 30 s, e cobre pronto/permissões do host sem iniciar física no cliente. A Parte 3b (motor físico Java) está implementada com
 cenários de paridade passando; a Parte 3c (classificação, fluxo de corrida e
-predição/reconciliação online) permanece pendente.
+predição/reconciliação online) está implementada no frontend, ainda em validação integrada conforme o adendo 3c.
 **Escopo:**
 - Cliente WebSocket com reconexão automática (backoff simples), obtendo antes um ticket de uso único vinculado à sala/usuário (validade de 60 s) em vez de expor o JWT principal.
-- Lobby: acesso restrito a contas; guest vê somente a prévia bloqueada. A lista pública mostra nome, host e ocupação e permite entrada direta; salas privadas são descobertas exclusivamente pelo código de quatro dígitos, sem senha. Cada sala aceita até 22 carros (humanos e bots), com grid de 2 a 22 normalizado no cliente e validado no servidor. O host não marca pronto e inicia quando todos os demais humanos estiverem `ready`; convidados podem confirmar ou retirar o pronto. O host edita pista por carrossel de traçados, grid, bots/dificuldade e visibilidade durante todo o lobby, sem botão de salvar e sem limpar confirmações, com propagação automática a todos. As configurações travam ao iniciar a classificação; o host pode cancelá-la e reabrir o lobby somente antes de qualquer carro começar a andar. Host e participantes comuns podem sair explicitamente, com transferência automática do host. Entrada, saída, remoção e configuração são propagadas imediatamente; desconexão reserva a vaga somente durante a janela de reconexão. Avisos e erros usam notificações no canto superior direito, expiram em 5 s e aceitam fechamento manual.
-- Classificação simultânea e isolada: uma tentativa de até 3 minutos por participante, com contagem sincronizada de 3 s, lançamento padronizado antes da linha, mesmas condições secas da corrida e ordenação do grid por tempo autoritativo. Voltas inválidas ficam no fim em ordem determinística.
-- Fluxo de corrida: três voltas, sentido oficial, sem entrada tardia, sem pausa ou reinício manual; após a chegada o carro vira `ghost`, os resultados ficam visíveis por confirmação ou no máximo 60 s e a sala retorna ao lobby.
+- Lobby: acesso restrito a contas; guest vê somente a prévia bloqueada. A lista pública mostra nome, host e ocupação e permite entrada direta; salas privadas são descobertas exclusivamente pelo código de quatro dígitos, sem senha. Cada sala aceita até 22 carros (humanos e bots), com grid de 2 a 22 normalizado no cliente e validado no servidor. O host não marca pronto e inicia quando todos os demais humanos estiverem `ready`; convidados podem confirmar ou retirar o pronto. O host edita pista por carrossel de traçados, grid, bots/dificuldade e visibilidade durante todo o lobby, sem botão de salvar e sem limpar confirmações, com propagação automática a todos. As configurações travam ao iniciar a classificação; o host pode cancelá-la e reabrir o lobby somente antes de qualquer carro começar a andar. Host e participantes comuns podem sair explicitamente, com transferência automática do host. Entrada, saída, remoção e configuração são propagadas imediatamente; no lobby, desconexão reserva a vaga por 30 s; durante a prova, o bot substituto preserva participação e associação ao resultado. Avisos e erros usam notificações no canto superior direito, expiram em 5 s e aceitam fechamento manual.
+- Classificação simultânea e isolada: duas voltas cronometradas por participante, sem limite de tempo, contagem de 3 s e lançamento antes da linha. Melhor volta válida define o grid; inválida consome tentativa, perda total encerra restantes, sem válida vai ao fim por seed. Todos os humanos confirmam novamente o grid, inclusive host.
+- Fluxo de corrida: voltas configuráveis de 1 a 99 no lobby (padrão 3), sentido oficial, sem entrada tardia, pausa ou reinício manual. Ghosts colidem apenas com ghosts; normais com normais; barreiras com todos. Ghost alheio fica oculto até o próprio jogador terminar. Resultados: confirmação de todos ou 60 s retorna ao lobby. Durante quali/corrida, desconexão transfere controle a bot e retorno em 30 s recupera o humano; depois da janela o bot permanece.
 - **Predição:** ao apertar uma tecla, o `RaceEngine` do Módulo 2 já simula o carro do próprio jogador imediatamente e envia `input` pro servidor.
 - **Compatibilidade:** `join_room` envia `physicsContractVersion`; servidor rejeita cliente com física incompatível antes da corrida.
 - **Reconciliação:** ao chegar `state_snapshot`, comparar posição, velocidade, ângulo e todo `physicsState` previsto com o estado autoritativo; reaplicar inputs ainda não confirmados e corrigir erro visual suavemente, sem esconder divergência persistente de motor.
-- **Interpolação:** carros remotos desenhados ~100ms atrás, interpolando entre os dois snapshots mais recentes — nunca perseguindo um alvo cru como no protótipo.
+- **Interpolação:** carros remotos desenhados 100 ms atrás, escolhendo os dois snapshots adjacentes ao instante de apresentação num histórico limitado (até 12); nunca perseguir posição bruta ou extrapolar indefinidamente.
 - Reaproveita o mesmo `RaceEngine` do Módulo 2 como motor de predição — não duplicar a física numa segunda implementação dentro do próprio frontend.
 - Minimap online transforma as posições interpoladas dos snapshots na mesma projeção fixa usada no modo local; nunca mantém um estado paralelo de posição.
 - O grupo de teclas do piloto online é uma preferência exclusivamente local, escolhida no lobby e reaproveitada pela corrida da Parte 3c; não integra payloads REST/WebSocket nem precisa ser sincronizada entre participantes.

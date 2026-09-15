@@ -288,7 +288,7 @@ export type TrackPitVisualStyle = TrackInfrastructurePalette & {
 }
 
 export type RoomVisibility = 'public' | 'private'
-export type RoomState = 'lobby' | 'qualifying' | 'race' | 'closed'
+export type RoomState = 'lobby' | 'qualifying' | 'qualifying_results' | 'countdown' | 'race' | 'results' | 'closed'
 export type RoomBotDifficulty = 'easy' | 'normal' | 'hard'
 
 export type RoomParticipant = {
@@ -304,6 +304,8 @@ export type RoomParticipant = {
 }
 
 export type RoomSettings = {
+  laps?: number
+  qualifyingLaps?: number
   trackId: string
   trackCatalogVersion: string
   physicsContractVersion: string
@@ -341,6 +343,7 @@ export type CreateRoomRequest = {
 }
 
 export type RoomSettingsUpdate = {
+  laps?: number
   trackId?: string
   gridSize?: number
   botsEnabled?: boolean

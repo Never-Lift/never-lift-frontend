@@ -20,15 +20,20 @@ vi.mock('@/race/vehicle-visuals', async () => {
 function createNoopContext() {
   const noOperation = vi.fn()
   const gradient = { addColorStop: noOperation }
+  let alpha = 1
+  const stack: number[] = []
   return new Proxy(
     {},
     {
       get: (_target, property) => {
+        if (property === 'globalAlpha') return alpha
+        if (property === 'save') return () => { stack.push(alpha) }
+        if (property === 'restore') return () => { alpha = stack.pop() ?? 1 }
         if (property === 'createLinearGradient') return () => gradient
         if (property === 'createRadialGradient') return () => gradient
         return noOperation
       },
-      set: () => true,
+      set: (_target, property, value) => { if (property === 'globalAlpha') alpha = value; return true },
     },
   ) as CanvasRenderingContext2D
 }
@@ -95,6 +100,21 @@ function createVehicles() {
 describe('RaceRenderer 2.5D camera integration', () => {
   beforeEach(() => drawVehicleVisualMock.mockClear())
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it('renders a ghost transparently without leaking opacity into normal cars or the minimap', () => {
+    const context = createNoopContext()
+    const vehicles = createVehicles()
+    vehicles[0].renderOpacity = 0.4
+    vehicles[1].renderOpacity = 1
+    const opacities: number[] = []
+    drawVehicleVisualMock.mockImplementation(() => { opacities.push(context.globalAlpha) })
+    const renderer = new RaceRenderer(createCanvas(context), SHORT_TRACK)
+    renderer.render({ mode: 'solo', getInterpolatedVehicles: () => vehicles }, 1/60)
+    expect(opacities).toContain(0.4)
+    expect(opacities).toContain(1)
+    expect(context.globalAlpha).toBe(1)
+    drawVehicleVisualMock.mockReset()
+  })
 
   it('does not draw a detailed opponent outside the viewport and keeps it in the minimap', () => {
     const renderer = new RaceRenderer(createCanvas(createNoopContext()), SHORT_TRACK)
