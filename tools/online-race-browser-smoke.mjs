@@ -5,9 +5,16 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 
 const api = 'http://127.0.0.1:8081/api'
+const profile = process.argv.includes('--profile')
+const baseline = process.argv.includes('--baseline')
+const trackId = process.env.ONLINE_SMOKE_TRACK ?? 'spielberg'
+assert.match(trackId, /^[a-z0-9-]+$/)
+const wireDelayMs = Number(process.env.ONLINE_SMOKE_DELAY_MS ?? 0)
+assert.ok(Number.isFinite(wireDelayMs) && wireDelayMs >= 0 && wireDelayMs <= 200)
 async function request(path, method = 'GET', body, token) {
   const res = await fetch(api + path, { method, headers: {
     'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -17,7 +24,10 @@ async function request(path, method = 'GET', body, token) {
   return data ? JSON.parse(data) : null
 }
 const { chromium } = await import(pathToFileURL(resolve('../never-lift-backend/tools/physics-parity/node_modules/playwright/index.mjs')).href)
-const server = await createServer({ envDir: false, define: {
+const baselinePrediction = baseline ? execFileSync('git', ['show', 'd343cbb:src/online/OnlinePrediction.ts'], { encoding: 'utf8' }) : null
+const server = await createServer({ envDir: false, plugins: baseline ? [{ name: 'diagnostic-baseline', enforce: 'pre',
+  load(id) { if (id.replaceAll('\\', '/').endsWith('/src/online/OnlinePrediction.ts')) return baselinePrediction },
+}] : [], define: {
   'import.meta.env.VITE_API_URL': JSON.stringify(api),
   'import.meta.env.VITE_WS_URL': JSON.stringify('ws://127.0.0.1:8081/ws'),
 }, server: { host: '127.0.0.1', port: 5174, strictPort: true } })
@@ -31,7 +41,7 @@ try {
     const credentials = { gamertag: `smoke${suffix}${number}`, displayName: `M3c Piloto ${number}`, password: `M3c!${randomUUID()}` }
     return { ...credentials, ...await request('/auth/register', 'POST', credentials) }
   }))
-  room = await request('/rooms', 'POST', { name: 'Smoke integrado 3c', visibility: 'private', trackId: 'spielberg', gridSize: 3, botsEnabled: false }, users[0].token)
+  room = await request('/rooms', 'POST', { name: 'Smoke integrado 3c', visibility: 'private', trackId, gridSize: 3, botsEnabled: false }, users[0].token)
   room = room.room ?? room
   await request(`/rooms/${room.code}/join`, 'POST', undefined, users[1].token)
   await request(`/rooms/${room.code}/settings`, 'PATCH', { botsEnabled: true, botDifficulty: 'easy', laps: 2 }, users[0].token)
@@ -68,11 +78,45 @@ try {
       const NativeSocket = window.WebSocket
       window.WebSocket = class extends NativeSocket {
         constructor(...args) { super(...args); if (String(args[0]).startsWith('ws://127.0.0.1:8081/ws')) window.onlineSmokeSockets.push(this) }
+        set onmessage(listener) {
+          super.onmessage = listener && (event => setTimeout(() => listener.call(this, event), data.delay))
+        }
+        send(payload) {
+          setTimeout(() => { if (this.readyState === NativeSocket.OPEN) super.send(payload) }, data.delay)
+        }
       }
-    }, { gamertag: user.gamertag, password: user.password, code: room.code })
+    }, { gamertag: user.gamertag, password: user.password, code: room.code, delay: wireDelayMs })
     await page.route('**/__online-smoke', route => route.fulfill({ contentType: 'text/html', body: html }))
     await page.goto('http://127.0.0.1:5174/__online-smoke')
     await page.getByText('Pilotos', { exact: true }).waitFor({ timeout: 30000 })
+    if (profile) await page.evaluate(async () => {
+      const { OnlineRaceRuntime } = await import('/src/online/OnlineRaceRuntime.ts')
+      const { RaceRenderer } = await import('/src/race/RaceRenderer.ts')
+      const metrics = window.onlineSmokeMetrics = { receive: [], advance: [], render: [], movement: [], snapshots: [] }
+      let previous
+      for (const [prototype, key] of [[OnlineRaceRuntime.prototype, 'receive'], [OnlineRaceRuntime.prototype, 'advance'], [RaceRenderer.prototype, 'render']]) {
+        const original = prototype[key]
+        prototype[key] = function(...args) {
+          const start = performance.now()
+          const result = original.apply(this, args)
+          if (metrics[key].length < 20000) metrics[key].push(performance.now() - start)
+          if (key === 'receive' && args[0].type === 'state_snapshot') {
+            const frame = this.getSnapshot()
+            if (frame) metrics.snapshots.push({ at: start, substep: frame.physicsSubstep })
+          }
+          if (key === 'render') {
+            const runtime = args[0], car = runtime.getInterpolatedVehicles()[0], now = performance.now()
+            if (car && previous) {
+              const speed = Math.hypot(car.velocity.x, car.velocity.y)
+              metrics.movement.push({ dt: args[1] * 1000, speed, health: car.damage.health,
+                distance: Math.hypot(car.renderPosition.x - previous.x, car.renderPosition.y - previous.y) })
+            }
+            if (car) previous = { at: now, x: car.renderPosition.x, y: car.renderPosition.y }
+          }
+          return result
+        }
+      }
+    })
   }
   await clients[1].page.getByRole('button', { name: 'Estou pronto', exact: true }).click()
   await clients[0].page.getByRole('button', { name: 'Iniciar classificação', exact: true }).click()
@@ -81,8 +125,9 @@ try {
     await page.getByText('A melhor volta válida define o grid', { exact: true }).waitFor()
     await page.keyboard.down('w')
   }
-  await clients[0].page.waitForTimeout(1500)
+  await clients[0].page.waitForTimeout(profile ? 6000 : 1500)
   for (const { page } of clients) await page.keyboard.up('w')
+  if (profile) for (const client of clients) client.measurements = await client.page.evaluate(() => window.onlineSmokeMetrics)
   for (const client of clients) {
     assert.ok(client.snapshot?.cars[0].speed > 0, 'Real authoritative movement')
     assert.equal(client.snapshot.cars.length, 1, 'Qualifying isolation')
@@ -97,6 +142,20 @@ try {
   await first.context.setOffline(false)
   await first.page.getByText(/Conexão interrompida/).waitFor({ state: 'hidden', timeout: 30000 })
   await mkdir(output, { recursive: true })
+  if (profile) {
+    const measurements = clients.map(client => client.measurements)
+    await writeFile(`${output}/browser-profile-${trackId}-${baseline ? 'before' : 'after'}.json`, JSON.stringify({ trackId, baseline, wireDelayMs, measurements }, null, 2))
+    for (const [index, m] of measurements.entries()) {
+      const stats = values => {
+        const sorted = [...values].sort((a,b) => a-b)
+        return { count: sorted.length, p5: sorted[Math.floor(sorted.length*.05)], p50: sorted[Math.floor(sorted.length*.5)], p95: sorted[Math.floor(sorted.length*.95)], max: sorted.at(-1) }
+      }
+      const moving = m.movement.filter(v => v.speed > 5 && v.health === 100 && v.dt > 5 && v.dt < 40)
+      const first = m.snapshots[0], last = m.snapshots.at(-1)
+      console.log(JSON.stringify({ client: index+1, trackId, baseline, wireDelayMs, serverRealtimeRatio: (last.substep-first.substep)*1000/120/(last.at-first.at), receiveMs: stats(m.receive), advanceMs: stats(m.advance), renderMs: stats(m.render),
+        frameMs: stats(m.movement.map(v => v.dt)), visualSpeedRatio: stats(moving.map(v => v.distance / (v.dt / 1000 * v.speed))) }))
+    }
+  }
   for (const [i, client] of clients.entries()) {
     await client.page.screenshot({ path: `${output}/qualifying-client-${i+1}.png` })
     await client.page.keyboard.press('Escape')
@@ -105,7 +164,7 @@ try {
     assert.equal(client.snapshot.phase, 'qualifying')
   }
   assert.deepEqual(errors, [])
-  const report = { passed: true, browser: 'Chrome headless', track: 'spielberg', humans: 2, bots: 1,
+  const report = { passed: true, browser: 'Chrome headless', track: trackId, humans: 2, bots: 1,
     validated: ['real authentication/ticket/socket', 'lobby ready/start', 'isolated qualifying', 'keyboard to authoritative physics', 'reconnect', 'escape confirmation'],
     pending: ['two complete timed laps', 'race start to podium with real browsers', 'author manual integrated test'],
     clients: clients.map(client => ({ snapshots: client.snapshots, inputs: client.inputs.length, phase: client.snapshot?.phase })), errors }

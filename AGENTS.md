@@ -23,6 +23,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/module-3b-authoritative-physics.md` — entrega da Parte 3b, paridade, snapshot completo e limites em relação à 3c.
 - `docs/module-3b-portability.md` — revisão aprovada 2.0.3, kernel numérico compartilhado, evidências e teste manual curto antes da 3c.
 - `docs/module-3c-client.md` — implementação frontend 3c, decisões adicionais aprovadas, testes, smoke Chrome e gates ainda pendentes. Ponto de retomada antes de publicar.
+- `docs/module-3c-online-stutter-2026-09-15.md` — correção de solavancos após teste manual em Suzuka: horizonte físico por subpasso e apresentação fracionária, comparação Chrome com latência; nova validação manual pendente.
 - `docs/module-3c-race-flow.md` — contrato 3c coordenado com backend: duas voltas cronometradas de quali, voltas da corrida configuráveis, fases, relógios, eventos e resultados.
 - `docs/race-performance-2026-09-04.md` — otimizações de grid completo/split-screen, benchmarks, paridade e limites; validação manual desta rodada pendente.
 - `docs/race-performance-worker-2026-09-08.md` — worker local, colisões e caches equivalentes, testes e medições; mínimo de 40 FPS ainda não comprovado e validação manual pendente.
@@ -101,6 +102,8 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 > Revisão equivalente de 09/09/2026: física/colisões e alocações do modelo visual foram otimizadas sem diferenças físicas ou RGBA. A medição final manteve a simulação em tempo real e registrou 57,6 FPS em Mônaco solo 1+21, mas somente 31,5 FPS em Mônaco local 2+20 e 30,7 FPS em Spa local 2+20 noturna. A meta universal de 40 FPS continua pendente; detalhes e ponto de decisão em `docs/race-performance-worker-2026-09-08.md`.
 
 > Status do backend (referência, não sincronizado automaticamente): ver `AGENTS.md` do repositório backend.
+
+> M3c, 15/09/2026: teste manual do autor em Suzuka com 2 humanos e 1 bot bloqueado por solavancos. Correção do horizonte/tempo fracionário de predição implementada, com 465 testes/55 arquivos, lint e build aprovados; comparação em dois Chromes locais com 160 ms adicionais de latência mostrou movimento mais uniforme. Backend remoto e nova validação manual ainda precisam ser conferidos; M3c não concluído. Ver `docs/module-3c-online-stutter-2026-09-15.md`.
 
 > Rodada de 08/09/2026: solo/local usam o mesmo motor 120 Hz em Web Worker, com mensagens limitadas e renderização desacoplada. Colisões e caches foram otimizados sem mudar física 2.0.3 nem design. Ver `docs/race-performance-worker-2026-09-08.md`: média não equivale a mínimo de 40 FPS; validação manual pendente. Nenhuma promoção à main nem implementação do M3c nesta rodada.
 
