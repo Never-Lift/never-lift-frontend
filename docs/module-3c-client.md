@@ -2,6 +2,12 @@
 
 ## Estado em 15/09/2026
 
+**Atualização após teste manual:** o autor relatou solavancos na classificação
+de Suzuka com dois humanos e um bot. PR #140 já mesclado em develop. Correção
+de horizonte/tempo fracionário de predição em revisão separada; evidências e
+limites em [module-3c-online-stutter-2026-09-15.md](module-3c-online-stutter-2026-09-15.md).
+O restante deste documento registra a entrega original; M3c continua pendente.
+
 Implementação frontend em validação; **não declarar a Parte 3c nem o Módulo 3
 prontos**. As Partes 3a/3b permanecem aprovadas. Branch:
 `codex/module-3c-frontend`, criada de `origin/develop` em `9b52721`.

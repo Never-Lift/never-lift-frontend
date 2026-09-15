@@ -15,6 +15,105 @@ function setup() {
 }
 
 describe('online prediction and rollback', () => {
+  it('keeps the predicted time horizon when a held command has already been acknowledged', () => {
+    const { prediction } = setup()
+    prediction.setInput(0, { throttle: 1, brake: 0, steer: 0 })
+    prediction.advance(1 / 30)
+    const delayedAuthority = prediction.getState()
+    prediction.advance(1 / 30)
+    const expected = prediction.getState()
+    // ACK 0 means the server used this command, not that every future step
+    // holding the same key has already been simulated by the server.
+    prediction.reconcile(delayedAuthority, 1 / 30, 0)
+    expect(prediction.getState()).toEqual(expected)
+    expect(prediction.getPendingStepCount()).toBe(4)
+  })
+
+  it('preserves fractional physical time across a snapshot arriving between frames', () => {
+    const { prediction } = setup()
+    prediction.setInput(0, { throttle: 1, brake: 0, steer: 0 })
+    prediction.advance(PHYSICS_STEP_SECONDS * 1.5)
+    const authority = prediction.getState()
+    prediction.reconcile(authority, PHYSICS_STEP_SECONDS, 0)
+    prediction.advance(PHYSICS_STEP_SECONDS * 0.5)
+    expect(prediction.getState().physicsState.appliedThrottle).toBeGreaterThan(authority.physicsState.appliedThrottle)
+  })
+
+  it('presents a fraction of a physical step without changing the authoritative physical state', () => {
+    const { prediction, car } = setup()
+    car.velocity = { x: 12, y: 24 }
+    car.physicsState.yawRate = 0.5
+    prediction.reconcile(car, 0, -1, true)
+    const physical = prediction.getState()
+    prediction.advance(PHYSICS_STEP_SECONDS / 2)
+    const visual = prediction.getVisualState()
+    expect(prediction.getState()).toEqual(physical)
+    expect(visual.renderPosition.x).toBeCloseTo(car.position.x + 12 * PHYSICS_STEP_SECONDS / 2, 10)
+    expect(visual.renderPosition.y).toBeCloseTo(car.position.y + 24 * PHYSICS_STEP_SECONDS / 2, 10)
+    expect(visual.renderAngle).toBeCloseTo(car.angle + 0.5 * PHYSICS_STEP_SECONDS / 2, 10)
+  })
+
+  it('replays the release after an acknowledged press without resurrecting the old held key', () => {
+    const { prediction } = setup()
+    prediction.setInput(0, { throttle: 1, brake: 0, steer: 0 })
+    prediction.advance(1 / 30)
+    const authority = prediction.getState()
+    prediction.setInput(1, { throttle: 0, brake: 1, steer: -1 })
+    prediction.advance(1 / 30)
+    const released = prediction.getState()
+    prediction.reconcile(authority, 1 / 30, 0)
+    expect(prediction.getState()).toEqual(released)
+    expect(prediction.getState().physicsState.appliedBrake).toBeGreaterThan(0)
+    expect(prediction.getState().physicsState.steeringAngle).toBeLessThan(0)
+  })
+
+  it('applies new authoritative damage at the same predicted horizon and resets residual time on reconnect', () => {
+    const { prediction } = setup()
+    prediction.setInput(0, { throttle: 1, brake: 0, steer: 0 })
+    prediction.advance(PHYSICS_STEP_SECONDS * 1.5)
+    const hit = prediction.getState()
+    hit.damage = { ...hit.damage, health: 60, engineDamaged: true, kind: 'engine' }
+    prediction.reconcile(hit, PHYSICS_STEP_SECONDS, 0)
+    expect(prediction.getState().damage).toEqual(hit.damage)
+    prediction.reconcile(hit, PHYSICS_STEP_SECONDS, 0, true)
+    expect(prediction.getVisualState().renderPosition).toEqual(hit.position)
+    expect(prediction.getPendingStepCount()).toBe(0)
+  })
+
+  it.each([30, 60, 120, 144])('keeps canonical motion through delayed jittered ACKs at %i display FPS', (fps) => {
+    const { prediction, car } = setup()
+    const authority = new RaceEngine({ track: SHORT_TRACK, mode: 'solo', racers: [car], prediction: true })
+    authority.restorePrediction(car, 0)
+    const commands = [
+      { throttle: 0.4, brake: 0, steer: 0 },
+      { throttle: 0.4, brake: 0, steer: 0.2 },
+      { throttle: 0, brake: 0.4, steer: 0 },
+      { throttle: 0.5, brake: 0, steer: -0.2 },
+    ]
+    const history = [authority.getVehicleState(car.id)!]
+    for (let step = 1; step <= 240; step++) {
+      authority.setInput(car.id, commands[Math.floor((step - 1) / 60)])
+      authority.stepFixed()
+      history.push(authority.getVehicleState(car.id)!)
+    }
+    let nextSnapshotStep = 6
+    for (let frame = 1; frame <= fps * 2; frame++) {
+      const sequence = Math.floor((frame - 1) / (fps / 2))
+      prediction.setInput(sequence, commands[sequence])
+      prediction.advance(1 / fps)
+      const localStep = Math.floor(frame / fps / PHYSICS_STEP_SECONDS + 1e-8)
+      // 20 Hz snapshots, delivery 7–11 substeps later. Each held command drives
+      // half a second; acceleration, steering/release and braking all replay.
+      while (nextSnapshotStep + 7 + (nextSnapshotStep % 5) <= localStep) {
+        prediction.reconcile(history[nextSnapshotStep], nextSnapshotStep * PHYSICS_STEP_SECONDS, Math.floor((nextSnapshotStep - 1) / 60))
+        nextSnapshotStep += 6
+      }
+      expect(prediction.getState().position).toEqual(history[localStep].position)
+      expect(prediction.getState().velocity).toEqual(history[localStep].velocity)
+      expect(prediction.getState().physicsState).toEqual(history[localStep].physicsState)
+    }
+  })
+
   it('applies a new input on the next physical step without a server response', () => {
     const { prediction } = setup()
     prediction.setInput(0, { throttle: 1, brake: 0, steer: 1 })

@@ -145,13 +145,19 @@ Mesma numeração e dependências do plano de backend.
 ### Módulo 3 — Motor autoritativo online (núcleo)
 
 **Parte 3c — implementação de 15/09/2026:** predição focal com o motor existente,
-restauração/replay por ACK, correção visual acima de 0,10 m em 100 ms, histórico
+restauração/replay pelo relógio físico do snapshot com controle de ACK,
+correção visual acima de 0,10 m em 100 ms, histórico
 remoto limitado com interpolação a 100 ms, HUD autoritativo, quali isolada,
 confirmação do grid por todos (inclusive host), semáforo, ghost, pódio e
 reconexão. A corrida aparece na própria rota da sala; sessão fora do React.
 Câmera, minimapa, split-screen, catálogo e tuning físico continuam inalterados.
 Ainda aguardam corrida completa integrada/manual e revalidação final backend.
 Detalhes e evidências: [module-3c-client.md](module-3c-client.md).
+Correção após relato de solavancos em Suzuka: preservar passos posteriores ao
+`physicsSubstep` autoritativo e o residual fracionário de 120 Hz; ACK de uma tecla
+mantida não confirma sua duração futura. Apresentação focal contínua e testes em
+30/60/120/144 FPS; ver [module-3c-online-stutter-2026-09-15.md](module-3c-online-stutter-2026-09-15.md).
+Nova validação manual online pendente.
 **Depende de:** Módulo 1, Módulo 2, Módulo 3 do backend.
 **Cobre features:** 4 (lobby online), 8.
 **Decisões aprovadas:** o registro completo das 80 decisões desta rodada está em
