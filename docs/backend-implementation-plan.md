@@ -148,7 +148,7 @@ Cada módulo é uma unidade que pode virar um prompt isolado pro Codex. A ordem 
 em `docs/module-3-online-decisions.md` e é normativo para a implementação.
 A Parte 3a (sala, ticket e lobby, incluindo o refinamento de acesso e configuração de 02/09/2026) foi validada
 manualmente em dois navegadores e está pronta desde 03/09/2026; a Parte 3b (motor físico Java) está implementada com paridade passando, e a revisão 2.0.3 foi validada manualmente pelo autor em 04/09/2026;
-a Parte 3c backend está em implementação e revalidação, sem declaração de pronto.
+a Parte 3c backend (regras de corrida) está pronta; aguardando frontend 3c.
 Decisões confirmadas, protocolo e evidências em `docs/module-3c-race-flow.md`.
 **Escopo:**
 - Sessão WebSocket por conexão (`/ws`), autenticada por ticket de uso único vinculado à sala e ao usuário (validade de 60 s); o JWT principal não é exposto na URL.
@@ -188,7 +188,9 @@ A portabilidade 2.0.3 foi autorizada pelo autor e implementada nos dois motores
 com `portable-f64-v1`, sem recalibrar os parâmetros de condução/dano. As funções
 transcendentais nativas não devem ser reintroduzidas na física da 3c.
 A validação manual da revisão 2.0.3 foi confirmada pelo autor em 04/09/2026,
-conforme [module-3b-portability.md](module-3b-portability.md). A Parte 3c não foi iniciada.
+conforme [module-3b-portability.md](module-3b-portability.md). O estado atual da
+Parte 3c está em [module-3c-race-flow.md](module-3c-race-flow.md); os parágrafos
+acima descrevem a base histórica da 3b, não limitam o protocolo estendido da 3c.
 
 ### Módulo 4 — Ambiente e modo caos
 **Depende de:** Módulo 3.
@@ -202,7 +204,7 @@ conforme [module-3b-portability.md](module-3b-portability.md). A Parte 3c não f
 **Escopo:**
 - `damageState` por carro: `{ health, engineDamaged, steeringDamaged, steeringPull, totalLoss }`, cumulativo e calculado pelo impulso/energia ou `delta-v` do contato no `RaceEngine`: fraco afeta direção, médio afeta motor, alto combina ambos e crítico causa perda total; colisões menores repetidas também zeram a vida. Este módulo acrescenta a integração completa com pits, eventos, resultado e demais regras de corrida.
 - Vácuo: redução moderada de arrasto no modelo aerodinâmico v2 quando um carro está atrás e próximo de outro, calculada no tick da física; não existe boost/nitro ou força extra independente.
-- Ao cruzar a linha, carro vira `isGhost: true`; regra de colisão do Módulo 3 passa a ignorar par (ghost, não-ghost) e (não-ghost, não-ghost-diferente-de-ghost) — só `(ghost, ghost)` e `(normal, normal)` colidem.
+- A Parte 3c já assume ghost ao completar todas as voltas: somente `(ghost, ghost)` e `(normal, normal)` colidem. O Módulo 5 preserva essa regra, sem duplicar a orquestração de término.
 - `pit_enter`/`pit_exit`: ao sobrepor a zona de pit com vida abaixo do máximo ou alguma falha mecânica, servidor assume o carro por 2s (ignora `input` do jogador), restaura vida e dano, e emite os dois eventos.
 - Loadout: somente `color` é selecionada antes do `ready` e validada no `select_loadout` do Módulo 3. O modelo é sempre F1 e nunca é enviado pelo cliente.
 **Critério de pronto:** uma batida forte aplica dano persistente coerente com o impulso, vácuo reduz somente o arrasto nas condições válidas, reparo em pits restaura os estados previstos e carro com perda total fica parado até o fim.

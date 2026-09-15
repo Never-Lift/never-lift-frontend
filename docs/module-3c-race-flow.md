@@ -41,7 +41,9 @@ As fórmulas físicas 2.0.3 permanecem canônicas. Pits com serviço, vácuo,
 ambiente, caos e campeonatos continuam nos seus módulos. A implementação da
 interface e da predição/reconciliação da Parte 3c pertence ao frontend.
 
-Status: implementação em andamento; critérios de pronto ainda não cumpridos.
+Status: **Parte 3c backend (regras de corrida) pronta; aguardando frontend 3c**.
+Os critérios backend foram validados em 15/09/2026. Isso não declara o Módulo 3
+inteiro pronto nem autoriza merge/promoção para produção.
 
 ## Contrato de integração frontend/backend — 15/09/2026
 
@@ -77,6 +79,9 @@ Cada carro acrescenta: `lap` (voltas válidas concluídas), `isGhost`,
 Na quali cada socket recebe somente seu próprio carro. Snapshots congelam
 durante contagens, espera e resultado; somente `qualifying` após 3 s e `race`
 integram movimento. No reinício da física, o frontend descarta predições antigas.
+Na corrida o backend transmite todos os carros, inclusive ghosts. A regra de
+ocultar ghosts alheios até o próprio piloto terminar é somente de renderização
+no frontend, não uma filtragem do snapshot autoritativo.
 
 ### Eventos
 
@@ -110,7 +115,7 @@ a associação original. Resultado só é emitido após commit da transação.
 O cliente deve preservar `clientSeq` crescente na mesma sessão e descartar
 snapshots de sessionId antigo. Reconexão recupera o mesmo estado e relógio.
 
-## Evidências e ponto de retomada — 15/09/2026
+## Evidências — 15/09/2026
 
 - A suíte completa anterior à última correção terminou com 127 testes,
   zero falhas/erros e um diagnóstico opcional ignorado. Os sete testes Node
@@ -141,13 +146,28 @@ snapshots de sessionId antigo. Reconexão recupera o mesmo estado e relógio.
   inicial era a permissão de acesso à rede local do Chrome, não CORS do backend.
 - Após a rodada focal aprovada, a execução de `package` com a suíte completa foi
   novamente bloqueada pelo serviço de aprovação automática por limite de uso.
-  Isso não equivale a build aprovado. Não promover nem declarar a Parte 3c pronta
-  até concluir a suíte completa e o empacotamento na revisão atual.
+  Após conferir o isolamento dos testes, a repetição direta foi autorizada e
+  concluiu em 08:46: 128 testes, zero falhas/erros, um diagnóstico opcional
+  ignorado, e pacote Spring Boot gerado.
+- A revisão desse log identificou fechamento do socket entre `isOpen()` e
+  `sendMessage()`. Duas regressões reproduziram a falha antes da correção:
+  broadcast aos demais participantes e continuidade do heartbeat. A exceção de
+  transporte `IllegalStateException` passou a ser tratada como desconexão do
+  cliente, sem interromper a sala nem o agendador global de heartbeat.
+- A revalidação final após essa correção concluiu às 08:50:23 com **130 testes,
+  zero falhas/erros e um diagnóstico opcional ignorado**, além de `BUILD SUCCESS`
+  e pacote Spring Boot gerado. Nenhum cenário de aceitação foi ignorado.
+  Os sete testes Node de suporte à paridade passaram nesta rodada.
+  O E2E repetido completou a sessão `8f53381c-7b2d-456e-8a1e-f3e8459a593d`,
+  com dois finalistas (49.478 ms e 50.296 ms), duas voltas cada, reconexões,
+  standings idênticos, duas linhas persistidas e retorno ao lobby confirmado.
 - As proteções remotas de `develop` e `main` foram conferidas: ambas exigem PR,
   `Validate source branch` e `Maven build and test`, inclusive para administradores.
   A implementação ainda está em `codex/module-3c-backend`. É necessário integrar
   o PR intermediário em `develop` antes da promoção conter a 3c; não contornar
   essa proteção nem mesclar sem autorização do autor. `main` permanece sem merge.
+- O servidor de smoke local H2 em 8081 foi encerrado após a tarefa frontend
+  liberar seu uso; nenhum recurso de produção foi alterado.
 
 Comando de revalidação no ambiente Windows observado (JDK 22 compilando release
 21; CI deve continuar usando Java 21):
@@ -161,3 +181,22 @@ $env:JAVA_HOME = 'C:\Program Files\Java\jdk-22'
 A propriedade JVM contorna somente uma falha de inicialização do transporte
 local do JDK (`UnixDomainSockets`/loopback) neste Windows. Não muda protocolo,
 física, resultados ou configurações de produção e não é requisito do produto.
+
+### Cobertura dos critérios da Parte 3c
+
+| Critério | Evidência automatizada |
+|---|---|
+| Classificação de duas tentativas, sem timer; grid | `OnlineRaceSessionTest`, E2E |
+| Cinco luzes e penalidade de exatamente 600 subpassos | `OnlineRaceSessionTest` |
+| Checkpoints na ordem/sentido, volta inválida e retorno após corte | `TrackProgressTest` |
+| Grupos de colisão ghost/normal | `RaceEngineTest`, `OnlineRaceSessionTest` |
+| Resultado ordenado, DNF e retorno ao lobby | `OnlineRaceSessionTest`, E2E |
+| Persistência somente ao fim e rollback atômico | `OnlineRaceResultIntegrationTest`, E2E |
+| Bot substituto e restauração do comando humano | `OnlineRaceSessionTest`, E2E |
+| Janela de 30 s e retenção correta do ticket | `RoomManagerTest` |
+| Loadout somente cor antes de ready | `RoomIntegrationTest`, `RoomManagerTest` |
+| Fechamento concorrente de socket não derruba broadcast/heartbeat | `RoomWebSocketHandlerTest` |
+
+O E2E usa a física real e dois scripts que enviam somente intenção a partir do
+snapshot recebido. Apenas os testes unitários de progressão injetam posições na
+fronteira interna da regra; nenhuma API aceita posição do cliente.

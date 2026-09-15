@@ -6,6 +6,12 @@ Implementação frontend em validação; **não declarar a Parte 3c nem o Módul
 prontos**. As Partes 3a/3b permanecem aprovadas. Branch:
 `codex/module-3c-frontend`, criada de `origin/develop` em `9b52721`.
 
+Implementação publicada no commit `4c2aa8b`. PR em rascunho para develop:
+[frontend #140](https://github.com/Never-Lift/never-lift-frontend/pull/140).
+Backend correspondente: commit `218973e`,
+[backend #104](https://github.com/Never-Lift/never-lift-backend/pull/104).
+Nenhum desses PRs foi mesclado por esta tarefa; main não foi promovida.
+
 O autor aprovou as decisões adicionais abaixo. O protocolo foi coordenado
 diretamente com a tarefa do backend, sem implementar backend neste checkout.
 
@@ -110,9 +116,10 @@ O harness cria contas/sala somente no H2 de teste e fecha a sala ao terminar.
 
 ## O que falta — gates de conclusão
 
-- Backend concluir a revisão final de suíte/package, incluindo fechamento de
-  socket durante broadcast. O fix do primeiro input após reconexão e o E2E
-  ampliado já passaram na tarefa backend. O H2 do smoke era anterior ao fix.
+- Usar a revisão final backend `218973e` na validação integrada. A tarefa backend
+  confirmou suíte de 130 testes sem falhas/erros (um diagnóstico opcional
+  ignorado), package e 7 testes Node aprovados; inclui reconexão e fechamento
+  de socket durante broadcast. O H2 do smoke frontend era anterior a esses fixes.
 - Corrida completa em dois navegadores: duas tentativas cronometradas de quali,
   confirmação de ambos, cinco luzes, duas voltas de corrida curta com ao menos
   um bot, contato observado nas duas telas, ghost, pódio idêntico e volta ao lobby.
@@ -121,8 +128,9 @@ O harness cria contas/sala somente no H2 de teste e fecha a sala ao terminar.
 - Conferir desempenho online em grid cheio. Não declarar 40/60 FPS garantidos
   por reutilizar as otimizações locais ou por este smoke de três carros.
 - Autor realizar/aprovar a validação manual integrada da preview correspondente.
-- Commit/push, PR da feature para develop; promoção develop → main somente
-  depois dos gates e integração, sem merge automático e preservando ancestralidade.
+- Revisar/integrar os PRs das features para develop somente após os gates;
+  promoção develop → main depois da validação integrada, sem merge automático
+  e preservando ancestralidade.
 
 ## Ponto de retomada e publicação
 
@@ -130,7 +138,7 @@ Em 15/09/2026 a consulta GitHub por `gh pr list` com permissão de rede foi
 temporariamente recusada pelo serviço de aprovação automática por limite de uso.
 Após checagens locais, a repetição direta foi autorizada: lista de PRs vazia,
 sem duplicata. O gate local também foi autorizado. Não foi usado contorno.
-Publicação em preparação; nenhum merge ou promoção à main foi realizado.
+Publicação concluída no PR #140 em rascunho; nenhum merge ou promoção à main.
 
 Comandos para reproduzir as verificações:
 
@@ -142,7 +150,6 @@ git diff --check
 gh pr list --state open --json number,title,baseRefName,headRefName,url
 ```
 
-Depois revisar o diff, sincronizar o schema/doc de fluxo final com o backend,
-registrar evidências e abrir PR em rascunho para develop enquanto houver gate
-manual/integrado pendente. Não promover o develop antigo como se já incluísse
-esta feature. O backend usa uma tarefa/branch própria; não editar seu checkout.
+PR #140 permanece em rascunho enquanto houver gate manual/integrado pendente.
+Não promover o develop antigo como se já incluísse esta feature. O backend usa
+uma tarefa/branch própria; não editar seu checkout.
