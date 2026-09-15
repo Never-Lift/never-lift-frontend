@@ -8,6 +8,7 @@ import {
   type OnlineRoomClientStatus,
 } from '@/online/OnlineRoomClient'
 import { roomFromPayload } from '@/online/room-state'
+import type { DriverInput } from '@/race/types'
 
 export type OnlineRoomSessionError = {
   code: string
@@ -57,6 +58,16 @@ class OnlineRoomSessionStore {
   }
   private readonly listeners = new Set<() => void>()
   private client: OnlineRoomClient | null = null
+  private readonly raceListeners = new Set<(envelope: OnlineEnvelope) => void>()
+  private raceEnvelopes: OnlineEnvelope[] = []
+  private lastInputSequence = -1
+
+  // High-frequency frames never enter the React lobby snapshot/store.
+  subscribeRace = (listener: (envelope: OnlineEnvelope) => void) => {
+    this.raceListeners.add(listener)
+    this.raceEnvelopes.forEach((envelope) => listener(envelope))
+    return () => { this.raceListeners.delete(listener) }
+  }
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener)
@@ -102,7 +113,21 @@ class OnlineRoomSessionStore {
             options.roomCode,
             this.snapshot.room,
           )
-          if (nextRoom) this.update({ room: nextRoom, error: null })
+          if (nextRoom) {
+            if (nextRoom.state === 'lobby') this.raceEnvelopes = []
+            this.update({ room: nextRoom, error: null })
+          }
+          return
+        }
+        if (['state_snapshot', 'race_event', 'race_result', 'countdown'].includes(envelope.type)) {
+          // Retain events for a page mounted after track loading, but only the
+          // newest physical frame. Both retained history and listeners are bounded.
+          if (envelope.type === 'state_snapshot') {
+            this.raceEnvelopes = this.raceEnvelopes.filter((item) => item.type !== 'state_snapshot')
+          }
+          this.raceEnvelopes.push(envelope)
+          if (this.raceEnvelopes.length > 64) this.raceEnvelopes.shift()
+          this.raceListeners.forEach((listener) => listener(envelope))
           return
         }
         if (envelope.type === 'error') {
@@ -144,10 +169,20 @@ class OnlineRoomSessionStore {
     this.client?.setReady(ready)
   }
 
+  sendInput(input: DriverInput, clientSeq: number, clientTimestamp: number) {
+    const sent = this.client?.sendInput(input, clientSeq, clientTimestamp) ?? false
+    if (sent) this.lastInputSequence = Math.max(this.lastInputSequence, clientSeq)
+    return sent
+  }
+
+  getNextInputSequence() { return this.lastInputSequence + 1 }
+
   disconnect() {
     const client = this.client
     this.client = null
     client?.disconnect()
+    this.raceEnvelopes = []
+    this.lastInputSequence = -1
     this.update({ roomCode: null, room: null, status: 'closed', error: null })
   }
 

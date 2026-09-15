@@ -37,6 +37,40 @@ afterEach(() => {
 })
 
 describe('OnlineRoomClient', () => {
+  it('does not reopen a socket when a pending ticket resolves after leaving', async () => {
+    let resolveTicket!: (value: ConnectionTicketResponse) => void
+    const factory = vi.fn(() => new FakeSocket())
+    const client = new OnlineRoomClient({
+      roomCode: '1234', trackCatalogVersion: '2026.12', physicsContractVersion: '2.0.3',
+      getTicket: () => new Promise(resolve => { resolveTicket = resolve }),
+      wsUrl: 'ws://localhost/ws', webSocketFactory: factory,
+    })
+    const connecting = client.connect()
+    client.disconnect()
+    resolveTicket(ticket())
+    await connecting
+    expect(factory).not.toHaveBeenCalled()
+    expect(client.getStatus()).toBe('closed')
+  })
+
+  it('enforces the deadline even if the replacement socket never opens', async () => {
+    vi.useFakeTimers()
+    const sockets: FakeSocket[] = []
+    const client = new OnlineRoomClient({
+      roomCode: '1234', trackCatalogVersion: '2026.12', physicsContractVersion: '2.0.3',
+      getTicket: async () => ticket(), wsUrl: 'ws://localhost/ws', backoffMs: [100],
+      webSocketFactory: () => { const socket = new FakeSocket(); sockets.push(socket); return socket },
+    })
+    await client.connect(); sockets[0].open(); sockets[0].close()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(sockets).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(29900)
+    expect(client.getStatus()).toBe('failed')
+    expect(sockets[1].readyState).toBe(3)
+    await vi.advanceTimersByTimeAsync(30000)
+    expect(sockets).toHaveLength(2)
+  })
+
   it('stops reconnecting and reports a physical-contract version mismatch', async () => {
     vi.useFakeTimers()
     const socket = new FakeSocket()

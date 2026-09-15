@@ -19,6 +19,26 @@ const room: RoomSummary = {
 }
 
 describe('OnlineRoomSession', () => {
+  it('keeps snapshots outside React and preserves input sequence when the canvas remounts', async () => {
+    let options!: OnlineRoomClientOptions
+    const client = { connect: vi.fn(), disconnect: vi.fn(), sendInput: vi.fn(() => true) }
+    await onlineRoomSession.connect({ roomCode: room.code, initialRoom: room, trackCatalogVersion: room.trackCatalogVersion,
+      physicsContractVersion: room.physicsContractVersion, getTicket: vi.fn(),
+      createClient: value => { options = value; return client as never },
+    })
+    const reactListener = vi.fn()
+    const unsubscribe = onlineRoomSession.subscribe(reactListener)
+    for (let tick = 0; tick < 500; tick++) options.onEnvelope?.({type: 'state_snapshot', payload: {tick}})
+    expect(reactListener).not.toHaveBeenCalled()
+    const raceListener = vi.fn()
+    const stopRace = onlineRoomSession.subscribeRace(raceListener)
+    expect(raceListener).toHaveBeenCalledExactlyOnceWith({type: 'state_snapshot', payload: {tick: 499}})
+    onlineRoomSession.sendInput({throttle: 0, brake: 0, steer: 0}, 17, 1234)
+    stopRace()
+    expect(onlineRoomSession.getNextInputSequence()).toBe(18)
+    unsubscribe()
+  })
+
   afterEach(() => {
     onlineRoomSession.resetForTests()
   })

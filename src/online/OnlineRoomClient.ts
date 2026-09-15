@@ -2,6 +2,7 @@ import type {
   ConnectionTicketResponse,
   RoomSummary,
 } from '@/lib/api'
+import type { DriverInput } from '@/race/types'
 
 export type OnlineEnvelope = {
   type: string
@@ -13,6 +14,7 @@ export type OnlineRoomClientMessage =
   | { type: 'select_loadout'; payload: { color: string } }
   | { type: 'ready'; payload: { ready: boolean } }
   | { type: 'start_race'; payload: Record<string, never> }
+  | { type: 'input'; payload: DriverInput & { clientSeq: number; clientTimestamp: number } }
 
 export type SocketLike = {
   readyState?: number
@@ -89,6 +91,7 @@ export class OnlineRoomClient {
   private reconnectDeadline = 0
   private reconnectAttempt = 0
   private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+  private deadlineTimer: ReturnType<typeof globalThis.setTimeout> | null = null
   private stopped = true
   private status: OnlineRoomClientStatus = 'idle'
 
@@ -97,8 +100,8 @@ export class OnlineRoomClient {
       ...options,
       webSocketFactory: options.webSocketFactory ?? defaultWebSocketFactory,
       now: options.now ?? Date.now,
-      setTimeout: options.setTimeout ?? globalThis.setTimeout,
-      clearTimeout: options.clearTimeout ?? globalThis.clearTimeout,
+      setTimeout: options.setTimeout ?? ((handler, timeout) => globalThis.setTimeout(handler, timeout)),
+      clearTimeout: options.clearTimeout ?? ((handle) => globalThis.clearTimeout(handle)),
       reconnectWindowMs: options.reconnectWindowMs ?? DEFAULT_RECONNECT_WINDOW_MS,
       backoffMs: options.backoffMs ?? DEFAULT_BACKOFF_MS,
     }
@@ -125,6 +128,7 @@ export class OnlineRoomClient {
   disconnect() {
     this.stopped = true
     this.clearReconnectTimer()
+    this.clearDeadlineTimer()
     const socket = this.socket
     this.socket = null
     if (socket) socket.close()
@@ -143,6 +147,10 @@ export class OnlineRoomClient {
     this.send({ type: 'start_race', payload: {} })
   }
 
+  sendInput(input: DriverInput, clientSeq: number, clientTimestamp: number) {
+    return this.sendEnvelope({ type: 'input', payload: { ...input, clientSeq, clientTimestamp } })
+  }
+
   private setStatus(status: OnlineRoomClientStatus) {
     this.status = status
     this.options.onStatus?.(status)
@@ -152,6 +160,7 @@ export class OnlineRoomClient {
     const now = this.options.now()
     if (!this.ticket || now >= this.ticketExpiresAt) {
       const ticket = await this.options.getTicket()
+      if (this.stopped) return
       if (ticket.roomCode !== this.options.roomCode) {
         throw new Error('O ticket de conexão não pertence a esta sala.')
       }
@@ -177,8 +186,6 @@ export class OnlineRoomClient {
 
     socket.onopen = () => {
       if (this.stopped || this.socket !== socket) return
-      this.reconnectAttempt = 0
-      this.reconnectDeadline = 0
       this.setStatus('connected')
       this.sendEnvelope({
         type: 'join_room',
@@ -194,6 +201,12 @@ export class OnlineRoomClient {
       try {
         const envelope = JSON.parse(event.data) as OnlineEnvelope
         if (!envelope || typeof envelope.type !== 'string') return
+        if (envelope.type === 'room_state') {
+          // An open socket alone does not mean the server accepted re-entry.
+          this.reconnectAttempt = 0
+          this.reconnectDeadline = 0
+          this.clearDeadlineTimer()
+        }
         if (
           envelope.type === 'race_event' &&
           envelope.payload && typeof envelope.payload === 'object' &&
@@ -223,6 +236,11 @@ export class OnlineRoomClient {
       if (!this.stopped) {
         if (this.reconnectDeadline === 0) {
           this.reconnectDeadline = this.options.now() + this.options.reconnectWindowMs
+          this.deadlineTimer = this.options.setTimeout(() => {
+            this.deadlineTimer = null
+            this.disconnect()
+            this.setStatus('failed')
+          }, this.options.reconnectWindowMs)
         }
         this.scheduleReconnect()
       }
@@ -237,8 +255,13 @@ export class OnlineRoomClient {
     if (!this.socket || (this.socket.readyState !== undefined && this.socket.readyState !== 1)) {
       return false
     }
-    this.socket.send(JSON.stringify(message))
-    return true
+    try {
+      this.socket.send(JSON.stringify(message))
+      return true
+    } catch {
+      this.socket.close()
+      return false
+    }
   }
 
   private scheduleReconnect() {
@@ -272,6 +295,12 @@ export class OnlineRoomClient {
     if (this.reconnectTimer === null) return
     this.options.clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
+  }
+
+  private clearDeadlineTimer() {
+    if (this.deadlineTimer === null) return
+    this.options.clearTimeout(this.deadlineTimer)
+    this.deadlineTimer = null
   }
 }
 

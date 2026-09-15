@@ -22,6 +22,8 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/game-design-guide.md` — fonte oficial das decisões visuais, de câmera, escala, telas e fase de implementação. Ler antes de qualquer trabalho de interface ou corrida.
 - `docs/module-3b-authoritative-physics.md` — entrega da Parte 3b, paridade, snapshot completo e limites em relação à 3c.
 - `docs/module-3b-portability.md` — revisão aprovada 2.0.3, kernel numérico compartilhado, evidências e teste manual curto antes da 3c.
+- `docs/module-3c-client.md` — implementação frontend 3c, decisões adicionais aprovadas, testes, smoke Chrome e gates ainda pendentes. Ponto de retomada antes de publicar.
+- `docs/module-3c-race-flow.md` — contrato 3c coordenado com backend: duas voltas cronometradas de quali, voltas da corrida configuráveis, fases, relógios, eventos e resultados.
 - `docs/race-performance-2026-09-04.md` — otimizações de grid completo/split-screen, benchmarks, paridade e limites; validação manual desta rodada pendente.
 - `docs/race-performance-worker-2026-09-08.md` — worker local, colisões e caches equivalentes, testes e medições; mínimo de 40 FPS ainda não comprovado e validação manual pendente.
 - `docs/race-input-cadence-2026-09-10.md` — correção de comandos perdidos e clocks de apresentação, medições de input/movimento e limites da validação solo/local; consultar antes de alterar novamente o transporte do worker.
@@ -75,7 +77,7 @@ Antes de começar um módulo, confira se as dependências dele já estão marcad
 | 0 — Fundação e deploy | pronto |
 | 1 — Usuários e autenticação | pronto |
 | 2 — Motor de corrida local | pronto — Partes 2a/2b/2c/2d, física `2.0.0` e catálogo `2026.12` validados manualmente de forma integrada em 31/08/2026; calibração de dano/direção `2.0.1` e correção aprovada de delta-v normal `2.0.2` implementadas e cobertas por testes, com confirmação manual pendente; simplificação para F1 único/condução fixa concluída; dinâmica F1, colisões precisas, dano cumulativo, câmera 2.5D, minimapa, split-screen, culling, pits navegáveis, 22 vagas visuais sólidas por circuito, zebras, muros/grades contínuos, placas métricas, largadas corrigidas, proteção canônica de Monza e remoção do escape provisório concluídos. Refinamento de setup/HUD automatizado em 02/09/2026; escolha entre `WASD`, setas e `IJKL` adicionada por piloto, sem duplicidade no local. Parte 2d e Módulo 2 prontos |
-| 3 — Motor autoritativo online | Parte 3a pronta e validada manualmente em 03/09/2026; Parte 3b Java implementada, com validação manual básica confirmada pelo autor; revisão de portabilidade 2.0.3 autorizada e coberta por paridade Java/TypeScript/navegadores, validada manualmente pelo autor em 04/09/2026. Compatibilidade do frontend sincronizada; 3c (classificação, fluxo de corrida e predição/reconciliação online) pendente |
+| 3 — Motor autoritativo online | Partes 3a e 3b/portabilidade 2.0.3 prontas e validadas pelo autor. Parte 3c frontend implementada e em validação: predição/reconciliação, interpolação, classificação, semáforo, HUD, ghost e pódio. Gate final de 456 testes/55 arquivos, lint e build aprovados; smoke Chrome integrado com 2 humanos e 1 bot aprovado até classificação/reconexão. Ainda pendentes corrida completa/manual até pódio e validação integrada final com backend. Módulo 3 NÃO concluído; detalhes e bloqueio de publicação em docs/module-3c-client.md |
 | 4 — Ambiente e modo caos | não iniciado |
 | 5 — Corrida completa (dano/vácuo/pits/HUD) | não iniciado |
 | 6 — Campeonatos | não iniciado |

@@ -90,6 +90,8 @@ export type VehicleState = VehicleSetup & {
 export type InterpolatedVehicleState = VehicleState & {
   renderPosition: Vector2
   renderAngle: number
+  /** Presentation only; the authoritative server assigns collision groups. */
+  renderOpacity?: number
 }
 
 export type RaceStatus = 'running' | 'finished'
@@ -100,6 +102,8 @@ export type RaceEngineOptions = {
   racers: VehicleSetup[]
   lapCount?: number
   maximumRaceSeconds?: number
+  /** Predict one human's physics; authoritative snapshots own race progress. */
+  prediction?: boolean
 }
 
 export type RaceResultEntry = {

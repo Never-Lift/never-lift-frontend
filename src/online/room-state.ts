@@ -10,7 +10,7 @@ export const DEFAULT_PHYSICS_CONTRACT_VERSION = '2.0.3'
 
 function normalizeState(value: unknown): RoomState {
   const state = String(value ?? 'lobby').toLowerCase()
-  if (state === 'qualifying' || state === 'race' || state === 'closed') return state
+  if (state === 'qualifying' || state === 'qualifying_results' || state === 'countdown' || state === 'race' || state === 'results' || state === 'closed') return state
   return 'lobby'
 }
 
@@ -125,6 +125,8 @@ export function roomFromPayload(
     state: normalizeState(nested.state ?? previous?.state),
     settingsLocked,
     settings: {
+      laps: Number(settingsSource.laps ?? previous?.settings?.laps ?? 3),
+      qualifyingLaps: 2,
       trackId,
       trackCatalogVersion: String(
         settingsSource.trackCatalogVersion ??

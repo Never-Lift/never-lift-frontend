@@ -17,10 +17,10 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 8. **Autenticação WebSocket:** ticket temporário, em vez de expor o JWT principal na URL.
 9. **Entrada tardia:** permitida somente durante o lobby; depois da contagem/classificação a sala fecha.
 10. **Pista:** o host escolhe uma das 24 pistas e a definição/versionamento ficam fixos na sala.
-11. **Voltas:** quantidade padrão fixa no M3; configuração livre fica para módulo posterior.
+11. **Voltas (revisão 15/09/2026):** configuráveis pelo host no lobby, de 1 a 99; padrão 3.
 12. **Largada:** sequência de cinco luzes vermelhas no estilo F1.
-13. **Queima de largada:** bloqueio do acelerador por 5 s.
-14. **Carro finalizado:** vira `ghost`, permanece visível e deixa de colidir.
+13. **Queima de largada:** qualquer throttle maior que zero antes da liberação bloqueia o acelerador por exatamente 600 subpassos de 1/120 s após lights-out (5 s de simulação).
+14. **Carro finalizado:** vira `ghost`, permanece visível e colide apenas com outros ghosts; carros normais colidem com normais. Barreiras continuam físicas. Ghost alheio só aparece para quem também terminou.
 15. **Fim da corrida:** quando todos terminarem ou o limite de segurança do servidor for atingido; demais recebem `DNF`.
 16. **Pós-corrida:** tela de resultados seguida de retorno ao lobby.
 17. **Configurações:** somente o host altera pista, grid e bots durante o lobby; confirmações de pronto não bloqueiam a edição nem são apagadas por uma alteração. As configurações travam somente quando a classificação começa.
@@ -40,7 +40,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 31. **Grid (decisão inicial substituída):** a opção aleatória foi superada pela classificação; a ordem final vem da quali definida nos tópicos seguintes.
 32. **Formato da classificação:** todos participam simultaneamente, cada um em sua própria simulação isolada.
 33. **Bots na quali:** humanos e bots fazem a volta classificatória simultaneamente.
-34. **Tentativa:** uma tentativa por participante; volta inválida vai para o fim do grid.
+34. **Tentativas (revisão 15/09/2026):** duas voltas cronometradas por participante, sem limite de tempo; a melhor válida define o grid. Volta inválida consome tentativa; sem tempo válido, piloto vai ao fim do grid.
 35. **Condições da quali:** exatamente as mesmas condições da corrida.
 36. **Transição quali/corrida:** tela curta de tempos e nova confirmação de pronto antes da corrida principal.
 37. **Visual da quali:** cada jogador vê somente o próprio carro.
@@ -63,7 +63,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 53. **Voltas padrão:** 3 voltas.
 54. **Bots padrão:** desativados por padrão; host ativa quando desejar.
 55. **Grid padrão:** 22 carros, podendo ser reduzido pelo host.
-56. **Tempo da quali:** limite de 3 minutos.
+56. **Fim da quali (revisão 15/09/2026):** não há limite de tempo; cada piloto encerra após duas tentativas. Um conectado parado pode manter a sessão aguardando.
 57. **Inválidos da quali:** ordem aleatória determinística por seed do servidor.
 58. **Sentido:** somente o sentido oficial de cada circuito.
 59. **Ambiente do M3:** pista seca e período fixo, iguais na quali e na corrida.
@@ -74,7 +74,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 64. **Início da quali:** lançamento padronizado antes da linha; cronômetro começa ao cruzá-la.
 65. **Bots na quali:** simulam a volta completa com a mesma física, limites e checkpoints.
 66. **Falha de bot na quali:** mesmas regras dos humanos; sem tempo válido se não completar.
-67. **Fim antecipado da quali:** encerrar quando todos concluírem ou ao atingir 3 minutos.
+67. **Fim da quali:** encerrar quando todos concluírem duas tentativas ou encerrarem sua participação; saída explícita e perda total encerram tentativas restantes sem tempo válido.
 68. **Contagem da quali:** contagem sincronizada curta de 3 s antes do lançamento.
 69. **Código da sala:** 4 dígitos numéricos; limite de tentativas e bloqueio contra força bruta são obrigatórios.
 70. **Entrada inválida:** mensagem genérica, sem revelar existência da sala, com bloqueio progressivo.
@@ -95,7 +95,7 @@ implementação; não significa que o Módulo 3 esteja implementado ou pronto.
 - O estado pronto é reversível no lobby e permanece intacto quando o host altera configurações. O payload normativo é `ready { ready: boolean }`.
 - A sessão WebSocket pertence ao app, não à página do lobby: navegar por Início, Jogar, Online ou Minha conta não remove o jogador. O item Online identifica e reabre a sala ativa.
 - A saída voluntária ocorre pelo botão **Sair da sala**, sempre com confirmação, tanto para o host quanto para participantes comuns e mesmo depois de o lobby avançar. Quando o host sai, a função é transferida automaticamente. Entrada, saída, remoção e alterações do host são publicadas imediatamente aos participantes restantes.
-- Uma queda preserva jogador e vaga durante a janela de reconexão de 30 s. Sem retorno após essa janela, o participante desconectado é removido e a vaga volta a ficar disponível. “Jogador inativo” na decisão 75 significa um cliente ainda conectado sem interagir e continua sem remoção automática.
+- No lobby, uma queda preserva jogador e vaga por 30 s; sem retorno, remove o participante. Durante classificação/corrida, o bot assume, retorno dentro de 30 s recupera controle e após a janela o bot permanece associado ao resultado original. “Jogador inativo” na decisão 75 significa um cliente ainda conectado sem interagir e continua sem remoção automática.
 
 ## Revisão de produto da Parte 3a — 02/09/2026
 
@@ -104,7 +104,7 @@ Esta revisão é normativa e detalha as decisões atualizadas acima:
 - O online exige conta. Guest enxerga a composição da tela escurecida/desfocada e o aviso para entrar, mas não recebe lista de salas, ticket nem acesso WebSocket.
 - Senha de sala foi removida de ponta a ponta. Sala pública permite entrada direta pelo card; sala privada não aparece na lista e usa o código numérico de quatro dígitos como único segredo.
 - A lista pública expõe apenas nome da sala, nome de exibição do host e ocupação/capacidade. O código aparece somente dentro da sala, ao lado de **Ajustes** para o host e de **Resumo da sala** para convidados.
-- O host não possui estado `ready`. Todos os demais humanos podem confirmar ou retirar o pronto; o host inicia a classificação quando todos eles confirmarem e o grid mínimo estiver atendido.
+- No lobby, o host não possui estado `ready`. Todos os demais humanos podem confirmar ou retirar o pronto; o host inicia a classificação quando todos eles confirmarem e o grid mínimo estiver atendido. Na revisão 3c, todos os humanos, inclusive host, confirmam novamente o grid e o resultado.
 - Pista, grid, bots/dificuldade e visibilidade são ajustes vivos: não existe botão de salvar, e cada mudança válida é propagada aos demais participantes. O seletor de pista é um carrossel visual de traçados; o grid usa campo sem setas, botões `−`/`+` e normalização entre 2 e 22.
 - O resumo do convidado contém pista, estado e bots (ativo/inativo, quantidade e dificuldade). O host vê somente o card de ajustes.
 - Avisos e erros da tela são notificações no canto superior direito, expiram após cinco segundos e podem ser fechados manualmente.
@@ -114,11 +114,27 @@ Esta revisão é normativa e detalha as decisões atualizadas acima:
 
 ## Limites e dependências
 
+### Adendo 3c aprovado pelo autor em 15/09/2026
+
+- A revisão foi coordenada com a tarefa backend. As duas voltas cronometradas
+  da classificação não fixam as voltas da corrida principal.
+- Predição reutiliza o `RaceEngine` por uma extensão mínima de restauração de
+  estado, sem alterar fórmulas ou tuning 2.0.3. Só o carro focal e as barreiras
+  são previstos; colisões entre participantes continuam autoritativas.
+- Limiar visual: 0,10 m, correção suave em 100 ms. Histórico remoto limitado,
+  escolhendo os dois snapshots que envolvem o instante 100 ms no passado.
+- O throttle bruto deve ser enviado antes de lights-out para o servidor detectar
+  queima; apenas o movimento da predição fica bloqueado. Isso substitui a
+  instrução inicial de suprimir o envio do throttle.
+- Contrato: [module-3c-race-flow.md](module-3c-race-flow.md).
+  Implementação e pendências: [module-3c-client.md](module-3c-client.md).
+
 - Estas decisões não tornam o Módulo 3 completo: o Módulo 2 está pronto, a
   Parte 3a foi validada manualmente em dois navegadores e está pronta desde 03/09/2026, e as
   Parte 3b Java está implementada, com validação manual básica confirmada pelo autor.
   A correção numérica 2.0.3 foi autorizada separadamente, está testada automaticamente
-  e foi validada manualmente pelo autor em 04/09/2026; somente a Parte 3c permanece não implementada.
+  e foi validada manualmente pelo autor em 04/09/2026. A Parte 3c está implementada
+  no frontend e em validação integrada; ainda não está pronta.
 - Antes da 3c, seguir [module-3b-portability.md](module-3b-portability.md): os dois
   motores usam `portable-f64-v1`, sem chamadas transcendentais nativas na física.
 - O M3 precisa reproduzir o contrato físico v2 e os cenários congelados antes de aceitar partidas online.
