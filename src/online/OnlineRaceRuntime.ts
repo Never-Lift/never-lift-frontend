@@ -10,6 +10,7 @@ import type { DriverInput, InterpolatedVehicleState } from '@/race/types'
 
 const NEUTRAL: DriverInput = { throttle: 0, brake: 0, steer: 0 }
 const INPUT_INTERVAL_MS = 1000 / 30
+const MAX_SNAPSHOT_SILENCE_MS = 250
 type Command = { sequence: number; input: DriverInput }
 
 /** Runs outside React. The physical engine contains only the local human. */
@@ -35,6 +36,8 @@ export class OnlineRaceRuntime {
   private raw = NEUTRAL
   private lastSent = -Infinity
   private receivedAt = 0
+  private receivedSnapshots = 0
+  private largestSnapshotGapMs = 0
   private offset = Infinity
   private lastRenderTime = -Infinity
   private redLights = 0
@@ -85,7 +88,9 @@ export class OnlineRaceRuntime {
       this.snapshot = frame
       this.phase = frame.phase
       this.sequence = Math.max(this.sequence, own.lastProcessedClientSeq + 1)
+      if (!reset && this.receivedSnapshots > 0) this.largestSnapshotGapMs = Math.max(this.largestSnapshotGapMs, now - this.receivedAt)
       this.receivedAt = now
+      this.receivedSnapshots++
       this.offset = Math.min(this.offset, now - frame.serverTime)
       this.awaitingSnapshot = false
       this.error = null
@@ -155,7 +160,7 @@ export class OnlineRaceRuntime {
   advance(deltaSeconds: number, now: number) {
     if (this.isFrozen() || !this.snapshot) return
     // Bound speculation when delivery stalls even before the socket closes.
-    if (now - this.receivedAt <= 250 && this.canMove()) {
+    if (!this.getDeliveryStatus(now).stalled && this.canMove()) {
       const car = this.getOwnSnapshot()!
       const input = car.falseStart ? { ...this.current.input, throttle: 0 } : this.current.input
       this.prediction.setInput(this.current.sequence, input)
@@ -194,6 +199,12 @@ export class OnlineRaceRuntime {
   getResult() { return this.result }
   getGrid() { return this.grid }
   getError() { return this.error }
+  /** Arrival gaps are not RTT or a measurement of the player's rendering FPS. */
+  getDeliveryStatus(now: number) {
+    const ageMs = this.snapshot ? Math.max(0, now - this.receivedAt) : 0
+    return { ageMs, largestGapMs: this.largestSnapshotGapMs, receivedSnapshots: this.receivedSnapshots,
+      stalled: !this.isFrozen() && this.canMove() && ageMs > MAX_SNAPSHOT_SILENCE_MS }
+  }
   isFrozen() { return !this.connected || this.awaitingSnapshot || !!this.error || this.phase === 'results' }
   getOverlay(showNames = false): LocalRaceOverlayState {
     return { startLights: { stage: 'hidden', redLights: 0 }, penalties: {}, showDriverNames: showNames || this.phase === 'countdown' }

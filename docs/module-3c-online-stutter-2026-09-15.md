@@ -1,5 +1,9 @@
 # M3c — solavancos durante a classificação online
 
+> Continuação: [revisão de 16/09/2026](module-3c-online-stall-2026-09-16.md).
+> A confirmação agora combina ACK e relógio físico para preservar também comandos
+> ainda em trânsito. As evidências abaixo correspondem à primeira rodada (#141).
+
 ## Relato e diagnóstico
 
 O autor e um colega testaram Suzuka em máquinas diferentes, com dois humanos

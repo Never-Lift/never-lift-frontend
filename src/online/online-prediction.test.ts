@@ -15,6 +15,51 @@ function setup() {
 }
 
 describe('online prediction and rollback', () => {
+  it('does not erase a new steering command when a newer snapshot has not acknowledged its arrival', () => {
+    const { prediction, car } = setup()
+    prediction.setInput(0, { throttle: 0.4, brake: 0, steer: 1 })
+    prediction.advance(1 / 30)
+    const expectedSteering = prediction.getState().physicsState.steeringAngle
+    // Server time advanced, but the command is still travelling to it. Physical
+    // time alone must not acknowledge input that the server has never received.
+    prediction.reconcile(car, 1 / 30, -1)
+    expect(prediction.getState().physicsState.steeringAngle).toBe(expectedSteering)
+    expect(prediction.getPendingStepCount()).toBe(4)
+  })
+
+  it.each([30, 60, 120, 144])('retains steering through multiple unacknowledged snapshots at %i FPS', fps => {
+    const { prediction, car } = setup()
+    prediction.setInput(0, { throttle: 0.4, brake: 0, steer: 1 })
+    let previousSteering = 0
+    for (let frame = 1; frame <= Math.ceil(fps * 0.15); frame++) {
+      prediction.advance(1 / fps)
+      if (frame % Math.max(1, Math.round(fps / 20)) === 0)
+        prediction.reconcile(car, frame / fps, -1)
+      expect(prediction.getState().physicsState.steeringAngle).toBeGreaterThanOrEqual(previousSteering)
+      previousSteering = prediction.getState().physicsState.steeringAngle
+    }
+    expect(previousSteering).toBeGreaterThan(0.1)
+    expect(prediction.getPendingStepCount()).toBeLessThanOrEqual(20)
+  })
+
+  it('never replays an older throttle command after a newer brake command was acknowledged', () => {
+    const { prediction, car } = setup()
+    prediction.setInput(0, { throttle: 1, brake: 0, steer: 0 })
+    prediction.advance(0.1)
+    const brake = { throttle: 0, brake: 1, steer: -1 }
+    prediction.setInput(1, brake)
+    prediction.advance(0.1)
+    const authority = new RaceEngine({ track: SHORT_TRACK, mode: 'solo', racers: [car], prediction: true })
+    authority.restorePrediction(car, 0)
+    authority.setInput(car.id, brake)
+    for (let step = 0; step < 4; step++) authority.stepFixed()
+    prediction.reconcile(authority.getVehicleState(car.id)!, 4 / 120, 1)
+    // The future horizon is retained, but all its older controls are replaced
+    // by the newer acknowledged brake rather than resurrecting throttle.
+    for (let step = 0; step < 20; step++) authority.stepFixed()
+    expect(prediction.getPendingStepCount()).toBe(20)
+    expect(prediction.getState()).toEqual(authority.getVehicleState(car.id))
+  })
   it('keeps the predicted time horizon when a held command has already been acknowledged', () => {
     const { prediction } = setup()
     prediction.setInput(0, { throttle: 1, brake: 0, steer: 0 })

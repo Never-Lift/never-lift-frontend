@@ -2,6 +2,11 @@
 
 ## Estado em 15/09/2026
 
+**Revisão de 16/09/2026:** o vídeo posterior motivou correção da confirmação de
+comandos ainda em trânsito, preservando o horizonte estável, e isolamento JDBC
+das leituras de sala no backend. Ver [module-3c-online-stall-2026-09-16.md](module-3c-online-stall-2026-09-16.md).
+Entrega original abaixo é histórica; nova validação manual continua pendente.
+
 **Atualização após teste manual:** o autor relatou solavancos na classificação
 de Suzuka com dois humanos e um bot. PR #140 já mesclado em develop. Correção
 de horizonte/tempo fracionário de predição em revisão separada; evidências e
