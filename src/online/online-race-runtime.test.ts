@@ -9,6 +9,38 @@ function setup() {
   return { runtime, send }
 }
 describe('online presentation lifecycle', () => {
+  it('bounds speculation during a delivery gap, keeps sending controls and resumes on a fresh frame', () => {
+    const { runtime, send } = setup()
+    runtime.receive({ type: 'state_snapshot', payload: onlineFrame() }, 0)
+    runtime.setInput({ throttle: 1, brake: 0, steer: 0 })
+    for (let now = 10; now <= 250; now += 10) runtime.advance(0.01, now)
+    const before = runtime.getOwnState()
+    expect(runtime.getDeliveryStatus(250).stalled).toBe(false)
+    runtime.setInput({ throttle: 0, brake: 1, steer: 1 })
+    for (let now = 260; now <= 1000; now += 10) {
+      runtime.flushInput(now, now + 1_000_000)
+      runtime.advance(0.01, now)
+    }
+    expect(runtime.getDeliveryStatus(1000)).toMatchObject({ stalled: true, ageMs: 1000, receivedSnapshots: 1 })
+    expect(runtime.getOwnState()).toEqual(before)
+    expect(send.mock.calls.some(call => call[0].brake === 1)).toBe(true)
+    runtime.receive({ type: 'state_snapshot', payload: onlineFrame({ tick: 30, substep: 120, physicsSubstep: 120, serverTime: 1_001_000 }) }, 1000)
+    expect(runtime.getDeliveryStatus(1000)).toMatchObject({ stalled: false, ageMs: 0, largestGapMs: 1000, receivedSnapshots: 2 })
+    runtime.advance(1 / 60, 1017)
+    expect(runtime.getOwnState().physicsState.appliedBrake).toBeGreaterThan(0)
+  })
+
+  it('does not report countdown, completed qualifying or disconnected sockets as delivery stalls', () => {
+    const { runtime } = setup()
+    runtime.receive({ type: 'state_snapshot', payload: onlineFrame({ phase: 'countdown' }) }, 0)
+    expect(runtime.getDeliveryStatus(5000).stalled).toBe(false)
+    const frame = onlineFrame({ phase: 'qualifying', tick: 100, substep: 400, physicsSubstep: 400 })
+    frame.cars[0].qualifyingAttempts = 2
+    runtime.receive({ type: 'state_snapshot', payload: frame }, 5000)
+    expect(runtime.getDeliveryStatus(10000).stalled).toBe(false)
+    runtime.setConnection(false)
+    expect(runtime.getDeliveryStatus(15000).stalled).toBe(false)
+  })
   it('neutralizes navigation immediately instead of sending a queued press on cleanup', () => {
     const { runtime, send } = setup()
     runtime.receive({ type: 'state_snapshot', payload: onlineFrame() }, 0)

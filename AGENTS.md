@@ -24,6 +24,7 @@ Detalhe completo de cada payload: `docs/frontend-implementation-plan.md`, seçã
 - `docs/module-3b-portability.md` — revisão aprovada 2.0.3, kernel numérico compartilhado, evidências e teste manual curto antes da 3c.
 - `docs/module-3c-client.md` — implementação frontend 3c, decisões adicionais aprovadas, testes, smoke Chrome e gates ainda pendentes. Ponto de retomada antes de publicar.
 - `docs/module-3c-online-stutter-2026-09-15.md` — correção de solavancos após teste manual em Suzuka: horizonte físico por subpasso e apresentação fracionária, comparação Chrome com latência; nova validação manual pendente.
+- `docs/module-3c-online-stall-2026-09-16.md` — revisão após vídeo: comandos ainda em trânsito, horizonte estável, aviso de atraso e remoção de transações indevidas do backend; revalidação manual pendente.
 - `docs/module-3c-race-flow.md` — contrato 3c coordenado com backend: duas voltas cronometradas de quali, voltas da corrida configuráveis, fases, relógios, eventos e resultados.
 - `docs/race-performance-2026-09-04.md` — otimizações de grid completo/split-screen, benchmarks, paridade e limites; validação manual desta rodada pendente.
 - `docs/race-performance-worker-2026-09-08.md` — worker local, colisões e caches equivalentes, testes e medições; mínimo de 40 FPS ainda não comprovado e validação manual pendente.

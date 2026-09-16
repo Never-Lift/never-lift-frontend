@@ -50,6 +50,14 @@ it('expires protocol error notifications after five seconds while keeping the ra
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument(), { timeout: 6500 })
   expect(screen.getByText('Corrida indisponível. Saia da sala para continuar.')).toBeInTheDocument()
 }, 10000)
+it('warns once during a silent delivery gap and lets the driver dismiss it without leaving', async () => {
+  await mount()
+  expect(await screen.findByRole('status')).toHaveTextContent('Atualizações da corrida atrasadas')
+  fireEvent.click(screen.getByRole('button', { name: 'Fechar notificação' }))
+  await new Promise(resolve => setTimeout(resolve, 150))
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Telemetria online')).toBeInTheDocument()
+})
 it('offers host readiness after qualifying and stops drawing on the authoritative podium', async () => {
   const {options,client}=await mount()
   act(() => options.onEnvelope?.({type:'race_event',payload:{type:'qualifying_result',sessionId:ONLINE_SESSION_ID,tick:0,substep:0,serverTime:1_000_000,

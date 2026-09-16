@@ -24,8 +24,9 @@ type Presentation = {
   snapshot: OnlineSnapshot | null; result: OnlineResult | null; grid: QualifyingGrid
   phase: OnlinePhase; frozen: boolean; lights: number; error: string | null
   connection: OnlineRoomClientStatus
+  stalled: boolean
 }
-const initial: Presentation = { snapshot: null, result: null, grid: [], phase: 'qualifying', frozen: true, lights: 0, error: null, connection: 'connecting' }
+const initial: Presentation = { snapshot: null, result: null, grid: [], phase: 'qualifying', frozen: true, lights: 0, error: null, connection: 'connecting', stalled: false }
 
 export function OnlineRacePanel({ room, player, isHost, onLeave, onCancelQualification, getTrack = raceApi.getTrack }: {
   room: RoomSummary; player: RoomParticipant; isHost: boolean
@@ -41,6 +42,7 @@ export function OnlineRacePanel({ room, player, isHost, onLeave, onCancelQualifi
   const roomRef = useRef(room)
   const playerRef = useRef(player)
   const leaveRef = useRef(false)
+  const lastStallNotice = useRef(-Infinity)
   roomRef.current = room
   playerRef.current = player
   leaveRef.current = leaveOpen
@@ -49,6 +51,14 @@ export function OnlineRacePanel({ room, player, isHost, onLeave, onCancelQualifi
     const error = state.error ?? loadError
     if (error) notify(error)
   }, [state.error, loadError, notify])
+
+  useEffect(() => {
+    const now = performance.now()
+    if (state.stalled && now - lastStallNotice.current >= 5000) {
+      lastStallNotice.current = now
+      notify('Atualizações da corrida atrasadas. Aguardando o servidor; seus comandos continuam sendo enviados.', 'warning')
+    }
+  }, [state.stalled, notify])
 
   useEffect(() => {
     let active = true
@@ -110,6 +120,7 @@ export function OnlineRacePanel({ room, player, isHost, onLeave, onCancelQualifi
     const hudTimer = window.setInterval(() => {
       setState({ snapshot: runtime.getSnapshot(), result: runtime.getResult(), grid: runtime.getGrid(),
         phase: runtime.getPhase(), lights: runtime.getRedLights(), frozen: runtime.isFrozen(), error: runtime.getError(),
+        stalled: runtime.getDeliveryStatus(performance.now()).stalled,
         connection: onlineRoomSession.getSnapshot().status })
     }, 100)
     return () => {

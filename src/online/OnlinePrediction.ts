@@ -15,6 +15,7 @@ export class OnlinePrediction {
   private readonly engine: RaceEngine
   private readonly playerId: string
   private pending: PendingStep[] = []
+  private commands = new Map<number, DriverInput>()
   private input: DriverInput = NEUTRAL
   private sequence = -1
   private acknowledged = -1
@@ -32,6 +33,8 @@ export class OnlinePrediction {
   setInput(sequence: number, input: DriverInput) {
     this.sequence = sequence
     this.input = { ...input }
+    this.commands.set(sequence, this.input)
+    if (this.commands.size > MAX_PENDING_STEPS + 1) this.commands.delete(this.commands.keys().next().value!)
   }
 
   advance(deltaSeconds: number) {
@@ -55,12 +58,22 @@ export class OnlinePrediction {
     const previous = this.initialized && !reset ? this.getVisualState() : null
     this.acknowledged = acknowledged
     this.authoritativeSubstep = authoritativeSubstep
-    // An ACK identifies the last command the server started using. A held key
-    // can drive many physical steps after that ACK. Only the snapshot's physical
-    // clock tells us which steps are actually confirmed; keep the future horizon.
-    this.pending = reset ? [] : this.pending.filter((step) => step.substep > authoritativeSubstep)
+    // Server time cannot confirm a command still travelling over the network.
+    // Keep those steps even if their old local timestamps are behind the new
+    // snapshot, then rebase them onto its state. For the acknowledged held key,
+    // keep only its future duration. Older commands must never overwrite a newer
+    // ACK (e.g. replaying throttle after the server acknowledged the brake).
+    // Replace those future controls, not their duration: shrinking the horizon
+    // on every ACK would reintroduce the periodic movement slowdown.
+    const confirmedInput = this.commands.get(acknowledged)
+    this.pending = reset ? [] : this.pending.filter((step) => step.sequence > acknowledged || step.substep > authoritativeSubstep)
+    if (confirmedInput) for (const step of this.pending) {
+      if (step.sequence < acknowledged) { step.sequence = acknowledged; step.input = confirmedInput }
+    }
+    for (const sequence of this.commands.keys()) if (reset || sequence < acknowledged) this.commands.delete(sequence)
     if (reset || authoritativeSubstep > this.substep) this.accumulator = 0
-    this.substep = Math.max(authoritativeSubstep, this.pending.at(-1)?.substep ?? authoritativeSubstep)
+    this.substep = authoritativeSubstep
+    for (const step of this.pending) step.substep = ++this.substep
     this.engine.restorePrediction(state, simulationSeconds)
     for (const step of this.pending) {
       this.engine.setInput(this.playerId, step.input)

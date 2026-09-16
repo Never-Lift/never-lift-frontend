@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 
 const api = 'http://127.0.0.1:8081/api'
 const profile = process.argv.includes('--profile')
+const maneuvers = process.argv.includes('--maneuvers')
 const baseline = process.argv.includes('--baseline')
 const trackId = process.env.ONLINE_SMOKE_TRACK ?? 'spielberg'
 assert.match(trackId, /^[a-z0-9-]+$/)
@@ -24,7 +25,9 @@ async function request(path, method = 'GET', body, token) {
   return data ? JSON.parse(data) : null
 }
 const { chromium } = await import(pathToFileURL(resolve('../never-lift-backend/tools/physics-parity/node_modules/playwright/index.mjs')).href)
-const baselinePrediction = baseline ? execFileSync('git', ['show', 'd343cbb:src/online/OnlinePrediction.ts'], { encoding: 'utf8' }) : null
+const baselineRef = process.env.ONLINE_SMOKE_BASELINE_REF ?? 'd343cbb'
+assert.match(baselineRef, /^[a-f0-9]{7,40}$/)
+const baselinePrediction = baseline ? execFileSync('git', ['show', `${baselineRef}:src/online/OnlinePrediction.ts`], { encoding: 'utf8' }) : null
 const server = await createServer({ envDir: false, plugins: baseline ? [{ name: 'diagnostic-baseline', enforce: 'pre',
   load(id) { if (id.replaceAll('\\', '/').endsWith('/src/online/OnlinePrediction.ts')) return baselinePrediction },
 }] : [], define: {
@@ -92,17 +95,21 @@ try {
     if (profile) await page.evaluate(async () => {
       const { OnlineRaceRuntime } = await import('/src/online/OnlineRaceRuntime.ts')
       const { RaceRenderer } = await import('/src/race/RaceRenderer.ts')
-      const metrics = window.onlineSmokeMetrics = { receive: [], advance: [], render: [], movement: [], snapshots: [] }
+      const metrics = window.onlineSmokeMetrics = { receive: [], advance: [], render: [], movement: [], snapshots: [], corrections: [] }
       let previous
       for (const [prototype, key] of [[OnlineRaceRuntime.prototype, 'receive'], [OnlineRaceRuntime.prototype, 'advance'], [RaceRenderer.prototype, 'render']]) {
         const original = prototype[key]
         prototype[key] = function(...args) {
           const start = performance.now()
+          const before = key === 'receive' && this.getSnapshot() ? this.getOwnState() : null
           const result = original.apply(this, args)
           if (metrics[key].length < 20000) metrics[key].push(performance.now() - start)
           if (key === 'receive' && args[0].type === 'state_snapshot') {
             const frame = this.getSnapshot()
             if (frame) metrics.snapshots.push({ at: start, substep: frame.physicsSubstep })
+            if (before) { const after = this.getOwnState(); metrics.corrections.push({ at: start,
+              distance: Math.hypot(after.position.x - before.position.x, after.position.y - before.position.y),
+              yaw: Math.abs(after.physicsState.yawRate - before.physicsState.yawRate) }) }
           }
           if (key === 'render') {
             const runtime = args[0], car = runtime.getInterpolatedVehicles()[0], now = performance.now()
@@ -125,11 +132,24 @@ try {
     await page.getByText('A melhor volta válida define o grid', { exact: true }).waitFor()
     await page.keyboard.down('w')
   }
-  await clients[0].page.waitForTimeout(profile ? 6000 : 1500)
+  if (maneuvers) {
+    await clients[0].page.waitForTimeout(4000)
+    for (const { page } of clients) { await page.keyboard.up('w'); await page.keyboard.down('s') }
+    await clients[0].page.waitForTimeout(700)
+    for (const { page } of clients) { await page.keyboard.up('s'); await page.keyboard.down('w') }
+    // Short steering changes expose command/ACK timing, not just straight speed.
+    for (let pulse = 0; pulse < 12; pulse++) {
+      const key = pulse < 6 ? 'd' : 'a'
+      for (const { page } of clients) await page.keyboard.down(key)
+      await clients[0].page.waitForTimeout(160)
+      for (const { page } of clients) await page.keyboard.up(key)
+      await clients[0].page.waitForTimeout(400)
+    }
+  } else await clients[0].page.waitForTimeout(profile ? 6000 : 1500)
   for (const { page } of clients) await page.keyboard.up('w')
   if (profile) for (const client of clients) client.measurements = await client.page.evaluate(() => window.onlineSmokeMetrics)
   for (const client of clients) {
-    assert.ok(client.snapshot?.cars[0].speed > 0, 'Real authoritative movement')
+    assert.ok(client.snapshot?.cars[0].speed > 0 || (maneuvers && client.measurements?.movement.some(v => v.speed > 5)), 'Real authoritative movement')
     assert.equal(client.snapshot.cars.length, 1, 'Qualifying isolation')
     assert.ok(client.inputs.some(input => input.throttle > 0), 'Keyboard sent real input')
     assert.equal(await client.page.getByRole('alert').count(), 0, 'No protocol/UI error')
@@ -144,7 +164,7 @@ try {
   await mkdir(output, { recursive: true })
   if (profile) {
     const measurements = clients.map(client => client.measurements)
-    await writeFile(`${output}/browser-profile-${trackId}-${baseline ? 'before' : 'after'}.json`, JSON.stringify({ trackId, baseline, wireDelayMs, measurements }, null, 2))
+    await writeFile(`${output}/browser-profile-${trackId}-${maneuvers ? 'maneuvers-' : ''}${baseline ? 'before' : 'after'}.json`, JSON.stringify({ trackId, baseline, wireDelayMs, measurements }, null, 2))
     for (const [index, m] of measurements.entries()) {
       const stats = values => {
         const sorted = [...values].sort((a,b) => a-b)
@@ -153,6 +173,7 @@ try {
       const moving = m.movement.filter(v => v.speed > 5 && v.health === 100 && v.dt > 5 && v.dt < 40)
       const first = m.snapshots[0], last = m.snapshots.at(-1)
       console.log(JSON.stringify({ client: index+1, trackId, baseline, wireDelayMs, serverRealtimeRatio: (last.substep-first.substep)*1000/120/(last.at-first.at), receiveMs: stats(m.receive), advanceMs: stats(m.advance), renderMs: stats(m.render),
+        snapshotGapMs: stats(m.snapshots.slice(1).map((v,i) => v.at - m.snapshots[i].at)), correctionsMeters: stats(m.corrections.map(v => v.distance)),
         frameMs: stats(m.movement.map(v => v.dt)), visualSpeedRatio: stats(moving.map(v => v.distance / (v.dt / 1000 * v.speed))) }))
     }
   }

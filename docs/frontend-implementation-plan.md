@@ -158,6 +158,11 @@ Correção após relato de solavancos em Suzuka: preservar passos posteriores ao
 mantida não confirma sua duração futura. Apresentação focal contínua e testes em
 30/60/120/144 FPS; ver [module-3c-online-stutter-2026-09-15.md](module-3c-online-stutter-2026-09-15.md).
 Nova validação manual online pendente.
+Revisão de 16/09: o relógio físico sozinho não confirma comandos ainda em trânsito.
+O replay preserva esses comandos e a duração futura, substituindo controles antigos
+quando um ACK posterior já é conhecido, sem alterar física ou protocolo. O cliente
+avisa silêncio de snapshots; o backend retirou transações JDBC das leituras em
+memória usadas por input/publicação. Ver [module-3c-online-stall-2026-09-16.md](module-3c-online-stall-2026-09-16.md).
 **Depende de:** Módulo 1, Módulo 2, Módulo 3 do backend.
 **Cobre features:** 4 (lobby online), 8.
 **Decisões aprovadas:** o registro completo das 80 decisões desta rodada está em
